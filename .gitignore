@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Java
+backend/target/
+*.class
+*.jar
+*.war
+*.log
+
+# Node
+frontend/node_modules/
+frontend/dist/
+.npm
+
+# Python
+ai-service/__pycache__/
+ai-service/models/__pycache__/
+*.pyc
+.venv/
+
+# Docker data
+data/
+models/
+
+# OS
+.DS_Store
+Thumbs.db

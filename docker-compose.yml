@@ -1,0 +1,112 @@
+version: '3.9'
+
+services:
+  frontend:
+    build: ./frontend
+    container_name: memoryvault-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: memoryvault-backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
+      - SPRING_DATASOURCE_USERNAME=memoryvault
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-memoryvault}
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PASSWORD=${REDIS_PASSWORD:-memoryvault}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_USERNAME=memoryvault
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-memoryvault}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+      - MINIO_ACCESS_KEY=memoryvault
+      - MINIO_SECRET_KEY=${MINIO_PASSWORD:-memoryvault}
+      - AI_SERVICE_URL=http://ai-service:8000
+      - JWT_SECRET=${JWT_SECRET:-zyuaaRF5NrCVNn6ubybATQ3/Oeik70oNSsflUKKgF/Q=}
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - minio
+    restart: unless-stopped
+
+  ai-service:
+    build: ./ai-service
+    container_name: memoryvault-ai
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ${MODEL_PATH:-./models}:/data/models
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    environment:
+      - MODEL_PATH=/data/models
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: memoryvault-postgres
+    environment:
+      - POSTGRES_DB=memoryvault
+      - POSTGRES_USER=memoryvault
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-memoryvault}
+    volumes:
+      - ${POSTGRES_DATA:-./data/postgres}:/var/lib/postgresql/data
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    shm_size: 256m
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: memoryvault-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-memoryvault}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ${REDIS_DATA:-./data/redis}:/data
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: memoryvault-rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=memoryvault
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-memoryvault}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - ${RABBITMQ_DATA:-./data/rabbitmq}:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: memoryvault-minio
+    command: server /data --console-address ":9001"
+    volumes:
+      - ${MINIO_DATA:-./data/minio}:/data
+    environment:
+      - MINIO_ROOT_USER=memoryvault
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:-memoryvault}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    restart: unless-stopped

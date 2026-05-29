@@ -1,0 +1,154 @@
+:root {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+  --font-heading: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', monospace;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-height: 84px;
+  --top-bar-height: 52px;
+}
+
+/* Dark theme (default) */
+:root, [data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-secondary: #1c1c1e;
+  --bg-tertiary: #2c2c2e;
+  --bg-card: #1c1c1e;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
+  --text-primary: #ffffff;
+  --text-secondary: #98989d;
+  --text-tertiary: #636366;
+  --border: #38383a;
+  --separator: #38383a;
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg-primary: #f2f2f7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e5e5ea;
+  --bg-card: #ffffff;
+  --accent: #007aff;
+  --accent-hover: #0056b3;
+  --success: #34c759;
+  --warning: #ff9500;
+  --danger: #ff3b30;
+  --text-primary: #000000;
+  --text-secondary: #3c3c43;
+  --text-tertiary: #8e8e93;
+  --border: #d1d1d6;
+  --separator: #c6c6c8;
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.08);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Scrollbar - minimal iOS style */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Glass morphism utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Fade transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.3s ease;
+}
+.slide-up-enter-from {
+  transform: translateY(20px);
+  opacity: 0;
+}
+.slide-up-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+/* iOS-style button reset */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+/* Photo grid compact - columns controlled by GalleryView */
+.photo-grid-compact {
+  display: grid;
+  gap: 2px;
+}
+
+/* Hide scrollbar but allow scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
