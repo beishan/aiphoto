@@ -16,6 +16,7 @@ public class ProgressWebSocketHandler {
      */
     public void sendProgress(TaskProgressDTO progress) {
         messagingTemplate.convertAndSend("/topic/tasks/" + progress.getTaskId(), progress);
+        messagingTemplate.convertAndSend("/topic/task-progress", progress);
     }
 
     /**

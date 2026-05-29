@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import { photoApi } from '@/api/photoApi'
+import { useTaskStore } from '@/stores/taskStore'
 
 const emit = defineEmits<{
   uploaded: [photo: any]
@@ -9,11 +10,8 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const taskStore = useTaskStore()
 const fileInput = ref<HTMLInputElement | null>(null)
-const uploading = ref(false)
-const uploadProgress = ref(0)
-const totalFiles = ref(0)
-const completedFiles = ref(0)
 
 function triggerSelect() {
   fileInput.value?.click()
@@ -24,33 +22,41 @@ async function handleFileChange(e: Event) {
   const files = input.files
   if (!files || files.length === 0) return
 
-  totalFiles.value = files.length
-  completedFiles.value = 0
-  uploadProgress.value = 0
-  uploading.value = true
+  // Create upload tasks and close modal immediately
+  const fileArray = Array.from(files)
+  const taskIds: string[] = []
 
-  for (let i = 0; i < files.length; i++) {
+  for (const file of fileArray) {
+    const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    taskStore.addUploadTask(id, file.name)
+    taskIds.push(id)
+  }
+
+  // Close the modal right away
+  input.value = ''
+  emit('done')
+
+  // Upload in background
+  for (let i = 0; i < fileArray.length; i++) {
+    const id = taskIds[i]
     try {
-      const { data } = await photoApi.upload(files[i])
-      completedFiles.value++
-      uploadProgress.value = Math.round((completedFiles.value / totalFiles.value) * 100)
+      taskStore.updateUploadProgress(id, 0)
+      const { data } = await photoApi.upload(fileArray[i])
+      taskStore.completeUploadTask(id)
       emit('uploaded', data)
     } catch (e: any) {
-      message.error(`${files[i].name} 上传失败`)
+      taskStore.failUploadTask(id)
+      message.error(`${fileArray[i].name} 上传失败`)
     }
   }
 
-  message.success(`${completedFiles.value} 张照片上传成功`)
-  uploading.value = false
-  input.value = ''
-  emit('done')
+  message.success(`${fileArray.length} 张照片上传成功`)
 }
 
 function handleDrop(e: DragEvent) {
   e.preventDefault()
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
-    // Create a synthetic event-like object
     const input = document.createElement('input')
     input.type = 'file'
     input.files = files
@@ -74,17 +80,7 @@ function handleDragOver(e: DragEvent) {
       @change="handleFileChange"
     />
 
-    <div v-if="uploading" class="upload-progress">
-      <div class="progress-info">
-        <span>正在上传...</span>
-        <span>{{ completedFiles }} / {{ totalFiles }}</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: `${uploadProgress}%` }"></div>
-      </div>
-    </div>
-
-    <div v-else class="upload-area" @click="triggerSelect">
+    <div class="upload-area" @click="triggerSelect">
       <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40" class="upload-icon">
         <path d="M2 5a3 3 0 013-3h14a3 3 0 013 3v10a3 3 0 01-3 3H5a3 3 0 01-3-3V5zm5.5 2a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM4 15l4.5-6 3.5 4.5L14 11l4 6H4z" />
       </svg>
@@ -131,31 +127,5 @@ function handleDragOver(e: DragEvent) {
 .upload-hint {
   font-size: 13px;
   color: var(--text-tertiary);
-}
-
-.upload-progress {
-  padding: 24px 20px;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.progress-bar {
-  height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 3px;
-  transition: width 0.3s ease;
 }
 </style>

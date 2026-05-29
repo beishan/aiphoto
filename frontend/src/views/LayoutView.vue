@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, inject, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useTaskStore } from '@/stores/taskStore'
-import TaskProgress from '@/components/TaskProgress.vue'
+import TaskFloat from '@/components/TaskFloat.vue'
 
 const router = useRouter()
 const route = useRoute()
-const taskStore = useTaskStore()
 
 const theme = inject<Ref<string>>('theme')!
 const toggleTheme = inject<() => void>('toggleTheme')!
@@ -14,6 +12,7 @@ const toggleTheme = inject<() => void>('toggleTheme')!
 const tabs = [
   { path: '/', name: 'Gallery', label: '照片', icon: 'photo', activeIcon: 'photo.fill' },
   { path: '/albums', name: 'Albums', label: '相册', icon: 'rectangle.stack', activeIcon: 'rectangle.stack.fill' },
+  { path: '/favorites', name: 'Favorites', label: '喜欢', icon: 'heart', activeIcon: 'heart.fill' },
   { path: '/people', name: 'People', label: '人物', icon: 'person.crop.circle', activeIcon: 'person.crop.circle.fill' },
   { path: '/search', name: 'Search', label: '搜索', icon: 'magnifyingglass', activeIcon: 'magnifyingglass' },
   { path: '/more', name: 'More', label: '更多', icon: 'ellipsis.circle', activeIcon: 'ellipsis.circle.fill' },
@@ -30,6 +29,7 @@ const pageTitle = computed(() => {
   const path = route.path
   if (path === '/') return '照片'
   if (path.startsWith('/albums')) return '相册'
+  if (path === '/favorites') return '喜欢'
   if (path === '/people') return '人物'
   if (path === '/search') return '搜索'
   if (path === '/more') return '更多'
@@ -51,6 +51,8 @@ const sfIcons: Record<string, string> = {
   'magnifyingglass': 'M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z',
   'ellipsis.circle': 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V6h2v6zm4 4h-2v-2h2v2zm0-4h-2V6h2v6z',
   'ellipsis.circle.fill': 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V6h2v6zm4 4h-2v-2h2v2zm0-4h-2V6h2v6z',
+  'heart': 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z',
+  'heart.fill': 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z',
 }
 </script>
 
@@ -58,7 +60,9 @@ const sfIcons: Record<string, string> = {
   <div class="app-shell">
     <!-- Top bar -->
     <header class="top-bar glass">
-      <div class="top-bar-left"></div>
+      <div class="top-bar-left">
+        <TaskFloat />
+      </div>
       <h1 class="page-title">{{ pageTitle }}</h1>
       <button class="theme-toggle" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
         <!-- Sun icon for light mode -->
@@ -97,8 +101,6 @@ const sfIcons: Record<string, string> = {
       </button>
     </nav>
 
-    <!-- Task progress overlay -->
-    <TaskProgress v-if="taskStore.activeTasks.length > 0" />
   </div>
 </template>
 
@@ -125,6 +127,8 @@ const sfIcons: Record<string, string> = {
 
 .top-bar-left {
   width: 36px;
+  display: flex;
+  align-items: center;
 }
 
 .page-title {

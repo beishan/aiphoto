@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { connectWebSocket } from '@/stores/websocket'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -27,6 +28,11 @@ const routes: RouteRecordRaw[] = [
         path: 'albums/:id',
         name: 'AlbumDetail',
         component: () => import('@/views/AlbumDetailView.vue'),
+      },
+      {
+        path: 'favorites',
+        name: 'Favorites',
+        component: () => import('@/views/FavoritesView.vue'),
       },
       {
         path: 'people',
@@ -67,11 +73,17 @@ const router = createRouter({
   routes,
 })
 
+let wsInitialized = false
+
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth !== false && !token) {
     next('/login')
   } else {
+    if (token && !wsInitialized) {
+      wsInitialized = true
+      connectWebSocket()
+    }
     next()
   }
 })

@@ -72,6 +72,10 @@ class CaptionResponse(BaseModel):
     caption: str
 
 
+class EmbedTextRequest(BaseModel):
+    text: str
+
+
 class BatchEmbedResponse(BaseModel):
     embeddings: list[list[float]]
 
@@ -170,6 +174,20 @@ async def caption(file: UploadFile = File(...)):
         return CaptionResponse(caption=text)
     except Exception as e:
         logger.error(f"Caption generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/embed-text", response_model=EmbeddingResponse)
+async def embed_text(request: EmbedTextRequest):
+    """Generate CLIP embedding for text."""
+    if clip_model is None:
+        raise HTTPException(status_code=503, detail="CLIP model not loaded")
+
+    try:
+        embedding = clip_model.encode_text(request.text)
+        return EmbeddingResponse(embedding=embedding)
+    except Exception as e:
+        logger.error(f"Text embedding failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

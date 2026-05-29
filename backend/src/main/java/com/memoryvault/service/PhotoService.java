@@ -5,16 +5,23 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
+import com.memoryvault.async.PhotoIndexingConsumer;
+import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
+import com.memoryvault.entity.AiTask;
 import com.memoryvault.entity.Photo;
+import com.memoryvault.repository.AiTaskRepository;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.storage.MinioStorageService;
 import lombok.RequiredArgsConstructor;
 import com.memoryvault.exception.DuplicateFileException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -35,6 +43,8 @@ public class PhotoService {
     private final PhotoRepository photoRepository;
     private final MinioStorageService storageService;
     private final SettingService settingService;
+    private final RabbitTemplate rabbitTemplate;
+    private final AiTaskRepository aiTaskRepository;
 
     @Transactional
     public PhotoDTO uploadPhoto(MultipartFile file, Long userId) throws Exception {
@@ -56,7 +66,8 @@ public class PhotoService {
         storageService.uploadPhoto(data, objectName, file.getContentType());
 
         // Generate thumbnail (skip if not a valid image)
-        String thumbName = hashMd5 + "/thumb.jpg";
+        boolean webp = isWebP(data);
+        String thumbName = webp ? hashMd5 + "/thumb.webp" : hashMd5 + "/thumb.jpg";
         try {
             byte[] thumbnail = generateThumbnail(data);
             storageService.uploadThumbnail(thumbnail, thumbName);
@@ -81,11 +92,25 @@ public class PhotoService {
         }
 
         photo = photoRepository.save(photo);
+
+        // Trigger AI indexing
+        AiTask aiTask = new AiTask();
+        aiTask.setType(AiTask.TaskType.INDEX);
+        aiTask.setPhotoIdsJson("[" + photo.getId() + "]");
+        aiTask = aiTaskRepository.save(aiTask);
+
+        PhotoIndexingConsumer.PhotoIndexMessage message = new PhotoIndexingConsumer.PhotoIndexMessage();
+        message.setTaskId(aiTask.getId());
+        message.setPhotoIds(List.of(photo.getId()));
+        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_PHOTO_INDEX, message);
+
         return toDTO(photo);
     }
 
     public Page<PhotoDTO> listPhotos(Pageable pageable) {
-        return photoRepository.findAll(pageable).map(this::toDTO);
+        Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "id"));
+        return photoRepository.findAll(sorted).map(this::toDTO);
     }
 
     public PhotoDTO getPhoto(Long id) {
@@ -154,6 +179,11 @@ public class PhotoService {
     }
 
     private byte[] generateThumbnail(byte[] imageData) throws Exception {
+        // WebP not supported by Java ImageIO - use original as thumbnail
+        if (isWebP(imageData)) {
+            log.info("WebP detected, using original as thumbnail");
+            return imageData;
+        }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Thumbnails.of(new java.io.ByteArrayInputStream(imageData))
                 .size(400, 400)
@@ -161,6 +191,17 @@ public class PhotoService {
                 .outputQuality(0.8)
                 .toOutputStream(baos);
         return baos.toByteArray();
+    }
+
+    private boolean isWebP(byte[] data) {
+        // WebP magic bytes: "RIFF" + 4 bytes + "WEBP"
+        return data.length >= 12
+                && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
+    }
+
+    private boolean isWebPFilename(String filename) {
+        return filename != null && filename.toLowerCase().endsWith(".webp");
     }
 
     private String computeMd5(byte[] data) throws Exception {
@@ -233,7 +274,8 @@ public class PhotoService {
         dto.setCreatedAt(photo.getCreatedAt());
 
         try {
-            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb.jpg"));
+            String thumbExt = isWebPFilename(photo.getOriginalFilename()) ? "webp" : "jpg";
+            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail URL for photo {}", photo.getId());
         }

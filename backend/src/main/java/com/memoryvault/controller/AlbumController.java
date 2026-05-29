@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/albums")
@@ -46,5 +47,12 @@ public class AlbumController {
     public ResponseEntity<Void> deleteAlbum(@PathVariable Long id) {
         albumService.deleteAlbum(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/train")
+    public ResponseEntity<Map<String, Object>> trainAlbum(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0.75") Double threshold) {
+        return ResponseEntity.ok(albumService.trainAlbum(id, threshold));
     }
 }

@@ -167,6 +167,10 @@ function handleScroll(e: Event) {
     loadMore()
   }
 }
+
+async function handleToggleFavorite(photoId: number) {
+  await photoStore.toggleFavorite(photoId)
+}
 </script>
 
 <template>
@@ -196,6 +200,7 @@ function handleScroll(e: Event) {
               :key="photoStore.photos[item.startIndex + i - 1].id"
               :photo="photoStore.photos[item.startIndex + i - 1]"
               @click="openViewer(item.startIndex + i - 1)"
+              @toggle-favorite="handleToggleFavorite(photoStore.photos[item.startIndex + i - 1].id)"
             />
           </div>
         </div>

@@ -21,7 +21,7 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.rating >= :minRating ORDER BY p.rating DESC, p.createdAt DESC")
     Page<Photo> findByMinRating(@Param("minRating") int minRating, Pageable pageable);
 
-    @Query("SELECT p FROM Photo p WHERE p.favorite = true ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM Photo p WHERE p.favorite = true ORDER BY p.id DESC")
     Page<Photo> findFavorites(Pageable pageable);
 
     @Query("SELECT p FROM Photo p WHERE p.fileHashMd5 = :hash")
@@ -40,4 +40,6 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     List<Photo> findAllWithPhash();
 
     Optional<Photo> findByFilePath(String filePath);
+
+    List<Photo> findByEmbeddingIsNull();
 }

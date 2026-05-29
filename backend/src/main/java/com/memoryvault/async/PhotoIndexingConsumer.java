@@ -2,10 +2,9 @@ package com.memoryvault.async;
 
 import com.memoryvault.ai.AiServiceClient;
 import com.memoryvault.config.RabbitMQConfig;
-import com.memoryvault.entity.AiTask;
-import com.memoryvault.entity.Photo;
-import com.memoryvault.repository.AiTaskRepository;
-import com.memoryvault.repository.PhotoRepository;
+import com.memoryvault.entity.*;
+import com.memoryvault.repository.*;
+import com.memoryvault.storage.MinioStorageService;
 import com.memoryvault.websocket.ProgressWebSocketHandler;
 import com.memoryvault.dto.TaskProgressDTO;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +13,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -24,6 +24,10 @@ public class PhotoIndexingConsumer {
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final ProgressWebSocketHandler progressHandler;
+    private final MinioStorageService storageService;
+    private final FaceClusterRepository faceClusterRepository;
+    private final TagRepository tagRepository;
+    private final PhotoTagRepository photoTagRepository;
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_PHOTO_INDEX)
     public void handlePhotoIndex(PhotoIndexMessage message) {
@@ -43,10 +47,42 @@ public class PhotoIndexingConsumer {
                 Photo photo = photoRepository.findById(photoIds.get(i)).orElse(null);
                 if (photo == null) continue;
 
-                // TODO: Download photo from MinIO and process with AI service
-                // 1. CLIP embedding
-                // 2. Face detection
-                // 3. YOLO classification
+                try {
+                    // Download photo from MinIO
+                    byte[] data = storageService.downloadBytes(photo.getFilePath());
+
+                    // 1. CLIP embedding
+                    AiServiceClient.EmbeddingResponse embedResp = aiServiceClient.embed(data, photo.getOriginalFilename());
+                    photo.setEmbedding(vectorToString(embedResp.getEmbedding()));
+
+                    // 2. Face detection
+                    AiServiceClient.FaceDetectionResponse faceResp = aiServiceClient.detectFaces(data, photo.getOriginalFilename());
+                    for (AiServiceClient.FaceDetectionResponse.FaceResult face : faceResp.getFaces()) {
+                        FaceCluster fc = new FaceCluster();
+                        fc.setPhoto(photo);
+                        fc.setBboxJson(toJson(face.getBbox()));
+                        fc.setEmbedding(vectorToString(face.getEmbedding()));
+                        fc.setConfidence(face.getConfidence());
+                        faceClusterRepository.save(fc);
+                    }
+
+                    // 3. YOLO classification
+                    AiServiceClient.ClassifyResponse classifyResp = aiServiceClient.classify(data, photo.getOriginalFilename());
+                    for (AiServiceClient.ClassifyResponse.TagResult tag : classifyResp.getTags()) {
+                        Tag t = tagRepository.findByName(tag.getName())
+                                .orElseGet(() -> tagRepository.save(newTag(tag.getName(), tag.getCategory())));
+                        PhotoTag pt = new PhotoTag();
+                        pt.setPhotoId(photo.getId());
+                        pt.setTagId(t.getId());
+                        pt.setConfidence(tag.getConfidence());
+                        pt.setSource(Tag.TagType.AI);
+                        photoTagRepository.save(pt);
+                    }
+
+                    photoRepository.save(photo);
+                } catch (Exception e) {
+                    log.error("Failed to process photo {}: {}", photo.getId(), e.getMessage());
+                }
 
                 int progress = (int) ((i + 1) * 100.0 / total);
                 task.setProgress(progress);
@@ -74,6 +110,24 @@ public class PhotoIndexingConsumer {
         dto.setProgress(task.getProgress());
         dto.setMessage(message);
         return dto;
+    }
+
+    private String vectorToString(List<Float> vector) {
+        return "[" + vector.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(",")) + "]";
+    }
+
+    private String toJson(AiServiceClient.FaceDetectionResponse.BBox bbox) {
+        return String.format("{\"x\":%.4f,\"y\":%.4f,\"w\":%.4f,\"h\":%.4f}",
+                bbox.getX(), bbox.getY(), bbox.getW(), bbox.getH());
+    }
+
+    private Tag newTag(String name, String category) {
+        Tag tag = new Tag();
+        tag.setName(name);
+        tag.setType(Tag.TagType.valueOf(category != null ? category.toUpperCase() : "AI"));
+        return tag;
     }
 
     @lombok.Data

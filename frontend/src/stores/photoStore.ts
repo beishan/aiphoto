@@ -48,10 +48,10 @@ export const usePhotoStore = defineStore('photo', () => {
     const { data } = await photoApi.update(id, updates)
     const index = photos.value.findIndex((p) => p.id === id)
     if (index !== -1) {
-      photos.value[index] = data
+      photos.value[index] = { ...photos.value[index], ...updates }
     }
     if (currentPhoto.value?.id === id) {
-      currentPhoto.value = data
+      currentPhoto.value = { ...currentPhoto.value, ...updates }
     }
     return data
   }

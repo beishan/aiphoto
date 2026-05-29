@@ -4,6 +4,7 @@ import com.memoryvault.ai.AiServiceClient;
 import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.entity.*;
 import com.memoryvault.repository.*;
+import com.memoryvault.storage.MinioStorageService;
 import com.memoryvault.websocket.ProgressWebSocketHandler;
 import com.memoryvault.dto.TaskProgressDTO;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -25,6 +28,7 @@ public class TrainingTaskConsumer {
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final ProgressWebSocketHandler progressHandler;
+    private final MinioStorageService storageService;
 
     @RabbitListener(queues = RabbitMQConfig.QUEUE_TRAINING)
     public void handleTrainingTask(TrainingMessage message) {
@@ -46,9 +50,9 @@ public class TrainingTaskConsumer {
             // Get embeddings for all positive samples
             for (int i = 0; i < positiveSamples.size(); i++) {
                 Photo photo = positiveSamples.get(i);
-                // TODO: Download photo from MinIO and get embedding
-                // AiServiceClient.EmbeddingResponse response = aiServiceClient.embed(data, photo.getFilePath());
-                // embeddings.add(response.getEmbedding());
+                byte[] data = storageService.downloadBytes(photo.getFilePath());
+                AiServiceClient.EmbeddingResponse response = aiServiceClient.embed(data, photo.getOriginalFilename());
+                embeddings.add(response.getEmbedding());
 
                 int progress = (int) ((i + 1) * 50.0 / positiveSamples.size());
                 task.setProgress(progress);
@@ -58,17 +62,49 @@ public class TrainingTaskConsumer {
             }
 
             // Compute prototype vector (centroid)
-            // TODO: Compute centroid from embeddings
+            int dim = embeddings.get(0).size();
+            float[] centroid = new float[dim];
+            for (List<Float> emb : embeddings) {
+                for (int j = 0; j < dim; j++) {
+                    centroid[j] += emb.get(j);
+                }
+            }
+            for (int j = 0; j < dim; j++) {
+                centroid[j] /= embeddings.size();
+            }
+            List<Float> centroidList = new ArrayList<>();
+            for (float v : centroid) centroidList.add(v);
 
             // Save training set
             TrainingSet trainingSet = trainingSetRepository.findByAlbumId(album.getId())
                     .orElse(new TrainingSet());
             trainingSet.setAlbum(album);
-            // trainingSet.setPrototypeVector(vectorToString(centroid));
+            trainingSet.setPrototypeVector(vectorToString(centroidList));
             trainingSet.setThreshold(message.getThreshold() != null ? message.getThreshold() : 0.75);
             trainingSetRepository.save(trainingSet);
 
-            // TODO: Scan all photos and find matches above threshold
+            // Scan all photos and find matches above threshold
+            String vectorStr = vectorToString(centroidList);
+            double threshold = trainingSet.getThreshold();
+            List<Photo> allPhotos = photoRepository.findAll();
+            int matched = 0;
+            for (int i = 0; i < allPhotos.size(); i++) {
+                Photo p = allPhotos.get(i);
+                if (p.getEmbedding() != null && !album.getPhotos().contains(p)) {
+                    List<Photo> similar = photoRepository.findByVectorSimilarity(vectorStr, 1.0 - threshold, 1);
+                    if (!similar.isEmpty() && similar.get(0).getId().equals(p.getId())) {
+                        album.getPhotos().add(p);
+                        matched++;
+                    }
+                }
+                int progress = 50 + (int) ((i + 1) * 50.0 / allPhotos.size());
+                task.setProgress(progress);
+                if (i % 10 == 0) {
+                    aiTaskRepository.save(task);
+                    progressHandler.sendProgress(createProgressDTO(task, "Scanning: " + (i + 1) + "/" + allPhotos.size()));
+                }
+            }
+            albumRepository.save(album);
 
             task.setStatus(AiTask.TaskStatus.COMPLETED);
             task.setProgress(100);
@@ -90,6 +126,12 @@ public class TrainingTaskConsumer {
         dto.setProgress(task.getProgress());
         dto.setMessage(message);
         return dto;
+    }
+
+    private String vectorToString(List<Float> vector) {
+        return "[" + vector.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(",")) + "]";
     }
 
     @lombok.Data

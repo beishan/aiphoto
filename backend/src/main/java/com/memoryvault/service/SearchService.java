@@ -1,5 +1,6 @@
 package com.memoryvault.service;
 
+import com.memoryvault.ai.AiServiceClient;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.dto.SearchRequest;
 import com.memoryvault.entity.Photo;
@@ -8,10 +9,12 @@ import com.memoryvault.storage.MinioStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -20,6 +23,7 @@ public class SearchService {
 
     private final PhotoRepository photoRepository;
     private final MinioStorageService storageService;
+    private final AiServiceClient aiServiceClient;
 
     public Page<PhotoDTO> search(SearchRequest request) {
         PageRequest pageRequest = PageRequest.of(request.getPage(), request.getSize());
@@ -36,11 +40,20 @@ public class SearchService {
     }
 
     private Page<PhotoDTO> semanticSearch(String query, Double threshold, PageRequest pageRequest) {
-        // This would call the AI service to get the embedding for the query,
-        // then search using pgvector cosine similarity.
-        // For now, fall back to full text search.
         log.info("Semantic search for: {} (threshold: {})", query, threshold);
-        return fullTextSearch(query, pageRequest);
+        AiServiceClient.EmbeddingResponse resp = aiServiceClient.embedText(query);
+        String vectorStr = vectorToString(resp.getEmbedding());
+        List<Photo> results = photoRepository.findByVectorSimilarity(vectorStr, threshold, 100);
+        int start = (int) pageRequest.getOffset();
+        int end = Math.min(start + pageRequest.getPageSize(), results.size());
+        List<PhotoDTO> page = results.subList(start, end).stream().map(this::toDTO).toList();
+        return new PageImpl<>(page, pageRequest, results.size());
+    }
+
+    private String vectorToString(List<Float> vector) {
+        return "[" + vector.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(",")) + "]";
     }
 
     private PhotoDTO toDTO(Photo photo) {
@@ -60,7 +73,9 @@ public class SearchService {
         dto.setFavorite(photo.getFavorite());
         dto.setCreatedAt(photo.getCreatedAt());
         try {
-            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb.webp"));
+            String thumbExt = photo.getOriginalFilename() != null
+                    && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
+            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail URL for photo {}", photo.getId());
         }

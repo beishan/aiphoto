@@ -1,17 +1,17 @@
 package com.memoryvault.service;
 
+import com.memoryvault.async.TrainingTaskConsumer;
+import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.AlbumDTO;
-import com.memoryvault.entity.Album;
-import com.memoryvault.entity.Photo;
-import com.memoryvault.entity.User;
-import com.memoryvault.repository.AlbumRepository;
-import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.repository.UserRepository;
+import com.memoryvault.entity.*;
+import com.memoryvault.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +20,8 @@ public class AlbumService {
     private final AlbumRepository albumRepository;
     private final PhotoRepository photoRepository;
     private final UserRepository userRepository;
+    private final RabbitTemplate rabbitTemplate;
+    private final AiTaskRepository aiTaskRepository;
 
     public List<AlbumDTO> listAlbums() {
         return albumRepository.findAll().stream().map(this::toDTO).toList();
@@ -63,6 +65,23 @@ public class AlbumService {
     @Transactional
     public void deleteAlbum(Long id) {
         albumRepository.deleteById(id);
+    }
+
+    public Map<String, Object> trainAlbum(Long albumId, Double threshold) {
+        Album album = albumRepository.findById(albumId)
+                .orElseThrow(() -> new RuntimeException("Album not found"));
+
+        AiTask aiTask = new AiTask();
+        aiTask.setType(AiTask.TaskType.TRAIN);
+        aiTask = aiTaskRepository.save(aiTask);
+
+        TrainingTaskConsumer.TrainingMessage message = new TrainingTaskConsumer.TrainingMessage();
+        message.setTaskId(aiTask.getId());
+        message.setAlbumId(albumId);
+        message.setThreshold(threshold);
+        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_TRAINING, message);
+
+        return Map.of("taskId", aiTask.getId(), "message", "Training task created");
     }
 
     private AlbumDTO toDTO(Album album) {

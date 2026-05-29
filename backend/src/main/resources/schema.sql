@@ -135,9 +135,9 @@ CREATE TABLE IF NOT EXISTS user_settings (
 );
 
 -- Indexes
--- Embedding indexes (create after AI service populates embeddings with native SQL)
--- CREATE INDEX IF NOT EXISTS idx_photos_embedding ON photos USING hnsw (embedding vector_cosine_ops);
--- CREATE INDEX IF NOT EXISTS idx_face_clusters_embedding ON face_clusters USING hnsw (embedding vector_cosine_ops);
+-- Embedding indexes
+CREATE INDEX IF NOT EXISTS idx_photos_embedding ON photos USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_face_clusters_embedding ON face_clusters USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_photos_fts ON photos USING gin(to_tsvector('simple', coalesce(note, '') || ' ' || coalesce(ai_caption, '')));
 CREATE INDEX IF NOT EXISTS idx_photos_exif_date ON photos (exif_date DESC);
 CREATE INDEX IF NOT EXISTS idx_photos_md5 ON photos (file_hash_md5);

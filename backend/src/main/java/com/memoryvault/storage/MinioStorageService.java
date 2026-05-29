@@ -51,11 +51,12 @@ public class MinioStorageService {
     }
 
     public String uploadThumbnail(byte[] data, String objectName) throws Exception {
+        String contentType = objectName.endsWith(".webp") ? "image/webp" : "image/jpeg";
         minioClient.putObject(PutObjectArgs.builder()
                 .bucket(bucketThumbs)
                 .object(objectName)
                 .stream(new ByteArrayInputStream(data), data.length, -1)
-                .contentType("image/webp")
+                .contentType(contentType)
                 .build());
         return objectName;
     }
@@ -65,6 +66,12 @@ public class MinioStorageService {
                 .bucket(bucketPhotos)
                 .object(objectName)
                 .build());
+    }
+
+    public byte[] downloadBytes(String objectName) throws Exception {
+        try (InputStream is = downloadPhoto(objectName)) {
+            return is.readAllBytes();
+        }
     }
 
     public String getPresignedUrl(String bucket, String objectName) throws Exception {

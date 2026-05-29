@@ -88,7 +88,9 @@ public class BabyAlbumService {
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
         try {
-            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb.webp"));
+            String thumbExt = photo.getOriginalFilename() != null
+                    && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
+            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
         } catch (Exception e) {
             // ignore
         }

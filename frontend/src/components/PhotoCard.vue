@@ -8,6 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   click: []
+  'toggle-favorite': []
 }>()
 
 const thumbnailSrc = computed(() => {
@@ -32,11 +33,14 @@ const formattedDate = computed(() => {
         <path d="M8 5v14l11-7z" />
       </svg>
     </div>
-    <div v-if="photo.favorite" class="badge fav-badge">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+    <button class="badge fav-btn" :class="{ active: photo.favorite }" @click.stop="emit('toggle-favorite')">
+      <svg v-if="photo.favorite" viewBox="0 0 24 24" fill="#ff453a" width="14" height="14">
         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
       </svg>
-    </div>
+      <svg v-else viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2" width="14" height="14">
+        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+      </svg>
+    </button>
   </div>
 </template>
 
@@ -68,7 +72,41 @@ const formattedDate = computed(() => {
   color: white;
   font-size: 11px;
   font-weight: 500;
-  pointer-events: none;
+}
+
+.fav-btn {
+  bottom: 4px;
+  left: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, transform 0.15s;
+}
+
+.photo-cell:hover .fav-btn,
+.fav-btn.active {
+  opacity: 1;
+}
+
+.fav-btn:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.fav-btn:active {
+  transform: scale(0.9);
+}
+
+.fav-btn.active {
+  background: rgba(255, 69, 58, 0.2);
 }
 
 .video-badge {
@@ -78,13 +116,7 @@ const formattedDate = computed(() => {
   backdrop-filter: blur(4px);
   padding: 2px 6px;
   border-radius: 4px;
-}
-
-.fav-badge {
-  bottom: 6px;
-  right: 6px;
-  color: #ff453a;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
 }
 
 </style>

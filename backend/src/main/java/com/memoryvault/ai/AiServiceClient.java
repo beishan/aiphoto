@@ -32,6 +32,23 @@ public class AiServiceClient {
     }
 
     /**
+     * Generate CLIP embedding for text.
+     */
+    public EmbeddingResponse embedText(String text) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        Map<String, String> body = Map.of("text", text);
+        HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(body, headers);
+        ResponseEntity<EmbeddingResponse> response = restTemplate.exchange(
+                aiServiceUrl + "/ai/embed-text",
+                HttpMethod.POST,
+                requestEntity,
+                EmbeddingResponse.class
+        );
+        return response.getBody();
+    }
+
+    /**
      * Detect faces in an image.
      */
     public FaceDetectionResponse detectFaces(byte[] imageData, String filename) {
