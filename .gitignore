@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Code index
+.codegraph/
+
 # IDE
 .idea/
 .vscode/
