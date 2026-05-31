@@ -13,9 +13,9 @@ const viewerIndex = ref(0)
 const showUploader = ref(false)
 const loadingMore = ref(false)
 
-// Zoom level: 0=6col, 1=4col(default), 2=3col, 3=2col
-const zoomLevel = ref(1)
-const zoomColumns = [6, 4, 3, 2]
+// Zoom level: 0=10col, 1=8col, 2=6col, 3=4col(default), 4=3col, 5=2col
+const zoomLevel = ref(0)
+const zoomColumns = [6, 10, 16, 20, 30]
 
 const gridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${zoomColumns[zoomLevel.value]}, 1fr)`,
@@ -26,21 +26,12 @@ function zoomIn() {
 }
 
 function zoomOut() {
-  if (zoomLevel.value < 3) zoomLevel.value++
+  if (zoomLevel.value < 4) zoomLevel.value++
 }
 
 // Set initial zoom based on viewport width
 function initZoom() {
-  const w = window.innerWidth
-  if (w < 480) {
-    zoomLevel.value = 3      // 2 col
-  } else if (w < 768) {
-    zoomLevel.value = 2      // 3 col
-  } else if (w < 1200) {
-    zoomLevel.value = 1      // 4 col
-  } else {
-    zoomLevel.value = 0      // 6 col
-  }
+  zoomLevel.value = 2      // Default: 16 columns (third level)
 }
 
 // Timeline
@@ -141,11 +132,21 @@ function scrollToMonth(item: TimelineItem) {
 }
 
 async function loadMore() {
-  if (loadingMore.value || photoStore.photos.length >= photoStore.totalElements) return
+  if (loadingMore.value) return
+  if (photoStore.totalPages > 0 && page.value >= photoStore.totalPages - 1) return
+  if (photoStore.photos.length >= photoStore.totalElements && photoStore.totalElements > 0) return
   loadingMore.value = true
-  page.value++
   try {
-    await photoStore.loadMore(page.value, pageSize)
+    const nextPage = page.value + 1
+    const prevLength = photoStore.photos.length
+    await photoStore.loadMore(nextPage, pageSize)
+    // Only increment page if we actually loaded more data
+    if (photoStore.photos.length > prevLength) {
+      page.value = nextPage
+    } else {
+      // No new data loaded, mark as last page
+      photoStore.totalPages = nextPage
+    }
   } finally {
     loadingMore.value = false
   }
@@ -235,7 +236,7 @@ async function handleToggleFavorite(photoId: number) {
           <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
         </svg>
       </button>
-      <button class="zoom-btn" @click="zoomOut" :disabled="zoomLevel === 3" title="缩小">
+      <button class="zoom-btn" @click="zoomOut" :disabled="zoomLevel === 4" title="缩小">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M5 12a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z" />
         </svg>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, type Ref } from 'vue'
+import { computed, inject, ref, watch, nextTick, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import TaskFloat from '@/components/TaskFloat.vue'
 
@@ -13,10 +13,20 @@ const tabs = [
   { path: '/', name: 'Gallery', label: '照片', icon: 'photo', activeIcon: 'photo.fill' },
   { path: '/albums', name: 'Albums', label: '相册', icon: 'rectangle.stack', activeIcon: 'rectangle.stack.fill' },
   { path: '/favorites', name: 'Favorites', label: '喜欢', icon: 'heart', activeIcon: 'heart.fill' },
+  { path: '/categories', name: 'Categories', label: '分类', icon: 'square.grid.2x2', activeIcon: 'square.grid.2x2.fill' },
   { path: '/people', name: 'People', label: '人物', icon: 'person.crop.circle', activeIcon: 'person.crop.circle.fill' },
   { path: '/search', name: 'Search', label: '搜索', icon: 'magnifyingglass', activeIcon: 'magnifyingglass' },
   { path: '/more', name: 'More', label: '更多', icon: 'ellipsis.circle', activeIcon: 'ellipsis.circle.fill' },
 ]
+
+// Tab-level routes (sub-pages should hide the tab bar)
+const tabPaths = tabs.map(t => t.path)
+
+const isTabRoute = computed(() => {
+  const path = route.path
+  if (path === '/') return true
+  return tabPaths.some(p => p !== '/' && path === p)
+})
 
 const activeTab = computed(() => {
   const path = route.path
@@ -25,20 +35,57 @@ const activeTab = computed(() => {
   return tab?.path || '/'
 })
 
+const activeTabIndex = computed(() => tabs.findIndex(t => t.path === activeTab.value))
+
+// Tab bar indicator position
+const tabBarRef = ref<HTMLElement | null>(null)
+const indicatorLeft = ref(0)
+const indicatorWidth = ref(0)
+
+function updateIndicator() {
+  if (!tabBarRef.value) return
+  const items = tabBarRef.value.querySelectorAll<HTMLElement>('.tab-item')
+  const idx = activeTabIndex.value
+  if (idx >= 0 && items[idx]) {
+    const item = items[idx]
+    const bar = tabBarRef.value
+    const barRect = bar.getBoundingClientRect()
+    const itemRect = item.getBoundingClientRect()
+    indicatorLeft.value = itemRect.left - barRect.left
+    indicatorWidth.value = itemRect.width
+  }
+}
+
+watch(activeTab, () => nextTick(updateIndicator), { immediate: true })
+
+// Also update on theme change (liquid glass changes tab bar dimensions)
+watch(theme, () => nextTick(updateIndicator))
+
 const pageTitle = computed(() => {
   const path = route.path
   if (path === '/') return '照片'
   if (path.startsWith('/albums')) return '相册'
   if (path === '/favorites') return '喜欢'
-  if (path === '/people') return '人物'
+  if (path.startsWith('/categories')) return '分类'
+  if (path.startsWith('/people')) return '人物'
   if (path === '/search') return '搜索'
   if (path === '/more') return '更多'
+  if (path === '/dedup') return '去重检测'
   return 'MemoryVault'
 })
 
 function navigateTo(path: string) {
   router.push(path)
 }
+
+const themeTitle = computed(() => {
+  const map: Record<string, string> = {
+    'dark': '切换亮色主题',
+    'light': '切换 Liquid Glass 主题',
+    'liquid-glass': '切换暗色主题',
+  }
+  return map[theme.value] || '切换主题'
+})
 
 // SF Symbols as SVG paths
 const sfIcons: Record<string, string> = {
@@ -53,6 +100,8 @@ const sfIcons: Record<string, string> = {
   'ellipsis.circle.fill': 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V6h2v6zm4 4h-2v-2h2v2zm0-4h-2V6h2v6z',
   'heart': 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z',
   'heart.fill': 'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z',
+  'square.grid.2x2': 'M3 3h8v8H3V3zm0 10h8v8H3v-8zM13 3h8v8h-8V3zm0 10h8v8h-8v-8z',
+  'square.grid.2x2.fill': 'M3 3h8v8H3V3zm0 10h8v8H3v-8zM13 3h8v8h-8V3zm0 10h8v8h-8v-8z',
 }
 </script>
 
@@ -64,14 +113,18 @@ const sfIcons: Record<string, string> = {
         <TaskFloat />
       </div>
       <h1 class="page-title">{{ pageTitle }}</h1>
-      <button class="theme-toggle" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
-        <!-- Sun icon for light mode -->
+      <button class="theme-toggle" @click="toggleTheme" :title="themeTitle">
+        <!-- Sun icon for dark mode -> light -->
         <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M12 7a5 5 0 100 10 5 5 0 000-10zm0-3a1 1 0 01-1-1V1a1 1 0 112 0v2a1 1 0 01-1 1zm0 18a1 1 0 01-1-1v-2a1 1 0 112 0v2a1 1 0 01-1 1zm9-9a1 1 0 01-1 1h-2a1 1 0 110-2h2a1 1 0 011 1zM6 13H4a1 1 0 110-2h2a1 1 0 010 2zm12.07-6.07a1 1 0 010-1.41l1.42-1.42a1 1 0 111.41 1.41l-1.41 1.42a1 1 0 01-1.42 0zM4.93 19.07a1 1 0 010-1.41l1.42-1.42a1 1 0 111.41 1.41l-1.41 1.42a1 1 0 01-1.42 0zm14.14 0a1 1 0 01-1.41 0l-1.42-1.42a1 1 0 011.41-1.41l1.42 1.41a1 1 0 010 1.42zM4.93 4.93a1 1 0 01-1.42 0L2.1 3.51a1 1 0 011.41-1.41l1.42 1.41a1 1 0 010 1.42z" />
         </svg>
-        <!-- Moon icon for dark mode -->
-        <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+        <!-- Moon icon for light mode -> liquid-glass -->
+        <svg v-else-if="theme === 'light'" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M21.64 13a1 1 0 00-1.05-.14 8.05 8.05 0 01-3.37.73 8.15 8.15 0 01-8.14-8.14 8.59 8.59 0 01.25-2A1 1 0 008 2.36a10.14 10.14 0 1014 11 1 1 0 00-.36-.64z" />
+        </svg>
+        <!-- Diamond icon for liquid-glass -> dark -->
+        <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M12 2L2 9l10 13L22 9 12 2zm0 2.8L19.5 9 12 19.2 4.5 9 12 4.8z" />
         </svg>
       </button>
     </header>
@@ -79,14 +132,19 @@ const sfIcons: Record<string, string> = {
     <!-- Main content -->
     <main class="main-content">
       <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
+        <transition name="slide-fade" mode="out-in">
           <component :is="Component" />
         </transition>
       </router-view>
     </main>
 
     <!-- Bottom tab bar -->
-    <nav class="tab-bar glass">
+    <nav v-if="isTabRoute" ref="tabBarRef" class="tab-bar glass">
+      <!-- Sliding indicator (liquid-glass theme only) -->
+      <div
+        class="tab-indicator"
+        :style="{ left: indicatorLeft + 'px', width: indicatorWidth + 'px' }"
+      ></div>
       <button
         v-for="tab in tabs"
         :key="tab.path"
@@ -155,22 +213,26 @@ const sfIcons: Record<string, string> = {
 
 .main-content {
   flex: 1;
-  padding-bottom: var(--tab-height);
+  padding-bottom: var(--tab-content-padding);
   overflow-y: auto;
 }
 
 .tab-bar {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: var(--tab-bar-bottom);
+  left: var(--tab-bar-left);
+  right: var(--tab-bar-right);
+  width: var(--tab-bar-width);
+  max-width: var(--tab-bar-max-width);
+  transform: var(--tab-bar-translate);
   z-index: 100;
   display: flex;
   align-items: flex-start;
   justify-content: space-around;
-  height: var(--tab-height);
-  padding-bottom: var(--safe-bottom);
-  border-top: 0.5px solid var(--glass-border);
+  height: var(--tab-bar-height);
+  border-radius: var(--tab-bar-radius);
+  box-shadow: var(--tab-bar-shadow);
+  border: 0.5px solid var(--glass-border);
 }
 
 .tab-item {
@@ -180,10 +242,12 @@ const sfIcons: Record<string, string> = {
   justify-content: center;
   gap: 2px;
   padding: 8px 0;
-  min-width: 64px;
+  min-width: 56px;
   color: var(--text-tertiary);
   transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 1;
 }
 
 .tab-item.active {
@@ -199,5 +263,17 @@ const sfIcons: Record<string, string> = {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.01em;
+}
+
+/* Sliding indicator - hidden by default, shown in liquid-glass theme */
+.tab-indicator {
+  display: none;
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  height: 48px;
+  border-radius: 16px;
+  pointer-events: none;
+  z-index: 0;
 }
 </style>

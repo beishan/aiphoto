@@ -1,8 +1,10 @@
 package com.memoryvault.entity;
 
+import com.memoryvault.config.PgVectorType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Type;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
@@ -24,8 +26,9 @@ public class TrainingSet {
     /**
      * Prototype vector computed from positive samples.
      */
+    @Type(PgVectorType.class)
     @Column(columnDefinition = "vector(512)")
-    private String prototypeVector;
+    private float[] prototypeVector;
 
     @Column(nullable = false)
     private Double threshold = 0.75;

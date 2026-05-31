@@ -10,7 +10,13 @@ import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.entity.AiTask;
 import com.memoryvault.entity.Photo;
+import com.memoryvault.entity.FaceCluster;
+import com.memoryvault.entity.Person;
 import com.memoryvault.repository.AiTaskRepository;
+import com.memoryvault.repository.AlbumRepository;
+import com.memoryvault.repository.CategoryRepository;
+import com.memoryvault.repository.FaceClusterRepository;
+import com.memoryvault.repository.PersonRepository;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.storage.MinioStorageService;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +51,10 @@ public class PhotoService {
     private final SettingService settingService;
     private final RabbitTemplate rabbitTemplate;
     private final AiTaskRepository aiTaskRepository;
+    private final FaceClusterRepository faceClusterRepository;
+    private final PersonRepository personRepository;
+    private final AlbumRepository albumRepository;
+    private final CategoryRepository categoryRepository;
 
     @Transactional
     public PhotoDTO uploadPhoto(MultipartFile file, Long userId) throws Exception {
@@ -134,6 +144,26 @@ public class PhotoService {
 
     @Transactional
     public void deletePhoto(Long id) {
+        Photo photo = photoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Photo not found"));
+        // Clear cover_photo_id references from albums and categories
+        albumRepository.clearCoverPhotoRefs(id);
+        categoryRepository.clearCoverPhotoRefs(id);
+        // Clear cover_face_id references from people table before deleting face clusters
+        List<FaceCluster> faceClusters = faceClusterRepository.findByPhoto(photo);
+        if (!faceClusters.isEmpty()) {
+            List<Long> faceIds = faceClusters.stream().map(FaceCluster::getId).toList();
+            personRepository.clearCoverFaceRefs(faceIds);
+        }
+        // Delete files from MinIO storage
+        try {
+            storageService.deleteObject(photo.getFilePath());
+            String thumbExt = photo.getOriginalFilename() != null
+                    && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
+            storageService.deleteObject(photo.getFileHashMd5() + "/thumb." + thumbExt);
+        } catch (Exception e) {
+            log.warn("Failed to delete storage objects for photo {}: {}", id, e.getMessage());
+        }
         photoRepository.deleteById(id);
     }
 

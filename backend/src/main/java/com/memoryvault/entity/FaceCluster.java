@@ -1,11 +1,14 @@
 package com.memoryvault.entity;
 
+import com.memoryvault.config.PgVectorType;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import org.hibernate.annotations.Type;
 
 @Data
 @NoArgsConstructor
+@ToString(exclude = {"person", "photo"})
+@EqualsAndHashCode(exclude = {"person", "photo"})
 @Entity
 @Table(name = "face_clusters")
 public class FaceCluster {
@@ -27,8 +30,9 @@ public class FaceCluster {
     /**
      * InsightFace 512-dimensional embedding vector.
      */
+    @Type(PgVectorType.class)
     @Column(columnDefinition = "vector(512)")
-    private String embedding;
+    private float[] embedding;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "person_id")

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import type { Photo } from '@/types'
+import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
+import { albumApi } from '@/api/albumApi'
 
 const props = defineProps<{
   show: boolean
@@ -17,6 +18,15 @@ const emit = defineEmits<{
 const photoStore = usePhotoStore()
 const currentIndex = ref(props.initialIndex)
 const showInfo = ref(false)
+
+// Album picker
+const showAlbumPicker = ref(false)
+const albums = ref<Album[]>([])
+const loadingAlbums = ref(false)
+const addingToAlbum = ref(false)
+const creatingAlbum = ref(false)
+const newAlbumName = ref('')
+const showCreateAlbum = ref(false)
 
 const currentPhoto = computed(() => props.photos[currentIndex.value])
 
@@ -56,8 +66,14 @@ async function toggleFavorite() {
 
 async function deletePhoto() {
   if (!currentPhoto.value) return
+  if (!confirm('确定要删除这张照片吗？')) return
   const photo = currentPhoto.value
-  await photoApi.delete(photo.id)
+  try {
+    await photoApi.delete(photo.id)
+  } catch (e) {
+    alert('删除失败，请重试')
+    return
+  }
   // Remove from photos array
   const idx = props.photos.findIndex(p => p.id === photo.id)
   if (idx !== -1) {
@@ -71,6 +87,47 @@ async function deletePhoto() {
   // Adjust index
   if (currentIndex.value >= props.photos.length) {
     currentIndex.value = props.photos.length - 1
+  }
+}
+
+async function openAlbumPicker() {
+  if (!currentPhoto.value) return
+  showAlbumPicker.value = true
+  showCreateAlbum.value = false
+  newAlbumName.value = ''
+  loadingAlbums.value = true
+  try {
+    const { data } = await albumApi.list()
+    albums.value = data
+  } finally {
+    loadingAlbums.value = false
+  }
+}
+
+async function addToAlbum(albumId: number) {
+  if (!currentPhoto.value || addingToAlbum.value) return
+  addingToAlbum.value = true
+  try {
+    await albumApi.addPhoto(albumId, currentPhoto.value.id)
+    showAlbumPicker.value = false
+  } catch (e) {
+    alert('添加失败，请重试')
+  } finally {
+    addingToAlbum.value = false
+  }
+}
+
+async function createAndAdd() {
+  if (!currentPhoto.value || !newAlbumName.value.trim() || creatingAlbum.value) return
+  creatingAlbum.value = true
+  try {
+    const { data: newAlbum } = await albumApi.create({ name: newAlbumName.value.trim(), type: 'VIRTUAL' })
+    await albumApi.addPhoto(newAlbum.id, currentPhoto.value.id)
+    showAlbumPicker.value = false
+  } catch (e) {
+    alert('创建失败，请重试')
+  } finally {
+    creatingAlbum.value = false
   }
 }
 
@@ -107,6 +164,11 @@ onUnmounted(() => {
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
                 <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+              </svg>
+            </button>
+            <button class="toolbar-btn" @click="openAlbumPicker">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+                <path d="M12 5v14M5 12h14" />
               </svg>
             </button>
             <button class="toolbar-btn danger" @click="deletePhoto">
@@ -168,6 +230,72 @@ onUnmounted(() => {
             <div class="info-row" v-if="currentPhoto.note">
               <span class="info-label">备注</span>
               <span class="info-value">{{ currentPhoto.note }}</span>
+            </div>
+          </div>
+        </Transition>
+
+        <!-- Album picker modal -->
+        <Transition name="slide-up">
+          <div v-if="showAlbumPicker" class="album-picker-overlay" @click.self="showAlbumPicker = false">
+            <div class="album-picker glass">
+              <div class="picker-header">
+                <h3 class="picker-title">添加到相册</h3>
+                <button class="picker-close" @click="showAlbumPicker = false">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                    <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Create new album -->
+              <div v-if="showCreateAlbum" class="create-album-row">
+                <input
+                  v-model="newAlbumName"
+                  type="text"
+                  class="album-name-input"
+                  placeholder="输入相册名称"
+                  @keyup.enter="createAndAdd"
+                  autofocus
+                />
+                <button
+                  class="create-confirm-btn"
+                  @click="createAndAdd"
+                  :disabled="!newAlbumName.trim() || creatingAlbum"
+                >
+                  {{ creatingAlbum ? '创建中...' : '创建并添加' }}
+                </button>
+              </div>
+              <button v-else class="create-album-btn" @click="showCreateAlbum = true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span>新建相册</span>
+              </button>
+
+              <!-- Album list -->
+              <div class="album-list" v-if="!loadingAlbums">
+                <button
+                  v-for="album in albums"
+                  :key="album.id"
+                  class="album-item"
+                  @click="addToAlbum(album.id)"
+                  :disabled="addingToAlbum"
+                >
+                  <div class="album-thumb">
+                    <img v-if="album.coverPhotoUrl" :src="album.coverPhotoUrl" alt="" />
+                    <svg v-else viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                      <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z" />
+                    </svg>
+                  </div>
+                  <div class="album-info">
+                    <span class="album-name">{{ album.name }}</span>
+                    <span class="album-count">{{ album.photoCount }} 张</span>
+                  </div>
+                </button>
+              </div>
+              <div v-else class="picker-loading">
+                <div class="loading-spinner"></div>
+              </div>
             </div>
           </div>
         </Transition>
@@ -355,5 +483,181 @@ onUnmounted(() => {
     max-width: 100vw;
     max-height: 75vh;
   }
+}
+
+/* Album picker */
+.album-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.album-picker {
+  width: 340px;
+  max-height: 70vh;
+  border-radius: var(--radius-lg);
+  padding: 0;
+  border: 0.5px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  border-bottom: 0.5px solid var(--glass-border);
+}
+
+.picker-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.picker-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.create-album-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--glass-border);
+}
+
+.album-name-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.album-name-input:focus {
+  border-color: var(--accent);
+}
+
+.create-confirm-btn {
+  height: 36px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.create-confirm-btn:disabled {
+  opacity: 0.5;
+}
+
+.create-album-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 14px;
+  border-bottom: 0.5px solid var(--glass-border);
+}
+
+.album-list {
+  overflow-y: auto;
+  max-height: 40vh;
+}
+
+.album-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+}
+
+.album-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.album-item:disabled {
+  opacity: 0.5;
+}
+
+.album-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.album-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.album-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.picker-loading {
+  display: flex;
+  justify-content: center;
+  padding: 32px;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--bg-tertiary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

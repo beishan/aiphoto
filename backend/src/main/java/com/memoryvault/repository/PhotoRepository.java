@@ -42,4 +42,8 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     Optional<Photo> findByFilePath(String filePath);
 
     List<Photo> findByEmbeddingIsNull();
+
+    Page<Photo> findBySourceFolderId(Long sourceFolderId, Pageable pageable);
+
+    long countBySourceFolderId(Long sourceFolderId);
 }

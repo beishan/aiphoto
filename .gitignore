@@ -37,3 +37,6 @@ models/
 # OS
 .DS_Store
 Thumbs.db
+
+# AI model cache
+ai-service/models_cache/

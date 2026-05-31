@@ -79,7 +79,7 @@ public class TrainingTaskConsumer {
             TrainingSet trainingSet = trainingSetRepository.findByAlbumId(album.getId())
                     .orElse(new TrainingSet());
             trainingSet.setAlbum(album);
-            trainingSet.setPrototypeVector(vectorToString(centroidList));
+            trainingSet.setPrototypeVector(centroid);
             trainingSet.setThreshold(message.getThreshold() != null ? message.getThreshold() : 0.75);
             trainingSetRepository.save(trainingSet);
 

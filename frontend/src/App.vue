@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, provide } from 'vue'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme } from 'naive-ui'
 
-type Theme = 'dark' | 'light'
+type Theme = 'dark' | 'light' | 'liquid-glass'
 
 const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'dark')
 
@@ -15,11 +15,18 @@ watch(theme, (val) => {
   localStorage.setItem('theme', val)
 })
 
+function setTheme(t: Theme) {
+  theme.value = t
+}
+
 function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+  const themes: Theme[] = ['dark', 'light', 'liquid-glass']
+  const idx = themes.indexOf(theme.value)
+  theme.value = themes[(idx + 1) % themes.length]
 }
 
 provide('theme', theme)
+provide('setTheme', setTheme)
 provide('toggleTheme', toggleTheme)
 
 const themeOverrides = {
@@ -30,7 +37,7 @@ const themeOverrides = {
   },
 }
 
-const naiveTheme = computed(() => (theme.value === 'dark' ? darkTheme : undefined))
+const naiveTheme = computed(() => (theme.value === 'dark' || theme.value === 'liquid-glass') ? darkTheme : undefined)
 </script>
 
 <template>

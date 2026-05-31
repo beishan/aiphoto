@@ -1,9 +1,11 @@
 package com.memoryvault.entity;
 
+import com.memoryvault.config.PgVectorType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Type;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
@@ -46,8 +48,9 @@ public class Photo {
      * CLIP 512-dimensional embedding vector stored as float array.
      * In PostgreSQL this maps to a vector(512) column via pgvector.
      */
+    @Type(PgVectorType.class)
     @Column(columnDefinition = "vector(512)")
-    private String embedding;
+    private float[] embedding;
 
     private Integer width;
 
@@ -63,6 +66,8 @@ public class Photo {
 
     @Column(length = 255)
     private String originalFilename;
+
+    private Long sourceFolderId;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

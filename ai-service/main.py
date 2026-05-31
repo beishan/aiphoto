@@ -126,9 +126,9 @@ async def detect_faces(file: UploadFile = File(...)):
         return FaceDetectionResponse(
             faces=[
                 FaceResult(
-                    bbox={"x": f.bbox[0], "y": f.bbox[1], "w": f.bbox[2], "h": f.bbox[3]},
-                    embedding=f.embedding,
-                    confidence=f.confidence,
+                    bbox={"x": float(f.bbox[0]), "y": float(f.bbox[1]), "w": float(f.bbox[2]), "h": float(f.bbox[3])},
+                    embedding=[float(x) for x in f.embedding],
+                    confidence=float(f.confidence),
                 )
                 for f in faces
             ]

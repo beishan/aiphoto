@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   frontend:
     build: ./frontend
@@ -57,10 +55,11 @@ services:
     environment:
       - MODEL_PATH=/data/models
       - CUDA_VISIBLE_DEVICES=0
+      - HF_ENDPOINT=https://hf-mirror.com
     restart: unless-stopped
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: docker.m.daocloud.io/pgvector/pgvector:pg16
     container_name: memoryvault-postgres
     environment:
       - POSTGRES_DB=memoryvault
@@ -75,7 +74,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: docker.m.daocloud.io/library/redis:7-alpine
     container_name: memoryvault-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:-memoryvault}
     ports:
@@ -85,7 +84,7 @@ services:
     restart: unless-stopped
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: docker.m.daocloud.io/library/rabbitmq:3-management-alpine
     container_name: memoryvault-rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=memoryvault
@@ -98,7 +97,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: docker.m.daocloud.io/minio/minio:latest
     container_name: memoryvault-minio
     command: server /data --console-address ":9001"
     volumes:

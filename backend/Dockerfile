@@ -4,6 +4,7 @@ FROM docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 COPY pom.xml .
+COPY settings.xml /root/.m2/settings.xml
 RUN mvn dependency:go-offline -B
 
 COPY src ./src

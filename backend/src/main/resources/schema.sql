@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS photos (
     media_type VARCHAR(20) NOT NULL DEFAULT 'PHOTO',
     favorite BOOLEAN DEFAULT FALSE,
     original_filename VARCHAR(255),
+    source_folder_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -41,8 +42,9 @@ CREATE TABLE IF NOT EXISTS photos (
 CREATE TABLE IF NOT EXISTS albums (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    description VARCHAR(1000),
     type VARCHAR(20) NOT NULL DEFAULT 'VIRTUAL',
-    cover_photo_id BIGINT REFERENCES photos(id),
+    cover_photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
     owner_id BIGINT REFERENCES users(id),
     shared BOOLEAN DEFAULT FALSE,
     birth_date DATE,
@@ -134,6 +136,48 @@ CREATE TABLE IF NOT EXISTS user_settings (
     UNIQUE(user_id, setting_key)
 );
 
+-- Categories table
+CREATE TABLE IF NOT EXISTS categories (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    icon VARCHAR(50),
+    color VARCHAR(7),
+    is_system BOOLEAN DEFAULT FALSE,
+    cover_photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
+    prototype_vector vector(512),
+    threshold DOUBLE PRECISION NOT NULL DEFAULT 0.7,
+    photo_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Photo-Category many-to-many
+CREATE TABLE IF NOT EXISTS photo_categories (
+    category_id BIGINT REFERENCES categories(id) ON DELETE CASCADE,
+    photo_id BIGINT REFERENCES photos(id) ON DELETE CASCADE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    source VARCHAR(20) DEFAULT 'auto',
+    PRIMARY KEY (category_id, photo_id)
+);
+
+-- Scan Folders table
+CREATE TABLE IF NOT EXISTS scan_folders (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    path VARCHAR(1024) NOT NULL UNIQUE,
+    storage_mode VARCHAR(10) NOT NULL DEFAULT 'COPY',
+    scan_status VARCHAR(20) NOT NULL DEFAULT 'IDLE',
+    last_scan_at TIMESTAMP,
+    photo_count INTEGER DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Foreign key: photos.source_folder_id -> scan_folders.id
+ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
+    FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
+
 -- Indexes
 -- Embedding indexes
 CREATE INDEX IF NOT EXISTS idx_photos_embedding ON photos USING hnsw (embedding vector_cosine_ops);
@@ -146,8 +190,26 @@ CREATE INDEX IF NOT EXISTS idx_face_clusters_person ON face_clusters (person_id)
 CREATE INDEX IF NOT EXISTS idx_album_photos_album ON album_photos (album_id);
 CREATE INDEX IF NOT EXISTS idx_photo_tags_photo ON photo_tags (photo_id);
 CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings (user_id);
+CREATE INDEX IF NOT EXISTS idx_categories_is_system ON categories (is_system);
+CREATE INDEX IF NOT EXISTS idx_photo_categories_category ON photo_categories (category_id);
+CREATE INDEX IF NOT EXISTS idx_photo_categories_photo ON photo_categories (photo_id);
+CREATE INDEX IF NOT EXISTS idx_photos_source_folder ON photos (source_folder_id);
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, role) VALUES
     ('admin', '$2a$10$ZIEvrdNQ8X8Nr88UCEypDOVaKM5KIt.0w.UPJaQqpiwwhIB5UtqzW', 'ADMIN')
 ON CONFLICT (username) DO NOTHING;
+
+-- Predefined system categories
+INSERT INTO categories (name, icon, color, is_system) VALUES
+    ('风景', 'landscape', '#34c759', TRUE),
+    ('人物', 'person', '#007aff', TRUE),
+    ('美食', 'food', '#ff9500', TRUE),
+    ('动物', 'animal', '#af52de', TRUE),
+    ('建筑', 'building', '#5856d6', TRUE),
+    ('植物', 'plant', '#30d158', TRUE),
+    ('旅行', 'travel', '#ff2d55', TRUE),
+    ('活动', 'event', '#ff9f0a', TRUE),
+    ('截图', 'screenshot', '#8e8e93', TRUE),
+    ('文档', 'document', '#636366', TRUE)
+ON CONFLICT DO NOTHING;

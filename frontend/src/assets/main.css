@@ -10,6 +10,17 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --tab-height: 84px;
   --top-bar-height: 52px;
+  /* Tab bar layout - floating pill (all themes) */
+  --tab-bar-bottom: calc(20px + var(--safe-bottom));
+  --tab-bar-left: 50%;
+  --tab-bar-right: auto;
+  --tab-bar-width: calc(100% - 32px);
+  --tab-bar-max-width: 420px;
+  --tab-bar-translate: translateX(-50%);
+  --tab-bar-radius: 24px;
+  --tab-bar-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --tab-bar-height: 64px;
+  --tab-content-padding: calc(100px + var(--safe-bottom));
 }
 
 /* Dark theme (default) */
@@ -50,6 +61,30 @@
   --separator: #c6c6c8;
   --glass-bg: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(0, 0, 0, 0.08);
+}
+
+/* Liquid Glass theme */
+[data-theme="liquid-glass"] {
+  --bg-primary: #0a0a1a;
+  --bg-secondary: rgba(20, 20, 40, 0.6);
+  --bg-tertiary: rgba(40, 40, 70, 0.5);
+  --bg-card: rgba(25, 25, 50, 0.55);
+  --accent: #00d4ff;
+  --accent-hover: #40e0ff;
+  --success: #00e676;
+  --warning: #ffab00;
+  --danger: #ff1744;
+  --text-primary: #e8eaff;
+  --text-secondary: #8a8cb0;
+  --text-tertiary: #555770;
+  --border: rgba(100, 120, 255, 0.15);
+  --separator: rgba(100, 120, 255, 0.12);
+  --glass-bg: rgba(30, 30, 60, 0.45);
+  --glass-border: rgba(120, 140, 255, 0.2);
+  --glass-blur: 28px;
+  --glass-saturation: 200%;
+  /* Enhanced floating tab bar for liquid glass */
+  --tab-bar-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 * {
@@ -96,8 +131,8 @@ code, pre {
 /* Glass morphism utility */
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(var(--glass-saturation, 180%)) blur(var(--glass-blur, 20px));
+  -webkit-backdrop-filter: saturate(var(--glass-saturation, 180%)) blur(var(--glass-blur, 20px));
 }
 
 .glass-light {
@@ -151,4 +186,33 @@ button {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* === Liquid Glass Theme Overrides === */
+[data-theme="liquid-glass"] body {
+  background: linear-gradient(135deg, #0a0a2e 0%, #0d1b3e 50%, #0a0a1a 100%);
+}
+
+/* Show tab indicator only in liquid-glass theme */
+[data-theme="liquid-glass"] .tab-indicator {
+  display: block;
+  background: rgba(255, 255, 255, 0.1);
+  transition: left 0.35s cubic-bezier(0.32, 0.72, 0, 1),
+              width 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Liquid Glass slide-fade transition for content */
+.slide-fade-enter-active {
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.25s ease;
+}
+.slide-fade-leave-active {
+  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.15s ease;
+}
+.slide-fade-enter-from {
+  transform: translateY(12px);
+  opacity: 0;
+}
+.slide-fade-leave-to {
+  transform: translateY(-8px);
+  opacity: 0;
 }

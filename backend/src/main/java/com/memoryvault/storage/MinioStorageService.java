@@ -1,23 +1,19 @@
 package com.memoryvault.storage;
 
 import io.minio.*;
-import io.minio.http.Method;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class MinioStorageService {
 
     private final MinioClient minioClient;
-    private final MinioClient publicMinioClient;
 
     @Value("${app.minio.bucket-photos}")
     private String bucketPhotos;
@@ -25,9 +21,8 @@ public class MinioStorageService {
     @Value("${app.minio.bucket-thumbs}")
     private String bucketThumbs;
 
-    public MinioStorageService(MinioClient minioClient, @Qualifier("publicMinioClient") MinioClient publicMinioClient) {
+    public MinioStorageService(MinioClient minioClient) {
         this.minioClient = minioClient;
-        this.publicMinioClient = publicMinioClient;
     }
 
     @PostConstruct
@@ -74,8 +69,11 @@ public class MinioStorageService {
         }
     }
 
+    /**
+     * Generate a URL for browser access via nginx proxy.
+     * Returns a relative path that nginx proxies to MinIO.
+     */
     public String getPresignedUrl(String bucket, String objectName) throws Exception {
-        // Use nginx proxy path for browser access
         return "/media/" + bucket + "/" + objectName;
     }
 
@@ -85,6 +83,13 @@ public class MinioStorageService {
 
     public String getThumbnailUrl(String objectName) throws Exception {
         return getPresignedUrl(bucketThumbs, objectName);
+    }
+
+    public void deleteObject(String objectName) throws Exception {
+        minioClient.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucketPhotos)
+                .object(objectName)
+                .build());
     }
 
     public void deleteObject(String bucket, String objectName) throws Exception {
@@ -100,7 +105,7 @@ public class MinioStorageService {
             minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketName).build());
             log.info("Created MinIO bucket: {}", bucketName);
         }
-        // Set bucket policy to allow public read access
+        // Set bucket policy to allow public read access (fallback for non-presigned access)
         String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::" + bucketName + "/*\"]}]}";
         minioClient.setBucketPolicy(SetBucketPolicyArgs.builder().bucket(bucketName).config(policy).build());
     }

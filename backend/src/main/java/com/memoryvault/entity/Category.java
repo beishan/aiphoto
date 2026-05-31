@@ -1,11 +1,13 @@
 package com.memoryvault.entity;
 
+import com.memoryvault.config.PgVectorType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Type;
+import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +15,8 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @Entity
-@Table(name = "albums")
-public class Album {
+@Table(name = "categories")
+public class Category {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,29 +25,31 @@ public class Album {
     @Column(nullable = false)
     private String name;
 
-    @Column(length = 1000)
-    private String description;
+    private String icon;
 
-    @Column(nullable = false, length = 20)
-    @Enumerated(EnumType.STRING)
-    private AlbumType type = AlbumType.VIRTUAL;
+    private String color;
+
+    @Column(nullable = false)
+    private Boolean isSystem = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cover_photo_id")
     private Photo coverPhoto;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id")
-    private User owner;
+    @Type(PgVectorType.class)
+    @Column(columnDefinition = "vector(512)")
+    private float[] prototypeVector;
 
-    private Boolean shared = false;
+    @Column(nullable = false)
+    private Double threshold = 0.7;
 
-    private LocalDate birthDate;
+    @Column(nullable = false)
+    private Integer photoCount = 0;
 
     @ManyToMany
     @JoinTable(
-        name = "album_photos",
-        joinColumns = @JoinColumn(name = "album_id"),
+        name = "photo_categories",
+        joinColumns = @JoinColumn(name = "category_id"),
         inverseJoinColumns = @JoinColumn(name = "photo_id")
     )
     private List<Photo> photos = new ArrayList<>();
@@ -53,7 +57,6 @@ public class Album {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    public enum AlbumType {
-        VIRTUAL, DIRECTORY, TRAINING, BABY
-    }
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

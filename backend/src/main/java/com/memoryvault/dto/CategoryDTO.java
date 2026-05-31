@@ -2,19 +2,18 @@ package com.memoryvault.dto;
 
 import lombok.Data;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-public class AlbumDTO {
+public class CategoryDTO {
     private Long id;
     private String name;
-    private String description;
-    private String type;
+    private String icon;
+    private String color;
+    private Boolean isSystem;
     private Long coverPhotoId;
     private String coverPhotoUrl;
-    private Boolean shared;
-    private LocalDate birthDate;
     private Integer photoCount;
+    private Boolean trained;
     private LocalDateTime createdAt;
 }

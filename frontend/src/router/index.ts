@@ -35,9 +35,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/FavoritesView.vue'),
       },
       {
+        path: 'categories',
+        name: 'Categories',
+        component: () => import('@/views/CategoriesView.vue'),
+      },
+      {
+        path: 'categories/:id',
+        name: 'CategoryDetail',
+        component: () => import('@/views/CategoryDetailView.vue'),
+      },
+      {
         path: 'people',
         name: 'People',
         component: () => import('@/views/PeopleView.vue'),
+      },
+      {
+        path: 'people/:id',
+        name: 'PersonDetail',
+        component: () => import('@/views/PersonDetailView.vue'),
       },
       {
         path: 'search',
@@ -60,9 +75,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/MoreView.vue'),
       },
       {
+        path: 'dedup',
+        name: 'Dedup',
+        component: () => import('@/views/DedupView.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),
+      },
+      {
+        path: 'folders',
+        name: 'Folders',
+        component: () => import('@/views/FoldersView.vue'),
       },
     ],
   },

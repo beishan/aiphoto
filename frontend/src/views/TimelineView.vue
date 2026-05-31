@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import http from '@/api/http'
 import type { Photo, TimelineData } from '@/types'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 
+const router = useRouter()
 const timeline = ref<TimelineData>({})
 const loading = ref(false)
 const viewerVisible = ref(false)
@@ -32,6 +34,15 @@ const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8�
 
 <template>
   <div class="timeline-view">
+    <div class="page-header">
+      <button class="back-btn" @click="router.push('/more')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+        </svg>
+      </button>
+      <h1 class="page-title">时间线</h1>
+    </div>
+
     <!-- Loading -->
     <div v-if="loading" class="loading-state">
       <div class="loading-spinner"></div>
@@ -81,6 +92,27 @@ const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8�
 <style scoped>
 .timeline-view {
   min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  padding: 4px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  flex: 1;
 }
 
 .loading-state {

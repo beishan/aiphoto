@@ -9,7 +9,7 @@ const router = useRouter()
 const albumStore = useAlbumStore()
 const message = useMessage()
 const showCreate = ref(false)
-const newAlbum = ref<{ name: string; type: 'VIRTUAL' | 'DIRECTORY' | 'TRAINING' | 'BABY' }>({ name: '', type: 'VIRTUAL' })
+const newAlbum = ref<{ name: string; description: string; type: 'VIRTUAL' | 'DIRECTORY' | 'TRAINING' | 'BABY' }>({ name: '', description: '', type: 'VIRTUAL' })
 
 onMounted(() => {
   albumStore.fetchAlbums()
@@ -27,7 +27,7 @@ async function handleCreate() {
   try {
     await albumStore.createAlbum(newAlbum.value)
     showCreate.value = false
-    newAlbum.value = { name: '', type: 'VIRTUAL' }
+    newAlbum.value = { name: '', description: '', type: 'VIRTUAL' }
     message.success('相册创建成功')
   } catch (e) {
     message.error('创建失败')
@@ -125,6 +125,11 @@ const albumTypeIcons: Record<string, string> = {
             </div>
 
             <div class="form-group">
+              <label>描述（可选）</label>
+              <textarea v-model="newAlbum.description" placeholder="添加相册描述..." class="ios-textarea" rows="2"></textarea>
+            </div>
+
+            <div class="form-group">
               <label>类型</label>
               <div class="type-selector">
                 <button
@@ -180,16 +185,20 @@ const albumTypeIcons: Record<string, string> = {
 
 .album-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
 @media (min-width: 768px) {
-  .album-grid { grid-template-columns: repeat(3, 1fr); }
+  .album-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 @media (min-width: 1024px) {
-  .album-grid { grid-template-columns: repeat(4, 1fr); }
+  .album-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+@media (min-width: 1440px) {
+  .album-grid { grid-template-columns: repeat(6, 1fr); }
 }
 
 .album-card {
@@ -342,6 +351,24 @@ const albumTypeIcons: Record<string, string> = {
 }
 
 .ios-input:focus {
+  border-color: var(--accent);
+}
+
+.ios-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.ios-textarea:focus {
   border-color: var(--accent);
 }
 

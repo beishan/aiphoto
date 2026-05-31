@@ -1,8 +1,7 @@
 package com.memoryvault.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -10,6 +9,8 @@ import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
+@ToString(exclude = "coverFace")
+@EqualsAndHashCode(exclude = "coverFace")
 @Entity
 @Table(name = "people")
 public class Person {

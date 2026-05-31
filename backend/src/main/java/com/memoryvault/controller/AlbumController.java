@@ -1,6 +1,7 @@
 package com.memoryvault.controller;
 
 import com.memoryvault.dto.AlbumDTO;
+import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.service.AlbumService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +27,27 @@ public class AlbumController {
         return ResponseEntity.ok(albumService.getAlbum(id));
     }
 
+    @GetMapping("/{id}/photos")
+    public ResponseEntity<List<PhotoDTO>> getAlbumPhotos(@PathVariable Long id) {
+        return ResponseEntity.ok(albumService.getAlbumPhotos(id));
+    }
+
     @PostMapping
     public ResponseEntity<AlbumDTO> createAlbum(@RequestBody AlbumDTO albumDTO) {
         return ResponseEntity.ok(albumService.createAlbum(albumDTO));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<AlbumDTO> updateAlbum(@PathVariable Long id, @RequestBody AlbumDTO albumDTO) {
+        return ResponseEntity.ok(albumService.updateAlbum(id, albumDTO));
+    }
+
+    @PutMapping("/{id}/cover")
+    public ResponseEntity<AlbumDTO> setCoverPhoto(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> request) {
+        Long photoId = request.get("photoId");
+        return ResponseEntity.ok(albumService.setCoverPhoto(id, photoId));
     }
 
     @PostMapping("/{albumId}/photos/{photoId}")

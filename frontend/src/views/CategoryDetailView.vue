@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
-import type { Photo } from '@/types'
-import { photoApi } from '@/api/photoApi'
+import { useRoute, useRouter } from 'vue-router'
+import { useMessage } from 'naive-ui'
+import { categoryApi } from '@/api/categoryApi'
+import { useCategoryStore } from '@/stores/categoryStore'
 import { usePhotoStore } from '@/stores/photoStore'
+import type { Category, Photo } from '@/types'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 
+const route = useRoute()
+const router = useRouter()
+const message = useMessage()
+const categoryStore = useCategoryStore()
 const photoStore = usePhotoStore()
+
+const categoryId = Number(route.params.id)
+const category = ref<Category | null>(null)
 const photos = ref<Photo[]>([])
 const page = ref(0)
 const pageSize = 40
@@ -26,7 +36,86 @@ const gridStyle = computed(() => ({
 }))
 
 function initZoom() {
-  zoomLevel.value = 2      // Default: 16 columns (third level)
+  const w = window.innerWidth
+  if (w < 480) {
+    zoomLevel.value = 2      // 16 col
+  } else if (w < 768) {
+    zoomLevel.value = 1      // 10 col
+  } else if (w < 1200) {
+    zoomLevel.value = 0      // 6 col
+  } else {
+    zoomLevel.value = 0      // 6 col
+  }
+}
+
+onMounted(async () => {
+  initZoom()
+  await fetchCategory()
+  await fetchPhotos()
+})
+
+async function fetchCategory() {
+  try {
+    const { data } = await categoryApi.get(categoryId)
+    category.value = data
+  } catch (e) {
+    message.error('分类不存在')
+    router.back()
+  }
+}
+
+async function fetchPhotos() {
+  loading.value = true
+  try {
+    const { data } = await categoryApi.getPhotos(categoryId, 0, pageSize)
+    photos.value = data.content
+    totalElements.value = data.totalElements
+    page.value = 0
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadMore() {
+  if (loadingMore.value) return
+  if (photos.value.length >= totalElements.value && totalElements.value > 0) return
+  loadingMore.value = true
+  try {
+    const nextPage = page.value + 1
+    const prevLength = photos.value.length
+    const { data } = await categoryApi.getPhotos(categoryId, nextPage, pageSize)
+    photos.value = [...photos.value, ...data.content]
+    totalElements.value = data.totalElements
+    if (photos.value.length > prevLength) {
+      page.value = nextPage
+    } else {
+      totalElements.value = photos.value.length
+    }
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement
+  if (target.scrollHeight - target.scrollTop - target.clientHeight < 300) {
+    loadMore()
+  }
+}
+
+function openViewer(index: number) {
+  viewerIndex.value = index
+  viewerVisible.value = true
+}
+
+async function handleToggleFavorite(photoId: number) {
+  await photoStore.toggleFavorite(photoId)
+  photos.value = photos.value.filter(p => p.id !== photoId)
+  totalElements.value = photos.value.length
+}
+
+function goBack() {
+  router.push('/categories')
 }
 
 // Timeline
@@ -78,85 +167,40 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
   return groups
 })
-
-const scrollContainer = ref<HTMLElement | null>(null)
-
-onMounted(async () => {
-  initZoom()
-  await fetchFavorites()
-})
-
-async function fetchFavorites() {
-  loading.value = true
-  try {
-    const { data } = await photoApi.favorites(0, pageSize)
-    photos.value = data.content
-    totalElements.value = data.totalElements
-    page.value = 0
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadMore() {
-  if (loadingMore.value) return
-  if (photos.value.length >= totalElements.value && totalElements.value > 0) return
-  loadingMore.value = true
-  try {
-    const nextPage = page.value + 1
-    const prevLength = photos.value.length
-    const { data } = await photoApi.favorites(nextPage, pageSize)
-    photos.value = [...photos.value, ...data.content]
-    totalElements.value = data.totalElements
-    // Only increment page if we actually loaded more data
-    if (photos.value.length > prevLength) {
-      page.value = nextPage
-    } else {
-      totalElements.value = photos.value.length
-    }
-  } finally {
-    loadingMore.value = false
-  }
-}
-
-function handleScroll(e: Event) {
-  const target = e.target as HTMLElement
-  if (target.scrollHeight - target.scrollTop - target.clientHeight < 300) {
-    loadMore()
-  }
-}
-
-function openViewer(index: number) {
-  viewerIndex.value = index
-  viewerVisible.value = true
-}
-
-async function handleToggleFavorite(photoId: number) {
-  await photoStore.toggleFavorite(photoId)
-  // Remove from favorites list since it was unfavorited
-  photos.value = photos.value.filter(p => p.id !== photoId)
-}
 </script>
 
 <template>
-  <div class="gallery-wrapper">
-    <div ref="scrollContainer" class="gallery-scroll" @scroll="handleScroll">
+  <div class="detail-view">
+    <!-- Header with back button -->
+    <div class="detail-header glass">
+      <button class="back-btn" @click="goBack">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
+        </svg>
+      </button>
+      <div class="header-info">
+        <h2>{{ category?.name || '分类' }}</h2>
+        <span class="header-count">{{ totalElements }} 张照片</span>
+      </div>
+    </div>
+
+    <div class="detail-scroll" @scroll="handleScroll">
       <!-- Empty state -->
       <div v-if="!loading && photos.length === 0" class="empty-state">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64" class="empty-icon">
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
+          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
         </svg>
-        <h3>还没有喜欢的照片</h3>
-        <p>点击照片上的爱心按钮收藏</p>
+        <h3>暂无照片</h3>
+        <p v-if="category && !category.trained">请先选择模板照片训练此分类</p>
+        <p v-else>AI 还没有找到匹配的照片</p>
       </div>
 
-      <!-- Photo grid grouped by month -->
+      <!-- Photo grid -->
       <template v-else>
         <div
           v-for="item in timelineItems"
           :key="`${item.year}-${item.month}`"
           class="month-section"
-          :data-month="`${item.year}-${item.month}`"
         >
           <div class="month-label">{{ item.label }}</div>
           <div class="photo-grid-compact" :style="gridStyle">
@@ -200,13 +244,64 @@ async function handleToggleFavorite(photoId: number) {
 </template>
 
 <style scoped>
-.gallery-wrapper {
+.detail-view {
   position: relative;
   min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
 }
 
-.gallery-scroll {
-  height: calc(100vh - var(--top-bar-height) - var(--tab-height));
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--glass-border);
+  position: sticky;
+  top: var(--top-bar-height);
+  z-index: 10;
+  background: var(--bg-primary);
+  backdrop-filter: blur(20px);
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--accent);
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.back-btn:active {
+  background: var(--bg-tertiary);
+}
+
+.header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.header-info h2 {
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detail-scroll {
+  height: calc(100vh - var(--top-bar-height) - var(--tab-height) - 56px);
   overflow-y: auto;
 }
 
@@ -215,7 +310,7 @@ async function handleToggleFavorite(photoId: number) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
+  min-height: 50vh;
   gap: 12px;
   color: var(--text-secondary);
 }
@@ -256,7 +351,7 @@ async function handleToggleFavorite(photoId: number) {
 .timeline-rail {
   position: fixed;
   right: 4px;
-  top: calc(var(--top-bar-height) + 8px);
+  top: calc(var(--top-bar-height) + 64px);
   bottom: calc(var(--tab-height) + 8px);
   width: 36px;
   display: flex;

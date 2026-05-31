@@ -22,12 +22,26 @@ export interface Photo {
 export interface Album {
   id: number
   name: string
+  description: string | null
   type: 'VIRTUAL' | 'DIRECTORY' | 'TRAINING' | 'BABY'
   coverPhotoId: number | null
   coverPhotoUrl: string | null
   shared: boolean
   birthDate: string | null
   photoCount: number
+  createdAt: string
+}
+
+export interface Category {
+  id: number
+  name: string
+  icon: string | null
+  color: string | null
+  isSystem: boolean
+  coverPhotoId: number | null
+  coverPhotoUrl: string | null
+  photoCount: number
+  trained: boolean
   createdAt: string
 }
 
@@ -73,4 +87,16 @@ export interface TimelineData {
   [year: number]: {
     [month: number]: Photo[]
   }
+}
+
+export interface ScanFolder {
+  id: number
+  name: string
+  path: string
+  storageMode: 'COPY' | 'LINK'
+  scanStatus: 'IDLE' | 'SCANNING' | 'COMPLETED' | 'ERROR'
+  lastScanAt: string | null
+  photoCount: number
+  errorMessage: string | null
+  createdAt: string
 }

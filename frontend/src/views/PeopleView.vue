@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { peopleApi } from '@/api/peopleApi'
 import type { Person } from '@/types'
 
+const router = useRouter()
 const people = ref<Person[]>([])
 const loading = ref(false)
+const reclustering = ref(false)
 
 onMounted(async () => {
   loading.value = true
@@ -17,12 +20,39 @@ onMounted(async () => {
 })
 
 function goToPerson(person: Person) {
-  // TODO: navigate to person detail
+  router.push(`/people/${person.id}`)
+}
+
+async function handleRecluster() {
+  if (reclustering.value) return
+  if (!confirm('自动合并相似的人物？')) return
+  reclustering.value = true
+  try {
+    const { data } = await peopleApi.recluster()
+    alert(`合并完成，共合并了 ${data.merged} 个人物`)
+    // Reload people list
+    const res = await peopleApi.list()
+    people.value = res.data
+  } catch (e) {
+    alert('重聚类失败，请重试')
+  } finally {
+    reclustering.value = false
+  }
 }
 </script>
 
 <template>
   <div class="people-view">
+    <!-- Header -->
+    <div class="people-header" v-if="people.length > 1">
+      <button class="recluster-btn" @click="handleRecluster" :disabled="reclustering">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
+        </svg>
+        {{ reclustering ? '合并中...' : '自动合并' }}
+      </button>
+    </div>
+
     <!-- Loading -->
     <div v-if="loading" class="loading-state">
       <div class="loading-spinner"></div>
@@ -60,6 +90,37 @@ function goToPerson(person: Person) {
 .people-view {
   min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
   padding: 16px;
+}
+
+.people-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.recluster-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recluster-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.recluster-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .loading-state {
