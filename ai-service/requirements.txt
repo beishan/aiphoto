@@ -3,7 +3,7 @@ uvicorn[standard]==0.30.6
 python-multipart==0.0.12
 torch==2.3.0
 torchvision==0.18.0
-open-clip-torch>=2.24.0
+cn-clip>=1.5.0
 insightface==0.7.3
 onnxruntime-gpu>=1.18.0
 ultralytics>=8.2.0

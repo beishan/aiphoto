@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MemoryVault AI Service",
-    description="AI inference service for CLIP, InsightFace, YOLOv8, and BLIP-2",
+    description="AI inference service for Chinese-CLIP, InsightFace, YOLOv8, and BLIP-2",
     version="1.0.0",
     lifespan=lifespan,
 )

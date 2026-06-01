@@ -49,6 +49,7 @@ services:
       - ./ai-models/insightface/models:/root/.insightface/models
       - ./ai-models/ultralytics:/root/.ultralytics
       - ./ai-models/clip:/opt/models/clip
+      - ./ai-models/chinese-clip:/opt/models/chinese-clip
     # deploy:
     #   resources:
     #     reservations:
@@ -60,6 +61,10 @@ services:
       - MODEL_PATH=/data/models
       - CUDA_VISIBLE_DEVICES=0
       - HF_ENDPOINT=https://hf-mirror.com
+      - HF_HOME=/opt/models/clip
+      - TRANSFORMERS_CACHE=/opt/models/clip
+      - OPENCLIP_CACHE_DIR=/opt/models/clip
+      - CHINESE_CLIP_CACHE_DIR=/opt/models/chinese-clip
     restart: unless-stopped
 
   postgres:
