@@ -240,7 +240,10 @@ public class CategoryService {
         }
 
         // Update category field for existing tags that don't have it
-        List<Tag> aiTags = tagRepository.findByType(Tag.TagType.AI);
+        List<Tag> aiTags = new java.util.ArrayList<>();
+        aiTags.addAll(tagRepository.findByType(Tag.TagType.AI));
+        aiTags.addAll(tagRepository.findByType(Tag.TagType.OBJECT));
+        aiTags.addAll(tagRepository.findByType(Tag.TagType.SCENE));
         for (Tag tag : aiTags) {
             if (tag.getCategory() == null || tag.getCategory().isEmpty()) {
                 String inferredCategory = YOLO_NAME_TO_CATEGORY.get(tag.getName());
@@ -254,13 +257,15 @@ public class CategoryService {
         int assigned = 0;
 
         for (Tag tag : aiTags) {
+            if (tag == null || tag.getId() == null) continue;
+
             // Refresh tag to get updated category
             tag = tagRepository.findById(tag.getId()).orElse(tag);
 
             // Determine which system category this tag matches
             // First check name override (e.g., "potted plant" -> "plant")
             String matchedIcon = YOLO_NAME_OVERRIDE.get(tag.getName());
-            if (matchedIcon == null) {
+            if (matchedIcon == null && tag.getCategory() != null) {
                 // Check category field (e.g., "person", "animal", "food")
                 matchedIcon = YOLO_TO_CATEGORY_ICON.get(tag.getCategory());
             }
@@ -275,9 +280,12 @@ public class CategoryService {
 
             // Find all photos with this tag
             List<PhotoTag> photoTags = photoTagRepository.findByTagId(tag.getId());
+            if (photoTags == null) continue;
+
             for (PhotoTag pt : photoTags) {
+                if (pt == null || pt.getPhotoId() == null) continue;
                 Photo photo = photoRepository.findById(pt.getPhotoId()).orElse(null);
-                if (photo != null && !category.getPhotos().contains(photo)) {
+                if (photo != null && photo.getId() != null && !category.getPhotos().contains(photo)) {
                     category.getPhotos().add(photo);
                     assigned++;
                 }
