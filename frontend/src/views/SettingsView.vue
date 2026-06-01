@@ -11,6 +11,7 @@ const setTheme = inject<(t: string) => void>('setTheme')!
 
 const namingRule = ref('original')
 const faceThreshold = ref(50)
+const searchThreshold = ref(80)
 
 // Accordion state: 0 = 照片上传, 1 = 外观, 2 = AI 设置
 const expandedSection = ref<number | null>(0)
@@ -40,6 +41,7 @@ onMounted(async () => {
   }
   namingRule.value = settingStore.getSetting('photo_naming_rule', 'original')
   faceThreshold.value = Number(settingStore.getSetting('ai_face_cluster_threshold', '50'))
+  searchThreshold.value = Number(settingStore.getSetting('ai_search_similarity_threshold', '80'))
 })
 
 async function handleNamingRuleChange() {
@@ -48,6 +50,10 @@ async function handleNamingRuleChange() {
 
 async function handleThresholdChange() {
   await settingStore.updateSettings({ ai_face_cluster_threshold: String(faceThreshold.value) })
+}
+
+async function handleSearchThresholdChange() {
+  await settingStore.updateSettings({ ai_search_similarity_threshold: String(searchThreshold.value) })
 }
 </script>
 
@@ -174,6 +180,34 @@ async function handleThresholdChange() {
               {{ faceThreshold <= 30 ? '严格模式：仅非常相似的面孔会被合并，可能产生多个人物条目' :
                  faceThreshold >= 70 ? '宽松模式：相似面孔容易合并，可能误合不同人' :
                  '均衡模式：推荐设置，平衡准确度和聚合效果' }}
+            </span>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span class="label-text">搜索相似度阈值</span>
+              <span class="label-desc">控制语义搜索结果的相似度要求</span>
+            </div>
+            <div class="threshold-control">
+              <span class="threshold-label">严格</span>
+              <input
+                type="range"
+                min="20"
+                max="80"
+                step="5"
+                v-model.number="searchThreshold"
+                class="threshold-slider"
+                @change="handleSearchThresholdChange"
+              />
+              <span class="threshold-label">宽松</span>
+              <span class="threshold-value">{{ (searchThreshold / 100).toFixed(2) }}</span>
+            </div>
+          </div>
+          <div class="setting-hint">
+            <span class="hint-label">说明：</span>
+            <span class="hint-value">
+              {{ searchThreshold <= 40 ? '严格模式：仅高相似度结果，精确但可能遗漏' :
+                 searchThreshold >= 70 ? '宽松模式：更多结果，可能包含不太相关的内容' :
+                 '均衡模式：推荐设置，平衡精确度和召回率' }}
             </span>
           </div>
         </div>

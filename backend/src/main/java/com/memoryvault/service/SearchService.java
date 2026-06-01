@@ -24,6 +24,7 @@ public class SearchService {
     private final PhotoRepository photoRepository;
     private final MinioStorageService storageService;
     private final AiServiceClient aiServiceClient;
+    private final SettingService settingService;
 
     // Chinese to English mapping for better CLIP search
     private static final Map<String, String> ZH_TO_EN = Map.ofEntries(
@@ -44,11 +45,13 @@ public class SearchService {
             Map.entry("树", "tree forest")
     );
 
-    public Page<PhotoDTO> search(SearchRequest request) {
+    public Page<PhotoDTO> search(SearchRequest request, Long userId) {
         PageRequest pageRequest = PageRequest.of(request.getPage(), request.getSize());
 
         if ("semantic".equals(request.getType())) {
-            return semanticSearch(request.getQuery(), 0.8, pageRequest);
+            String thresholdStr = settingService.getSetting(userId, "ai_search_similarity_threshold");
+            double threshold = thresholdStr != null ? Double.parseDouble(thresholdStr) / 100.0 : 0.8;
+            return semanticSearch(request.getQuery(), threshold, pageRequest);
         } else {
             return fullTextSearch(request.getQuery(), pageRequest);
         }
