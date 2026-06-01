@@ -53,4 +53,10 @@ public class PeopleController {
         int merged = faceService.recluster();
         return ResponseEntity.ok(Map.of("merged", merged));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePerson(@PathVariable Long id) {
+        faceService.deletePerson(id);
+        return ResponseEntity.noContent().build();
+    }
 }

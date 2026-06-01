@@ -13,7 +13,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -25,11 +25,30 @@ public class SearchService {
     private final MinioStorageService storageService;
     private final AiServiceClient aiServiceClient;
 
+    // Chinese to English mapping for better CLIP search
+    private static final Map<String, String> ZH_TO_EN = Map.ofEntries(
+            Map.entry("宠物", "pet animal cat dog"),
+            Map.entry("猫", "cat kitty"),
+            Map.entry("狗", "dog puppy"),
+            Map.entry("美食", "food meal restaurant"),
+            Map.entry("吃", "eating food dining"),
+            Map.entry("风景", "landscape scenery nature"),
+            Map.entry("海边", "beach ocean sea"),
+            Map.entry("日落", "sunset sunset sky"),
+            Map.entry("家庭", "family people together"),
+            Map.entry("人物", "person people portrait"),
+            Map.entry("建筑", "building architecture house"),
+            Map.entry("旅行", "travel journey"),
+            Map.entry("山", "mountain hill"),
+            Map.entry("花", "flower floral"),
+            Map.entry("树", "tree forest")
+    );
+
     public Page<PhotoDTO> search(SearchRequest request) {
         PageRequest pageRequest = PageRequest.of(request.getPage(), request.getSize());
 
         if ("semantic".equals(request.getType())) {
-            return semanticSearch(request.getQuery(), 0.75, pageRequest);
+            return semanticSearch(request.getQuery(), 0.8, pageRequest);
         } else {
             return fullTextSearch(request.getQuery(), pageRequest);
         }
@@ -41,13 +60,34 @@ public class SearchService {
 
     private Page<PhotoDTO> semanticSearch(String query, Double threshold, PageRequest pageRequest) {
         log.info("Semantic search for: {} (threshold: {})", query, threshold);
-        AiServiceClient.EmbeddingResponse resp = aiServiceClient.embedText(query);
+
+        // Translate Chinese to English for better CLIP matching
+        String searchQuery = ZH_TO_EN.getOrDefault(query, query);
+
+        AiServiceClient.EmbeddingResponse resp = aiServiceClient.embedText(searchQuery);
         String vectorStr = vectorToString(resp.getEmbedding());
         List<Photo> results = photoRepository.findByVectorSimilarity(vectorStr, threshold, 100);
+
+        // Sort by distance (most similar first)
+        results.sort((a, b) -> {
+            double distA = cosineDistance(a.getEmbedding(), resp.getEmbedding());
+            double distB = cosineDistance(b.getEmbedding(), resp.getEmbedding());
+            return Double.compare(distA, distB);
+        });
+
         int start = (int) pageRequest.getOffset();
         int end = Math.min(start + pageRequest.getPageSize(), results.size());
         List<PhotoDTO> page = results.subList(start, end).stream().map(this::toDTO).toList();
         return new PageImpl<>(page, pageRequest, results.size());
+    }
+
+    private double cosineDistance(float[] a, List<Float> b) {
+        if (a == null || b == null || a.length != b.size()) return 1.0;
+        float dot = 0;
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b.get(i);
+        }
+        return 1.0 - dot;
     }
 
     private String vectorToString(List<Float> vector) {

@@ -78,6 +78,22 @@ public class FaceService {
         personRepository.delete(source);
     }
 
+    @Transactional
+    public void deletePerson(Long id) {
+        Person person = personRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Person not found"));
+
+        // Unlink all face clusters from this person (keep faces in photos)
+        List<FaceCluster> faces = faceClusterRepository.findByPerson(person);
+        for (FaceCluster face : faces) {
+            face.setPerson(null);
+        }
+        faceClusterRepository.saveAll(faces);
+
+        // Delete the person
+        personRepository.delete(person);
+    }
+
     /**
      * Re-cluster all persons by computing average embeddings and merging similar ones.
      * Reads threshold from settings (ai_face_cluster_threshold), default 0.5.

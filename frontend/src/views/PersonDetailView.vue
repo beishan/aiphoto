@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage, useDialog } from 'naive-ui'
 import { peopleApi } from '@/api/peopleApi'
 import { usePhotoStore } from '@/stores/photoStore'
 import type { Person, Photo } from '@/types'
@@ -11,6 +11,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const photoStore = usePhotoStore()
 
 const personId = Number(route.params.id)
@@ -150,6 +151,24 @@ function formatRange() {
   }
   return parts.join(' ~ ')
 }
+
+function confirmDelete() {
+  dialog.warning({
+    title: '删除人物',
+    content: `确定要删除"${person.value?.name || '未命名'}"吗？此操作不会删除照片，只会移除此人物标记。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await peopleApi.delete(personId)
+        message.success('已删除')
+        router.push('/people')
+      } catch (e) {
+        message.error('删除失败')
+      }
+    },
+  })
+}
 </script>
 
 <template>
@@ -175,6 +194,11 @@ function formatRange() {
         </h2>
         <span class="header-meta">{{ totalElements }} 张照片 · {{ formatRange() }}</span>
       </div>
+      <button class="delete-btn" @click="confirmDelete" title="删除人物">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+        </svg>
+      </button>
     </div>
 
     <div class="detail-scroll" @scroll="handleScroll">
@@ -319,6 +343,26 @@ function formatRange() {
 .header-meta {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.1);
 }
 
 .detail-scroll {

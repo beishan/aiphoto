@@ -13,6 +13,9 @@ RUN mvn clean package -DskipTests -B
 # Stage 2: Run
 FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
 
+# Install FFmpeg for video thumbnail generation
+RUN apk add --no-cache ffmpeg
+
 WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar

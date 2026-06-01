@@ -30,12 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 @Slf4j
@@ -51,6 +53,10 @@ public class FolderService {
 
     private static final Set<String> IMAGE_EXTENSIONS = Set.of(
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp", ".heic", ".heif"
+    );
+
+    private static final Set<String> VIDEO_EXTENSIONS = Set.of(
+            ".mp4", ".avi", ".mov", ".mkv", ".webm"
     );
 
     @Transactional
@@ -131,7 +137,7 @@ public class FolderService {
                         .forEach(imageFiles::add);
             }
 
-            log.info("Found {} image files in folder: {}", imageFiles.size(), folder.getPath());
+            log.info("Found {} media files in folder: {}", imageFiles.size(), folder.getPath());
 
             int imported = 0;
             int skipped = 0;
@@ -185,9 +191,10 @@ public class FolderService {
             storageService.uploadPhoto(data, objectName, contentType);
 
             // Generate thumbnail
-            String thumbName = isWebP(data) ? hashMd5 + "/thumb.webp" : hashMd5 + "/thumb.jpg";
+            String thumbExt = isVideoFile(filename) ? "jpg" : (isWebP(data) ? "webp" : "jpg");
+            String thumbName = hashMd5 + "/thumb." + thumbExt;
             try {
-                byte[] thumbnail = generateThumbnail(data);
+                byte[] thumbnail = generateThumbnail(data, filename);
                 storageService.uploadThumbnail(thumbnail, thumbName);
             } catch (Exception e) {
                 log.warn("Failed to generate thumbnail for {}: {}", filename, e.getMessage());
@@ -278,7 +285,12 @@ public class FolderService {
         }
     }
 
-    private byte[] generateThumbnail(byte[] imageData) throws Exception {
+    private byte[] generateThumbnail(byte[] imageData, String filename) throws Exception {
+        // Check if it's a video file
+        if (isVideoFile(filename)) {
+            return generateVideoThumbnail(imageData);
+        }
+
         if (isWebP(imageData)) {
             return imageData;
         }
@@ -289,6 +301,49 @@ public class FolderService {
                 .outputQuality(0.8)
                 .toOutputStream(baos);
         return baos.toByteArray();
+    }
+
+    private byte[] generateVideoThumbnail(byte[] videoData) throws Exception {
+        File tempVideo = null;
+        File tempThumb = null;
+        try {
+            // Create temp files
+            tempVideo = Files.createTempFile("video_", ".tmp").toFile();
+            tempThumb = Files.createTempFile("thumb_", ".jpg").toFile();
+
+            // Write video data to temp file
+            try (FileOutputStream fos = new FileOutputStream(tempVideo)) {
+                fos.write(videoData);
+            }
+
+            // Use FFmpeg to extract first frame as thumbnail
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffmpeg",
+                "-i", tempVideo.getAbsolutePath(),
+                "-ss", "00:00:00",
+                "-vframes", "1",
+                "-vf", "scale=400:400:force_original_aspect_ratio=decrease,pad=400:400:(ow-iw)/2:(oh-ih)/2",
+                "-y",
+                tempThumb.getAbsolutePath()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("FFmpeg process timed out");
+            }
+
+            if (process.exitValue() != 0) {
+                throw new RuntimeException("FFmpeg exited with code " + process.exitValue());
+            }
+
+            return Files.readAllBytes(tempThumb.toPath());
+        } finally {
+            if (tempVideo != null) tempVideo.delete();
+            if (tempThumb != null) tempThumb.delete();
+        }
     }
 
     private boolean isWebP(byte[] data) {
@@ -309,7 +364,12 @@ public class FolderService {
 
     private boolean isImageFile(String filename) {
         String lower = filename.toLowerCase();
-        return IMAGE_EXTENSIONS.stream().anyMatch(lower::endsWith);
+        return IMAGE_EXTENSIONS.stream().anyMatch(lower::endsWith)
+                || VIDEO_EXTENSIONS.stream().anyMatch(lower::endsWith);
+    }
+
+    private boolean isVideoFile(String filename) {
+        return filename != null && filename.toLowerCase().matches(".*\\.(mp4|avi|mov|mkv|webm)$");
     }
 
     private String probeContentType(Path path) {

@@ -56,4 +56,16 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     @Transactional
     @Query(value = "UPDATE categories SET cover_photo_id = NULL WHERE cover_photo_id = :photoId", nativeQuery = true)
     void clearCoverPhotoRefs(@Param("photoId") Long photoId);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM photo_categories WHERE category_id = :categoryId AND photo_id = :photoId", nativeQuery = true)
+    boolean existsPhotoInCategory(@Param("categoryId") Long categoryId, @Param("photoId") Long photoId);
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+        INSERT INTO photo_categories (category_id, photo_id, source, added_at)
+        VALUES (:categoryId, :photoId, 'auto', NOW())
+        ON CONFLICT (category_id, photo_id) DO NOTHING
+        """, nativeQuery = true)
+    void addPhotoToCategoryNative(@Param("categoryId") Long categoryId, @Param("photoId") Long photoId);
 }

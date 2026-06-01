@@ -101,13 +101,14 @@ async def health_check():
 
 @app.post("/ai/embed", response_model=EmbeddingResponse)
 async def embed(file: UploadFile = File(...)):
-    """Generate CLIP embedding for an image."""
+    """Generate CLIP embedding for an image/video."""
     if clip_model is None:
         raise HTTPException(status_code=503, detail="CLIP model not loaded")
 
     try:
         data = await file.read()
-        embedding = clip_model.encode_image(data)
+        filename = file.filename
+        embedding = clip_model.encode_image(data, filename)
         return EmbeddingResponse(embedding=embedding)
     except Exception as e:
         logger.error(f"Embedding failed: {e}")
@@ -116,13 +117,14 @@ async def embed(file: UploadFile = File(...)):
 
 @app.post("/ai/detect-faces", response_model=FaceDetectionResponse)
 async def detect_faces(file: UploadFile = File(...)):
-    """Detect faces in an image using InsightFace."""
+    """Detect faces in an image/video using InsightFace."""
     if face_model is None:
         raise HTTPException(status_code=503, detail="InsightFace model not loaded")
 
     try:
         data = await file.read()
-        faces = face_model.detect(data)
+        filename = file.filename
+        faces = face_model.detect(data, filename)
         return FaceDetectionResponse(
             faces=[
                 FaceResult(
@@ -140,13 +142,14 @@ async def detect_faces(file: UploadFile = File(...)):
 
 @app.post("/ai/classify", response_model=ClassifyResponse)
 async def classify(file: UploadFile = File(...)):
-    """Classify image using YOLOv8."""
+    """Classify image/video using YOLOv8."""
     if yolo_model is None:
         raise HTTPException(status_code=503, detail="YOLO model not loaded")
 
     try:
         data = await file.read()
-        tags = yolo_model.detect(data)
+        filename = file.filename
+        tags = yolo_model.detect(data, filename=filename)
         return ClassifyResponse(
             tags=[
                 TagResult(name=t.name, confidence=t.confidence, category=t.category)

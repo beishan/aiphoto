@@ -18,6 +18,9 @@ public interface FaceClusterRepository extends JpaRepository<FaceCluster, Long> 
     @Query(value = "SELECT * FROM face_clusters WHERE person_id IS NULL", nativeQuery = true)
     List<FaceCluster> findUnassigned();
 
-    @Query(value = "SELECT * FROM face_clusters WHERE embedding <=> :query_vector::vector < :threshold ORDER BY embedding <=> :query_vector::vector LIMIT :limit", nativeQuery = true)
+    @Query(value = "SELECT * FROM face_clusters WHERE embedding <=> CAST(:query_vector AS vector) < :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
     List<FaceCluster> findByVectorSimilarity(@Param("query_vector") String queryVector, @Param("threshold") double threshold, @Param("limit") int limit);
+
+    @Query(value = "SELECT person_id FROM face_clusters WHERE embedding <=> CAST(:query_vector AS vector) < :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
+    List<Long> findPersonIdByVectorSimilarity(@Param("query_vector") String queryVector, @Param("threshold") double threshold, @Param("limit") int limit);
 }

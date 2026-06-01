@@ -25,4 +25,8 @@ export const peopleApi = {
   recluster() {
     return http.post<{ merged: number }>('/people/recluster')
   },
+
+  delete(id: number) {
+    return http.delete(`/people/${id}`)
+  },
 }

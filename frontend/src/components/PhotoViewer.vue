@@ -30,6 +30,10 @@ const showCreateAlbum = ref(false)
 
 const currentPhoto = computed(() => props.photos[currentIndex.value])
 
+const isVideo = computed(() => {
+  return currentPhoto.value?.mediaType === 'VIDEO'
+})
+
 watch(() => props.initialIndex, (val) => {
   currentIndex.value = val
 })
@@ -198,7 +202,16 @@ onUnmounted(() => {
           </button>
 
           <div class="viewer-image-wrapper">
-            <img v-if="currentPhoto" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
+            <video
+              v-if="isVideo && currentPhoto"
+              :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || ''"
+              class="viewer-video"
+              controls
+              autoplay
+              playsinline
+              preload="auto"
+            />
+            <img v-else-if="currentPhoto" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
           </div>
 
           <button class="nav-btn next-btn" @click="next" :disabled="currentIndex >= photos.length - 1">
@@ -396,6 +409,13 @@ onUnmounted(() => {
   -webkit-user-drag: none;
 }
 
+.viewer-video {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+  outline: none;
+}
+
 .nav-btn {
   position: absolute;
   top: 50%;
@@ -480,6 +500,11 @@ onUnmounted(() => {
   }
 
   .viewer-img {
+    max-width: 100vw;
+    max-height: 75vh;
+  }
+
+  .viewer-video {
     max-width: 100vw;
     max-height: 75vh;
   }

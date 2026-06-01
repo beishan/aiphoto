@@ -11,26 +11,16 @@ RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
     build-essential \
-    wget unzip \
+    wget unzip ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-download InsightFace buffalo_l model
-RUN mkdir -p /root/.insightface/models && \
-    wget --no-check-certificate -O /tmp/buffalo_l.zip \
-      "https://gh-proxy.com/https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip" && \
-    unzip -q /tmp/buffalo_l.zip -d /root/.insightface/models/ && \
-    rm /tmp/buffalo_l.zip
-
-# Pre-download YOLOv8n model
-RUN mkdir -p /root/.ultralytics && \
-    wget --no-check-certificate -O /root/.ultralytics/yolov8n.pt \
-      "https://gh-proxy.com/https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.pt"
+# Create model directories (models will be mounted via volume)
+RUN mkdir -p /root/.insightface/models \
+             /root/.ultralytics \
+             /opt/models/clip
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt
-
-# Copy pre-downloaded CLIP model (use /opt to avoid volume mount override)
-COPY models_cache/clip/open_clip_pytorch_model.bin /opt/models/clip/open_clip_pytorch_model.bin
 
 COPY . .
 

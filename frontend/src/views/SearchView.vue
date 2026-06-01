@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { searchApi } from '@/api/searchApi'
 import type { Photo } from '@/types'
@@ -8,7 +8,7 @@ import PhotoViewer from '@/components/PhotoViewer.vue'
 
 const route = useRoute()
 const query = ref('')
-const searchType = ref<'text' | 'semantic'>('text')
+const searchType = ref<'text' | 'semantic'>('semantic')
 const results = ref<Photo[]>([])
 const loading = ref(false)
 const totalElements = ref(0)
@@ -16,6 +16,11 @@ const page = ref(0)
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
 const hasSearched = ref(false)
+const gridColumns = ref(12)
+
+const gridStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${gridColumns.value}, 1fr)`
+}))
 
 onMounted(() => {
   const q = route.query.q as string
@@ -98,7 +103,7 @@ function toggleSearchType() {
       <div class="result-meta">
         <span>{{ totalElements }} 张照片</span>
       </div>
-      <div class="photo-grid-compact">
+      <div class="photo-grid-compact" :style="gridStyle">
         <PhotoCard
           v-for="(photo, index) in results"
           :key="photo.id"
@@ -111,12 +116,14 @@ function toggleSearchType() {
     <!-- Suggestions when not searched -->
     <div v-else class="suggestions">
       <h3>搜索建议</h3>
+      <p class="suggestion-hint">试试用自然语言描述你想找的照片</p>
       <div class="suggestion-tags">
-        <button class="tag" @click="query = '海边'; handleSearch()">海边</button>
-        <button class="tag" @click="query = '日落'; handleSearch()">日落</button>
-        <button class="tag" @click="query = '家庭'; handleSearch()">家庭</button>
-        <button class="tag" @click="query = '旅行'; handleSearch()">旅行</button>
-        <button class="tag" @click="query = '美食'; handleSearch()">美食</button>
+        <button class="tag" @click="query = '吃美食'; handleSearch()">吃美食</button>
+        <button class="tag" @click="query = '海边风景'; handleSearch()">海边风景</button>
+        <button class="tag" @click="query = '家庭聚会'; handleSearch()">家庭聚会</button>
+        <button class="tag" @click="query = '宠物'; handleSearch()">宠物</button>
+        <button class="tag" @click="query = '日落黄昏'; handleSearch()">日落黄昏</button>
+        <button class="tag" @click="query = '旅行风景'; handleSearch()">旅行风景</button>
       </div>
     </div>
 
@@ -246,6 +253,12 @@ function toggleSearchType() {
 .suggestions h3 {
   font-size: 20px;
   font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.suggestion-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 

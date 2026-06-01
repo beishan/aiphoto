@@ -40,3 +40,6 @@ Thumbs.db
 
 # AI model cache
 ai-service/models_cache/
+
+# Local AI models (large files)
+ai-models/

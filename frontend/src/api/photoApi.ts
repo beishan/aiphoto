@@ -26,6 +26,10 @@ export const photoApi = {
     return http.delete(`/photos/${id}`)
   },
 
+  batchDelete(ids: number[]) {
+    return http.delete<{ success: number; fail: number }>('/photos/batch', { data: ids })
+  },
+
   favorites(page = 0, size = 20) {
     return http.get<PageResponse<Photo>>('/photos/favorites', { params: { page, size } })
   },

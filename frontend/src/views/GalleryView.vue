@@ -1,17 +1,25 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { usePhotoStore } from '@/stores/photoStore'
+import { photoApi } from '@/api/photoApi'
+import { useMessage, useDialog } from 'naive-ui'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import Uploader from '@/components/Uploader.vue'
 
 const photoStore = usePhotoStore()
+const message = useMessage()
+const dialog = useDialog()
 const page = ref(0)
 const pageSize = 40
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
 const showUploader = ref(false)
 const loadingMore = ref(false)
+
+// Selection mode
+const selectMode = ref(false)
+const selectedIds = ref<Set<number>>(new Set())
 
 // Zoom level: 0=10col, 1=8col, 2=6col, 3=4col(default), 4=3col, 5=2col
 const zoomLevel = ref(0)
@@ -32,6 +40,66 @@ function zoomOut() {
 // Set initial zoom based on viewport width
 function initZoom() {
   zoomLevel.value = 2      // Default: 16 columns (third level)
+}
+
+// Selection functions
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) {
+    selectedIds.value.clear()
+  }
+}
+
+function toggleSelect(photoId: number) {
+  if (selectedIds.value.has(photoId)) {
+    selectedIds.value.delete(photoId)
+  } else {
+    selectedIds.value.add(photoId)
+  }
+  // Force reactivity
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+function selectAll() {
+  photoStore.photos.forEach(p => selectedIds.value.add(p.id))
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+function deselectAll() {
+  selectedIds.value.clear()
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+async function batchDelete() {
+  if (selectedIds.value.size === 0) return
+
+  dialog.warning({
+    title: '批量删除',
+    content: `确定要删除选中的 ${selectedIds.value.size} 张照片吗？此操作不可恢复。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const ids = Array.from(selectedIds.value)
+
+      try {
+        const { data } = await photoApi.batchDelete(ids)
+
+        // Remove deleted photos from store
+        photoStore.photos = photoStore.photos.filter(p => !selectedIds.value.has(p.id))
+        selectedIds.value.clear()
+        selectedIds.value = new Set(selectedIds.value)
+        selectMode.value = false
+
+        if (data.fail === 0) {
+          message.success(`已删除 ${data.success} 张照片`)
+        } else {
+          message.warning(`删除完成：成功 ${data.success} 张，失败 ${data.fail} 张`)
+        }
+      } catch (e) {
+        message.error('批量删除失败')
+      }
+    },
+  })
 }
 
 // Timeline
@@ -158,8 +226,8 @@ function openViewer(index: number) {
 }
 
 function handleUploaded() {
-  photoStore.fetchPhotos(0, pageSize)
-  page.value = 0
+  // Refresh page after upload
+  location.reload()
 }
 
 function handleScroll(e: Event) {
@@ -177,6 +245,26 @@ async function handleToggleFavorite(photoId: number) {
 <template>
   <div class="gallery-wrapper">
     <div ref="scrollContainer" class="gallery-scroll" @scroll="handleScroll">
+      <!-- Selection toolbar -->
+      <div v-if="selectMode" class="selection-toolbar">
+        <button class="toolbar-btn" @click="toggleSelectMode">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+        <span class="toolbar-title">已选择 {{ selectedIds.size }} 项</span>
+        <div class="toolbar-actions">
+          <button class="toolbar-btn text-btn" @click="selectAll">全选</button>
+          <button class="toolbar-btn text-btn" @click="deselectAll">取消全选</button>
+          <button class="toolbar-btn delete-btn" @click="batchDelete" :disabled="selectedIds.size === 0">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+            删除
+          </button>
+        </div>
+      </div>
+
       <!-- Empty state -->
       <div v-if="!photoStore.loading && photoStore.photos.length === 0" class="empty-state">
         <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64" class="empty-icon">
@@ -200,8 +288,11 @@ async function handleToggleFavorite(photoId: number) {
               v-for="i in item.count"
               :key="photoStore.photos[item.startIndex + i - 1].id"
               :photo="photoStore.photos[item.startIndex + i - 1]"
+              :select-mode="selectMode"
+              :selected="selectedIds.has(photoStore.photos[item.startIndex + i - 1].id)"
               @click="openViewer(item.startIndex + i - 1)"
               @toggle-favorite="handleToggleFavorite(photoStore.photos[item.startIndex + i - 1].id)"
+              @toggle-select="toggleSelect(photoStore.photos[item.startIndex + i - 1].id)"
             />
           </div>
         </div>
@@ -214,7 +305,7 @@ async function handleToggleFavorite(photoId: number) {
     </div>
 
     <!-- Timeline rail -->
-    <div v-if="timelineItems.length > 0" class="timeline-rail">
+    <div v-if="timelineItems.length > 0 && !selectMode" class="timeline-rail">
       <button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"
@@ -230,7 +321,7 @@ async function handleToggleFavorite(photoId: number) {
     </div>
 
     <!-- Zoom controls -->
-    <div class="zoom-controls">
+    <div v-if="!selectMode" class="zoom-controls">
       <button class="zoom-btn" @click="zoomIn" :disabled="zoomLevel === 0" title="放大">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
@@ -244,9 +335,16 @@ async function handleToggleFavorite(photoId: number) {
     </div>
 
     <!-- Upload FAB -->
-    <button class="fab-upload" @click="showUploader = true">
+    <button v-if="!selectMode" class="fab-upload" @click="showUploader = true">
       <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
         <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
+      </svg>
+    </button>
+
+    <!-- Select mode FAB -->
+    <button v-if="!selectMode && photoStore.photos.length > 0" class="fab-select" @click="toggleSelectMode">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="none" stroke="currentColor" stroke-width="2"/>
       </svg>
     </button>
 
@@ -286,6 +384,71 @@ async function handleToggleFavorite(photoId: number) {
 .gallery-scroll {
   height: calc(100vh - var(--top-bar-height) - var(--tab-height));
   overflow-y: auto;
+}
+
+/* Selection toolbar */
+.selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toolbar-btn.text-btn {
+  background: none;
+}
+
+.toolbar-btn.text-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.toolbar-btn.delete-btn {
+  background: rgba(255, 69, 58, 0.8);
+}
+
+.toolbar-btn.delete-btn:hover {
+  background: rgba(255, 69, 58, 1);
+}
+
+.toolbar-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .empty-state {
@@ -390,7 +553,7 @@ async function handleToggleFavorite(photoId: number) {
 /* Zoom controls */
 .zoom-controls {
   position: fixed;
-  bottom: calc(var(--tab-height) + 88px);
+  bottom: calc(var(--tab-height) + 130px);
   right: 20px;
   display: flex;
   flex-direction: column;
@@ -471,6 +634,41 @@ async function handleToggleFavorite(photoId: number) {
   transform: scale(0.95);
 }
 
+/* Select FAB */
+.fab-select {
+  position: fixed;
+  bottom: calc(var(--tab-height) + 86px);
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 50;
+  border: 0.5px solid var(--glass-border);
+  cursor: pointer;
+}
+
+.fab-select svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fab-select:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.fab-select:active {
+  transform: scale(0.95);
+}
+
 /* Uploader modal */
 .uploader-overlay {
   position: fixed;
@@ -513,9 +711,20 @@ async function handleToggleFavorite(photoId: number) {
     bottom: calc(var(--tab-height) + 16px);
     right: 16px;
   }
+  .fab-select {
+    bottom: calc(var(--tab-height) + 80px);
+    right: 16px;
+  }
   .zoom-controls {
     right: 16px;
-    bottom: calc(var(--tab-height) + 84px);
+    bottom: calc(var(--tab-height) + 124px);
+  }
+  .toolbar-actions {
+    gap: 4px;
+  }
+  .toolbar-btn {
+    padding: 6px 8px;
+    font-size: 12px;
   }
 }
 </style>

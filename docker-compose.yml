@@ -45,6 +45,10 @@ services:
       - "${AI_SERVICE_PORT:-8000}:8000"
     volumes:
       - ${MODEL_PATH:-./models}:/data/models
+      # Mount AI models to avoid re-downloading
+      - ./ai-models/insightface/models:/root/.insightface/models
+      - ./ai-models/ultralytics:/root/.ultralytics
+      - ./ai-models/clip:/opt/models/clip
     # deploy:
     #   resources:
     #     reservations:

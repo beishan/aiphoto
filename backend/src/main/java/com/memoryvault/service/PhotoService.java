@@ -33,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -40,6 +43,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -76,10 +80,10 @@ public class PhotoService {
         storageService.uploadPhoto(data, objectName, file.getContentType());
 
         // Generate thumbnail (skip if not a valid image)
-        boolean webp = isWebP(data);
-        String thumbName = webp ? hashMd5 + "/thumb.webp" : hashMd5 + "/thumb.jpg";
+        String thumbExt = isVideoFile(originalFilename) ? "jpg" : (isWebP(data) ? "webp" : "jpg");
+        String thumbName = hashMd5 + "/thumb." + thumbExt;
         try {
-            byte[] thumbnail = generateThumbnail(data);
+            byte[] thumbnail = generateThumbnail(data, originalFilename);
             storageService.uploadThumbnail(thumbnail, thumbName);
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail for {}: {}", originalFilename, e.getMessage());
@@ -149,17 +153,27 @@ public class PhotoService {
         // Clear cover_photo_id references from albums and categories
         albumRepository.clearCoverPhotoRefs(id);
         categoryRepository.clearCoverPhotoRefs(id);
-        // Clear cover_face_id references from people table before deleting face clusters
+        // Get face clusters and update person photo counts before deleting
         List<FaceCluster> faceClusters = faceClusterRepository.findByPhoto(photo);
         if (!faceClusters.isEmpty()) {
             List<Long> faceIds = faceClusters.stream().map(FaceCluster::getId).toList();
             personRepository.clearCoverFaceRefs(faceIds);
+            // Update photo count for each affected person
+            java.util.Set<Person> affectedPersons = faceClusters.stream()
+                    .map(FaceCluster::getPerson)
+                    .filter(p -> p != null)
+                    .collect(java.util.stream.Collectors.toSet());
+            for (Person person : affectedPersons) {
+                person.setPhotoCount(Math.max(0, person.getPhotoCount() - 1));
+            }
+            personRepository.saveAll(affectedPersons);
         }
         // Delete files from MinIO storage
         try {
             storageService.deleteObject(photo.getFilePath());
-            String thumbExt = photo.getOriginalFilename() != null
-                    && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
+            String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :
+                              (photo.getOriginalFilename() != null
+                              && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg");
             storageService.deleteObject(photo.getFileHashMd5() + "/thumb." + thumbExt);
         } catch (Exception e) {
             log.warn("Failed to delete storage objects for photo {}: {}", id, e.getMessage());
@@ -208,7 +222,12 @@ public class PhotoService {
         }
     }
 
-    private byte[] generateThumbnail(byte[] imageData) throws Exception {
+    private byte[] generateThumbnail(byte[] imageData, String filename) throws Exception {
+        // Check if it's a video file
+        if (filename != null && filename.toLowerCase().matches(".*\\.(mp4|avi|mov|mkv|webm)$")) {
+            return generateVideoThumbnail(imageData);
+        }
+
         // WebP not supported by Java ImageIO - use original as thumbnail
         if (isWebP(imageData)) {
             log.info("WebP detected, using original as thumbnail");
@@ -223,6 +242,49 @@ public class PhotoService {
         return baos.toByteArray();
     }
 
+    private byte[] generateVideoThumbnail(byte[] videoData) throws Exception {
+        File tempVideo = null;
+        File tempThumb = null;
+        try {
+            // Create temp files
+            tempVideo = Files.createTempFile("video_", ".tmp").toFile();
+            tempThumb = Files.createTempFile("thumb_", ".jpg").toFile();
+
+            // Write video data to temp file
+            try (FileOutputStream fos = new FileOutputStream(tempVideo)) {
+                fos.write(videoData);
+            }
+
+            // Use FFmpeg to extract first frame as thumbnail
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffmpeg",
+                "-i", tempVideo.getAbsolutePath(),
+                "-ss", "00:00:00",
+                "-vframes", "1",
+                "-vf", "scale=400:400:force_original_aspect_ratio=decrease,pad=400:400:(ow-iw)/2:(oh-ih)/2",
+                "-y",
+                tempThumb.getAbsolutePath()
+            );
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("FFmpeg process timed out");
+            }
+
+            if (process.exitValue() != 0) {
+                throw new RuntimeException("FFmpeg exited with code " + process.exitValue());
+            }
+
+            return Files.readAllBytes(tempThumb.toPath());
+        } finally {
+            if (tempVideo != null) tempVideo.delete();
+            if (tempThumb != null) tempThumb.delete();
+        }
+    }
+
     private boolean isWebP(byte[] data) {
         // WebP magic bytes: "RIFF" + 4 bytes + "WEBP"
         return data.length >= 12
@@ -232,6 +294,10 @@ public class PhotoService {
 
     private boolean isWebPFilename(String filename) {
         return filename != null && filename.toLowerCase().endsWith(".webp");
+    }
+
+    private boolean isVideoFile(String filename) {
+        return filename != null && filename.toLowerCase().matches(".*\\.(mp4|avi|mov|mkv|webm)$");
     }
 
     private String computeMd5(byte[] data) throws Exception {
@@ -304,7 +370,8 @@ public class PhotoService {
         dto.setCreatedAt(photo.getCreatedAt());
 
         try {
-            String thumbExt = isWebPFilename(photo.getOriginalFilename()) ? "webp" : "jpg";
+            String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :
+                              (isWebPFilename(photo.getOriginalFilename()) ? "webp" : "jpg");
             dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
         } catch (Exception e) {
             log.warn("Failed to generate thumbnail URL for photo {}", photo.getId());

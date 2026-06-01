@@ -5,7 +5,7 @@ import { photoApi } from '@/api/photoApi'
 import { useTaskStore } from '@/stores/taskStore'
 
 const emit = defineEmits<{
-  uploaded: [photo: any]
+  uploaded: []
   done: []
 }>()
 
@@ -37,13 +37,14 @@ async function handleFileChange(e: Event) {
   emit('done')
 
   // Upload in background
+  let uploadedCount = 0
   for (let i = 0; i < fileArray.length; i++) {
     const id = taskIds[i]
     try {
       taskStore.updateUploadProgress(id, 0)
       const { data } = await photoApi.upload(fileArray[i])
       taskStore.completeUploadTask(id)
-      emit('uploaded', data)
+      uploadedCount++
     } catch (e: any) {
       taskStore.failUploadTask(id)
       message.error(`${fileArray[i].name} 上传失败`)
@@ -51,6 +52,11 @@ async function handleFileChange(e: Event) {
   }
 
   message.success(`${fileArray.length} 张照片上传成功`)
+
+  // Notify parent after all uploads complete
+  if (uploadedCount > 0) {
+    emit('uploaded')
+  }
 }
 
 function handleDrop(e: DragEvent) {

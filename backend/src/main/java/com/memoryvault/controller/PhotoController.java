@@ -63,6 +63,21 @@ public class PhotoController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/batch")
+    public ResponseEntity<Map<String, Object>> batchDeletePhotos(@RequestBody List<Long> ids) {
+        int success = 0;
+        int fail = 0;
+        for (Long id : ids) {
+            try {
+                photoService.deletePhoto(id);
+                success++;
+            } catch (Exception e) {
+                fail++;
+            }
+        }
+        return ResponseEntity.ok(Map.of("success", success, "fail", fail));
+    }
+
     @GetMapping("/favorites")
     public ResponseEntity<Page<PhotoDTO>> getFavorites(
             @RequestParam(defaultValue = "0") int page,

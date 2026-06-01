@@ -21,4 +21,8 @@ public interface PersonRepository extends JpaRepository<Person, Long> {
     @Modifying
     @Query("UPDATE Person p SET p.coverFace = NULL WHERE p.coverFace.id IN :faceIds")
     void clearCoverFaceRefs(@Param("faceIds") List<Long> faceIds);
+
+    @Modifying
+    @Query(value = "UPDATE people SET cover_face_id = :faceId WHERE id = :personId", nativeQuery = true)
+    void setCoverFaceId(@Param("personId") Long personId, @Param("faceId") Long faceId);
 }

@@ -27,6 +27,9 @@ public class Tag {
     @Enumerated(EnumType.STRING)
     private TagType type = TagType.MANUAL;
 
+    @Column(length = 50)
+    private String category;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

@@ -71,15 +71,14 @@ public class PhotoIndexingConsumer {
 
                         // Try to find an existing person with similar face
                         String vectorStr = vectorToString(faceEmbedding);
-                        List<FaceCluster> similarFaces = faceClusterRepository.findByVectorSimilarity(
+                        List<Long> similarPersonIds = faceClusterRepository.findPersonIdByVectorSimilarity(
                                 vectorStr, faceThreshold, 1);
 
                         Person person = null;
-                        if (!similarFaces.isEmpty()) {
+                        if (!similarPersonIds.isEmpty() && similarPersonIds.get(0) != null) {
                             // Found a similar face — reuse the same person
-                            FaceCluster match = similarFaces.get(0);
-                            if (match.getPerson() != null) {
-                                person = match.getPerson();
+                            person = personRepository.findById(similarPersonIds.get(0)).orElse(null);
+                            if (person != null) {
                                 person.setPhotoCount(person.getPhotoCount() + 1);
                                 if (photo.getExifDate() != null) {
                                     if (person.getFirstSeen() == null || photo.getExifDate().isBefore(person.getFirstSeen())) {
@@ -110,10 +109,9 @@ public class PhotoIndexingConsumer {
                         fc.setConfidence(face.getConfidence());
                         faceClusterRepository.save(fc);
 
-                        // Set cover face for the person if not set
+                        // Set cover face for the person if not set (use native query to avoid lazy loading)
                         if (person.getCoverFace() == null) {
-                            person.setCoverFace(fc);
-                            personRepository.save(person);
+                            personRepository.setCoverFaceId(person.getId(), fc.getId());
                         }
                     }
 
@@ -204,12 +202,11 @@ public class PhotoIndexingConsumer {
                 }
             }
 
-            // Assign photo to matching categories
+            // Assign photo to matching categories using native queries (avoid lazy loading)
             for (Category category : systemCategories) {
                 if (matchedIcons.contains(category.getIcon())) {
-                    if (!category.getPhotos().contains(photo)) {
-                        category.getPhotos().add(photo);
-                        categoryRepository.save(category);
+                    if (!categoryRepository.existsPhotoInCategory(category.getId(), photo.getId())) {
+                        categoryRepository.addPhotoToCategoryNative(category.getId(), photo.getId());
                         categoryRepository.updatePhotoCount(category.getId());
                         log.debug("Auto-assigned photo {} to category '{}'", photo.getId(), category.getName());
                     }
@@ -256,7 +253,8 @@ public class PhotoIndexingConsumer {
     private Tag newTag(String name, String category) {
         Tag tag = new Tag();
         tag.setName(name);
-        tag.setType(Tag.TagType.valueOf(category != null ? category.toUpperCase() : "AI"));
+        tag.setType(Tag.TagType.AI);
+        tag.setCategory(category);
         return tag;
     }
 

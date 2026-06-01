@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS tags (
     name VARCHAR(50) NOT NULL UNIQUE,
     color VARCHAR(7),
     type VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+    category VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -194,6 +195,17 @@ CREATE INDEX IF NOT EXISTS idx_categories_is_system ON categories (is_system);
 CREATE INDEX IF NOT EXISTS idx_photo_categories_category ON photo_categories (category_id);
 CREATE INDEX IF NOT EXISTS idx_photo_categories_photo ON photo_categories (photo_id);
 CREATE INDEX IF NOT EXISTS idx_photos_source_folder ON photos (source_folder_id);
+
+-- Migration: Add category column to tags table (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'tags' AND column_name = 'category'
+    ) THEN
+        ALTER TABLE tags ADD COLUMN category VARCHAR(50);
+    END IF;
+END $$;
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, role) VALUES

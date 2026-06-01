@@ -27,7 +27,7 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.fileHashMd5 = :hash")
     Optional<Photo> findByFileHashMd5(@Param("hash") String hash);
 
-    @Query(value = "SELECT * FROM photos WHERE embedding <=> :query_vector::vector < :threshold ORDER BY embedding <=> :query_vector::vector LIMIT :limit", nativeQuery = true)
+    @Query(value = "SELECT * FROM photos WHERE embedding <=> CAST(:query_vector AS vector) < :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
     List<Photo> findByVectorSimilarity(@Param("query_vector") String queryVector, @Param("threshold") double threshold, @Param("limit") int limit);
 
     @Query(value = "SELECT * FROM photos WHERE to_tsvector('simple', coalesce(note, '') || ' ' || coalesce(ai_caption, '')) @@ plainto_tsquery('simple', :query)", nativeQuery = true)

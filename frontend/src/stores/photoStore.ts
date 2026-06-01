@@ -56,6 +56,11 @@ export const usePhotoStore = defineStore('photo', () => {
     return data
   }
 
+  function addPhoto(photo: Photo) {
+    photos.value.unshift(photo)
+    totalElements.value++
+  }
+
   async function toggleFavorite(id: number) {
     const photo = photos.value.find((p) => p.id === id) || currentPhoto.value
     if (photo) {
@@ -75,6 +80,7 @@ export const usePhotoStore = defineStore('photo', () => {
     totalPages,
     fetchPhotos,
     loadMore,
+    addPhoto,
     fetchPhoto,
     updatePhoto,
     toggleFavorite,
