@@ -2,6 +2,8 @@
 import { onMounted, ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
+import { albumApi } from '@/api/albumApi'
+import type { Album } from '@/types'
 import { useMessage, useDialog } from 'naive-ui'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
@@ -100,6 +102,77 @@ async function batchDelete() {
       }
     },
   })
+}
+
+async function batchToggleFavorite() {
+  if (selectedIds.value.size === 0) return
+  const ids = Array.from(selectedIds.value)
+
+  // Determine if we should favorite or unfavorite
+  // If any selected photo is not favorited, favorite all; otherwise unfavorite all
+  const hasNonFavorite = ids.some(id => {
+    const photo = photoStore.photos.find(p => p.id === id)
+    return photo && !photo.favorite
+  })
+  const favorite = hasNonFavorite
+
+  try {
+    await photoApi.batchFavorite(ids, favorite)
+    // Update local state
+    ids.forEach(id => {
+      const photo = photoStore.photos.find(p => p.id === id)
+      if (photo) photo.favorite = favorite
+    })
+    message.success(favorite ? `已收藏 ${ids.length} 张照片` : `已取消收藏 ${ids.length} 张照片`)
+  } catch (e) {
+    message.error('操作失败')
+  }
+}
+
+// Album picker
+const showAlbumPicker = ref(false)
+const albums = ref<Album[]>([])
+
+async function openAlbumPicker() {
+  if (selectedIds.value.size === 0) return
+  const { data } = await albumApi.list()
+  albums.value = data.filter(a => a.type !== 'TRAINING')
+  showAlbumPicker.value = true
+}
+
+async function addToAlbum(albumId: number) {
+  if (selectedIds.value.size === 0) return
+  const ids = Array.from(selectedIds.value)
+
+  try {
+    const { data } = await albumApi.batchAddPhotos(albumId, ids)
+    showAlbumPicker.value = false
+    const album = albums.value.find(a => a.id === albumId)
+    message.success(`已将 ${data.success} 张照片添加到「${album?.name || '相册'}」`)
+  } catch (e) {
+    message.error('添加到相册失败')
+  }
+}
+
+// Rating picker
+const showRatingPicker = ref(false)
+
+async function setBatchRating(rating: number) {
+  if (selectedIds.value.size === 0) return
+  const ids = Array.from(selectedIds.value)
+
+  try {
+    await photoApi.batchRating(ids, rating)
+    // Update local state
+    ids.forEach(id => {
+      const photo = photoStore.photos.find(p => p.id === id)
+      if (photo) photo.rating = rating
+    })
+    showRatingPicker.value = false
+    message.success(`已将 ${ids.length} 张照片评分设为 ${rating} 星`)
+  } catch (e) {
+    message.error('设置评分失败')
+  }
 }
 
 // Timeline
@@ -256,11 +329,62 @@ async function handleToggleFavorite(photoId: number) {
         <div class="toolbar-actions">
           <button class="toolbar-btn text-btn" @click="selectAll">全选</button>
           <button class="toolbar-btn text-btn" @click="deselectAll">取消全选</button>
+          <button class="toolbar-btn action-btn" @click="batchToggleFavorite" :disabled="selectedIds.size === 0" title="收藏">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </button>
+          <div class="picker-wrapper">
+            <button class="toolbar-btn action-btn" @click="openAlbumPicker" :disabled="selectedIds.size === 0" title="添加到相册">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
+              </svg>
+            </button>
+            <!-- Album picker dropdown -->
+            <Transition name="fade">
+              <div v-if="showAlbumPicker" class="picker-dropdown" @click.self="showAlbumPicker = false">
+                <div class="picker-panel">
+                  <div class="picker-header">选择相册</div>
+                  <div class="picker-list">
+                    <button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
+                      <span class="picker-item-name">{{ album.name }}</span>
+                      <span class="picker-item-count">{{ album.photoCount }} 张</span>
+                    </button>
+                    <div v-if="albums.length === 0" class="picker-empty">暂无相册</div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
+          <div class="picker-wrapper">
+            <button class="toolbar-btn action-btn" @click="showRatingPicker = !showRatingPicker" :disabled="selectedIds.size === 0" title="评分">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+              </svg>
+            </button>
+            <!-- Rating picker dropdown -->
+            <Transition name="fade">
+              <div v-if="showRatingPicker" class="picker-dropdown" @click.self="showRatingPicker = false">
+                <div class="picker-panel rating-panel">
+                  <div class="picker-header">设置评分</div>
+                  <div class="rating-options">
+                    <button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
+                      <span class="rating-stars">
+                        <svg v-for="s in 5" :key="s" viewBox="0 0 24 24" :fill="s <= r ? '#ffcc00' : 'none'" :stroke="s <= r ? '#ffcc00' : 'currentColor'" stroke-width="2" width="16" height="16">
+                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                        </svg>
+                      </span>
+                    </button>
+                    <button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
           <button class="toolbar-btn delete-btn" @click="batchDelete" :disabled="selectedIds.size === 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
             </svg>
-            删除
           </button>
         </div>
       </div>
@@ -438,6 +562,118 @@ async function handleToggleFavorite(photoId: number) {
 
 .toolbar-btn.delete-btn:hover {
   background: rgba(255, 69, 58, 1);
+}
+
+.toolbar-btn.action-btn {
+  padding: 6px 8px;
+}
+
+/* Picker dropdown */
+.picker-wrapper {
+  position: relative;
+}
+
+.picker-dropdown {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.picker-panel {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  width: 280px;
+  max-height: 360px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.picker-header {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.picker-item:hover {
+  background: var(--bg-secondary);
+}
+
+.picker-item-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.picker-empty {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* Rating picker */
+.rating-panel {
+  width: 200px;
+}
+
+.rating-options {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rating-option {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.rating-option:hover {
+  background: var(--bg-secondary);
+}
+
+.rating-stars {
+  display: flex;
+  gap: 2px;
+}
+
+.clear-rating {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 .toolbar-title {

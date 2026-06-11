@@ -18,6 +18,20 @@ export const photoApi = {
     })
   },
 
+  batchUpload(files: File[], onProgress?: (index: number, progress: number) => void) {
+    const formData = new FormData()
+    files.forEach((f) => formData.append('files', f))
+
+    return http.post<{ fileName: string; success: boolean; photo?: Photo; error?: string; message?: string }[]>(
+      '/photos/batch-upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 600000,
+      }
+    )
+  },
+
   update(id: number, data: Partial<Photo>) {
     return http.put<Photo>(`/photos/${id}`, data)
   },
@@ -28,6 +42,14 @@ export const photoApi = {
 
   batchDelete(ids: number[]) {
     return http.delete<{ success: number; fail: number }>('/photos/batch', { data: ids })
+  },
+
+  batchFavorite(ids: number[], favorite: boolean) {
+    return http.post<{ success: number; total: number }>('/photos/batch-favorite', { ids, favorite })
+  },
+
+  batchRating(ids: number[], rating: number) {
+    return http.post<{ success: number; total: number }>('/photos/batch-rating', { ids, rating })
   },
 
   favorites(page = 0, size = 20) {

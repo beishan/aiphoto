@@ -30,6 +30,10 @@ export const albumApi = {
     return http.post(`/albums/${albumId}/photos/${photoId}`)
   },
 
+  batchAddPhotos(albumId: number, photoIds: number[]) {
+    return http.post<{ success: number; total: number }>(`/albums/${albumId}/photos/batch`, { photoIds })
+  },
+
   removePhoto(albumId: number, photoId: number) {
     return http.delete(`/albums/${albumId}/photos/${photoId}`)
   },

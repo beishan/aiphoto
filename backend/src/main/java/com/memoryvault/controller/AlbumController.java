@@ -56,6 +56,23 @@ public class AlbumController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/{albumId}/photos/batch")
+    public ResponseEntity<Map<String, Object>> batchAddPhotos(
+            @PathVariable Long albumId,
+            @RequestBody Map<String, List<Long>> request) {
+        List<Long> photoIds = request.get("photoIds");
+        int success = 0;
+        for (Long photoId : photoIds) {
+            try {
+                albumService.addPhotoToAlbum(albumId, photoId);
+                success++;
+            } catch (Exception e) {
+                // skip
+            }
+        }
+        return ResponseEntity.ok(Map.of("success", success, "total", photoIds.size()));
+    }
+
     @DeleteMapping("/{albumId}/photos/{photoId}")
     public ResponseEntity<Void> removePhotoFromAlbum(@PathVariable Long albumId, @PathVariable Long photoId) {
         albumService.removePhotoFromAlbum(albumId, photoId);

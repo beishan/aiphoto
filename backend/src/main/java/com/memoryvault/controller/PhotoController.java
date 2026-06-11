@@ -4,6 +4,7 @@ import com.memoryvault.async.PhotoIndexingConsumer;
 import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.entity.AiTask;
+import com.memoryvault.exception.DuplicateFileException;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.entity.User;
 import com.memoryvault.repository.AiTaskRepository;
@@ -47,6 +48,35 @@ public class PhotoController {
         return ResponseEntity.ok(photoService.uploadPhoto(file, userId));
     }
 
+    @PostMapping("/batch-upload")
+    public ResponseEntity<List<Map<String, Object>>> batchUpload(
+            @RequestParam("files") MultipartFile[] files,
+            Authentication authentication) {
+        Long userId = getUserId(authentication);
+        List<Map<String, Object>> results = new java.util.ArrayList<>();
+
+        for (MultipartFile file : files) {
+            Map<String, Object> result = new java.util.HashMap<>();
+            result.put("fileName", file.getOriginalFilename());
+            try {
+                PhotoDTO dto = photoService.uploadPhoto(file, userId);
+                result.put("success", true);
+                result.put("photo", dto);
+            } catch (DuplicateFileException e) {
+                result.put("success", false);
+                result.put("error", "duplicate");
+                result.put("message", e.getMessage());
+            } catch (Exception e) {
+                result.put("success", false);
+                result.put("error", "failed");
+                result.put("message", e.getMessage());
+            }
+            results.add(result);
+        }
+
+        return ResponseEntity.ok(results);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<PhotoDTO> getPhoto(@PathVariable Long id) {
         return ResponseEntity.ok(photoService.getPhoto(id));
@@ -76,6 +106,44 @@ public class PhotoController {
             }
         }
         return ResponseEntity.ok(Map.of("success", success, "fail", fail));
+    }
+
+    @PostMapping("/batch-favorite")
+    public ResponseEntity<Map<String, Object>> batchFavorite(@RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<Number>) request.get("ids")).stream().map(Number::longValue).toList();
+        Boolean favorite = (Boolean) request.get("favorite");
+        int success = 0;
+        for (Long id : ids) {
+            try {
+                PhotoDTO dto = new PhotoDTO();
+                dto.setFavorite(favorite);
+                photoService.updatePhoto(id, dto);
+                success++;
+            } catch (Exception e) {
+                // skip
+            }
+        }
+        return ResponseEntity.ok(Map.of("success", success, "total", ids.size()));
+    }
+
+    @PostMapping("/batch-rating")
+    public ResponseEntity<Map<String, Object>> batchRating(@RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<Number>) request.get("ids")).stream().map(Number::longValue).toList();
+        Integer rating = (Integer) request.get("rating");
+        int success = 0;
+        for (Long id : ids) {
+            try {
+                PhotoDTO dto = new PhotoDTO();
+                dto.setRating(rating);
+                photoService.updatePhoto(id, dto);
+                success++;
+            } catch (Exception e) {
+                // skip
+            }
+        }
+        return ResponseEntity.ok(Map.of("success", success, "total", ids.size()));
     }
 
     @GetMapping("/favorites")
