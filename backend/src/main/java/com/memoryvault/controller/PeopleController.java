@@ -1,5 +1,6 @@
 package com.memoryvault.controller;
 
+import com.memoryvault.dto.FaceDTO;
 import com.memoryvault.dto.PersonDTO;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.service.FaceService;
@@ -58,5 +59,31 @@ public class PeopleController {
     public ResponseEntity<Void> deletePerson(@PathVariable Long id) {
         faceService.deletePerson(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/faces")
+    public ResponseEntity<List<FaceDTO>> getPersonFaces(@PathVariable Long id) {
+        return ResponseEntity.ok(faceService.getPersonFaces(id));
+    }
+
+    @GetMapping("/faces/unassigned")
+    public ResponseEntity<List<FaceDTO>> getUnnamedFaces() {
+        return ResponseEntity.ok(faceService.getUnnamedFaces());
+    }
+
+    @PostMapping("/faces/{faceId}/assign")
+    public ResponseEntity<Void> assignFace(
+            @PathVariable Long faceId,
+            @RequestBody Map<String, Long> body) {
+        faceService.assignFaceToPerson(faceId, body.get("personId"));
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{id}/cover-face")
+    public ResponseEntity<Void> setCoverFace(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body) {
+        faceService.setCoverFace(id, body.get("faceId"));
+        return ResponseEntity.ok().build();
     }
 }

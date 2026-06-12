@@ -8,16 +8,22 @@ import com.drew.metadata.exif.GpsDirectory;
 import com.memoryvault.async.PhotoIndexingConsumer;
 import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
+import com.memoryvault.dto.PhotoDetailDTO;
+import com.memoryvault.dto.PersonDTO;
+import com.memoryvault.dto.TagDTO;
 import com.memoryvault.entity.AiTask;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.entity.FaceCluster;
 import com.memoryvault.entity.Person;
+import com.memoryvault.entity.PhotoTag;
 import com.memoryvault.repository.AiTaskRepository;
 import com.memoryvault.repository.AlbumRepository;
 import com.memoryvault.repository.CategoryRepository;
 import com.memoryvault.repository.FaceClusterRepository;
 import com.memoryvault.repository.PersonRepository;
 import com.memoryvault.repository.PhotoRepository;
+import com.memoryvault.repository.PhotoTagRepository;
+import com.memoryvault.repository.TagRepository;
 import com.memoryvault.storage.MinioStorageService;
 import lombok.RequiredArgsConstructor;
 import com.memoryvault.exception.DuplicateFileException;
@@ -59,6 +65,8 @@ public class PhotoService {
     private final PersonRepository personRepository;
     private final AlbumRepository albumRepository;
     private final CategoryRepository categoryRepository;
+    private final PhotoTagRepository photoTagRepository;
+    private final TagRepository tagRepository;
 
     @Transactional
     public PhotoDTO uploadPhoto(MultipartFile file, Long userId) throws Exception {
@@ -131,6 +139,73 @@ public class PhotoService {
         Photo photo = photoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Photo not found"));
         return toDTO(photo);
+    }
+
+    public PhotoDetailDTO getPhotoDetail(Long id) {
+        Photo photo = photoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Photo not found"));
+
+        PhotoDetailDTO dto = new PhotoDetailDTO();
+        dto.setId(photo.getId());
+        dto.setFilePath(photo.getFilePath());
+        dto.setExifDate(photo.getExifDate());
+        dto.setGpsLat(photo.getGpsLat());
+        dto.setGpsLng(photo.getGpsLng());
+        dto.setRating(photo.getRating());
+        dto.setNote(photo.getNote());
+        dto.setAiCaption(photo.getAiCaption());
+        dto.setWidth(photo.getWidth());
+        dto.setHeight(photo.getHeight());
+        dto.setFileSize(photo.getFileSize());
+        dto.setMediaType(photo.getMediaType().name());
+        dto.setFavorite(photo.getFavorite());
+        dto.setOriginalFilename(photo.getOriginalFilename());
+        dto.setCreatedAt(photo.getCreatedAt());
+        dto.setFileHashMd5(photo.getFileHashMd5());
+        dto.setFileHashPhash(photo.getFileHashPhash());
+
+        try {
+            String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :
+                              (isWebPFilename(photo.getOriginalFilename()) ? "webp" : "jpg");
+            dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
+            dto.setOriginalUrl(storageService.getPhotoUrl(photo.getFilePath()));
+        } catch (Exception e) {
+            log.warn("Failed to generate URLs for photo {}", id);
+        }
+
+        // Load tags
+        List<PhotoTag> photoTags = photoTagRepository.findByPhotoId(id);
+        List<TagDTO> tagDTOs = photoTags.stream().map(pt -> {
+            TagDTO td = new TagDTO();
+            td.setId(pt.getTagId());
+            td.setConfidence(pt.getConfidence());
+            td.setSource(pt.getSource().name());
+            tagRepository.findById(pt.getTagId()).ifPresent(tag -> {
+                td.setName(tag.getName());
+                td.setColor(tag.getColor());
+                td.setType(tag.getType().name());
+                td.setCategory(tag.getCategory());
+            });
+            return td;
+        }).toList();
+        dto.setTags(tagDTOs);
+
+        // Load people
+        List<FaceCluster> faces = faceClusterRepository.findByPhoto(photo);
+        List<PersonDTO> peopleDTOs = faces.stream()
+                .filter(f -> f.getPerson() != null)
+                .map(FaceCluster::getPerson)
+                .distinct()
+                .map(p -> {
+                    PersonDTO pd = new PersonDTO();
+                    pd.setId(p.getId());
+                    pd.setName(p.getName());
+                    pd.setPhotoCount(p.getPhotoCount());
+                    return pd;
+                }).toList();
+        dto.setPeople(peopleDTOs);
+
+        return dto;
     }
 
     @Transactional

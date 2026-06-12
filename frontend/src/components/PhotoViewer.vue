@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
+
+const router = useRouter()
 
 const props = defineProps<{
   show: boolean
@@ -142,6 +145,12 @@ function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'ArrowRight') next()
 }
 
+function goToDetail() {
+  if (!currentPhoto.value) return
+  close()
+  router.push(`/photos/${currentPhoto.value.id}`)
+}
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
 })
@@ -183,6 +192,11 @@ onUnmounted(() => {
             <button class="toolbar-btn" @click="showInfo = !showInfo">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+              </svg>
+            </button>
+            <button class="toolbar-btn" @click="goToDetail" title="查看详情">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+                <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/>
               </svg>
             </button>
             <button class="toolbar-btn" @click="close">

@@ -1,5 +1,5 @@
 import http from './http'
-import type { Photo, PageResponse } from '@/types'
+import type { Photo, PhotoDetail, PageResponse } from '@/types'
 
 export const photoApi = {
   list(page = 0, size = 20) {
@@ -8,6 +8,10 @@ export const photoApi = {
 
   get(id: number) {
     return http.get<Photo>(`/photos/${id}`)
+  },
+
+  getDetail(id: number) {
+    return http.get<PhotoDetail>(`/photos/${id}/detail`)
   },
 
   upload(file: File) {

@@ -3,6 +3,7 @@ import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { peopleApi } from '@/api/peopleApi'
+import type { Face } from '@/api/peopleApi'
 import { usePhotoStore } from '@/stores/photoStore'
 import type { Person, Photo } from '@/types'
 import PhotoCard from '@/components/PhotoCard.vue'
@@ -16,6 +17,7 @@ const photoStore = usePhotoStore()
 
 const personId = Number(route.params.id)
 const person = ref<Person | null>(null)
+const faces = ref<Face[]>([])
 const photos = ref<Photo[]>([])
 const page = ref(0)
 const pageSize = 40
@@ -28,7 +30,7 @@ const editName = ref('')
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
 
-// Zoom level: 0=6col, 1=4col(default), 2=3col, 3=2col
+// Zoom level
 const zoomLevel = ref(0)
 const zoomColumns = [6, 10, 16, 20, 30]
 
@@ -49,8 +51,7 @@ function initZoom() {
 
 onMounted(async () => {
   initZoom()
-  await fetchPerson()
-  await fetchPhotos()
+  await Promise.all([fetchPerson(), fetchFaces(), fetchPhotos()])
 })
 
 async function fetchPerson() {
@@ -61,6 +62,15 @@ async function fetchPerson() {
   } catch (e) {
     message.error('人物不存在')
     router.back()
+  }
+}
+
+async function fetchFaces() {
+  try {
+    const { data } = await peopleApi.getFaces(personId)
+    faces.value = data
+  } catch (e) {
+    // ignore
   }
 }
 
@@ -169,6 +179,30 @@ function confirmDelete() {
     },
   })
 }
+
+async function setCoverFace(faceId: number) {
+  try {
+    await peopleApi.setCoverFace(personId, faceId)
+    message.success('已设置封面')
+    await fetchPerson()
+  } catch (e) {
+    message.error('设置失败')
+  }
+}
+
+function getBboxStyle(bboxJson: string) {
+  try {
+    const bbox = JSON.parse(bboxJson)
+    return {
+      left: `${bbox.x * 100}%`,
+      top: `${bbox.y * 100}%`,
+      width: `${bbox.w * 100}%`,
+      height: `${bbox.h * 100}%`,
+    }
+  } catch {
+    return {}
+  }
+}
 </script>
 
 <template>
@@ -202,6 +236,28 @@ function confirmDelete() {
     </div>
 
     <div class="detail-scroll" @scroll="handleScroll">
+      <!-- Face thumbnails section -->
+      <div v-if="faces.length > 0" class="faces-section">
+        <div class="faces-header">
+          <span class="faces-title">人脸缩略图 ({{ faces.length }})</span>
+          <span class="faces-hint">点击设为封面</span>
+        </div>
+        <div class="faces-row">
+          <div
+            v-for="face in faces"
+            :key="face.id"
+            class="face-thumb"
+            :class="{ active: person?.coverFaceId === face.id }"
+            @click="setCoverFace(face.id)"
+            :title="person?.coverFaceId === face.id ? '当前封面' : '设为封面'"
+          >
+            <img v-if="face.photoUrl" :src="face.photoUrl" alt="" />
+            <div v-if="face.bboxJson" class="face-crop" :style="getBboxStyle(face.bboxJson)"></div>
+            <div v-if="person?.coverFaceId === face.id" class="face-badge">封面</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Empty state -->
       <div v-if="!loading && photos.length === 0" class="empty-state">
         <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
@@ -370,6 +426,96 @@ function confirmDelete() {
   overflow-y: auto;
 }
 
+/* Faces section */
+.faces-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.faces-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.faces-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.faces-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.faces-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.faces-row::-webkit-scrollbar {
+  height: 4px;
+}
+
+.faces-row::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+}
+
+.face-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.face-thumb:hover {
+  transform: scale(1.05);
+}
+
+.face-thumb.active {
+  border-color: var(--accent);
+}
+
+.face-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.face-crop {
+  position: absolute;
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.face-badge {
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  background: var(--accent);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Empty state */
 .empty-state {
   display: flex;
   flex-direction: column;

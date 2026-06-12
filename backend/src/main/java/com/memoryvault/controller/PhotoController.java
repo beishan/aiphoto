@@ -3,6 +3,7 @@ package com.memoryvault.controller;
 import com.memoryvault.async.PhotoIndexingConsumer;
 import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
+import com.memoryvault.dto.PhotoDetailDTO;
 import com.memoryvault.entity.AiTask;
 import com.memoryvault.exception.DuplicateFileException;
 import com.memoryvault.entity.Photo;
@@ -80,6 +81,11 @@ public class PhotoController {
     @GetMapping("/{id}")
     public ResponseEntity<PhotoDTO> getPhoto(@PathVariable Long id) {
         return ResponseEntity.ok(photoService.getPhoto(id));
+    }
+
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<PhotoDetailDTO> getPhotoDetail(@PathVariable Long id) {
+        return ResponseEntity.ok(photoService.getPhotoDetail(id));
     }
 
     @PutMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.memoryvault.service;
 
+import com.memoryvault.dto.FaceDTO;
 import com.memoryvault.dto.PersonDTO;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.entity.FaceCluster;
@@ -92,6 +93,41 @@ public class FaceService {
 
         // Delete the person
         personRepository.delete(person);
+    }
+
+    public List<FaceDTO> getPersonFaces(Long personId) {
+        Person person = personRepository.findById(personId)
+                .orElseThrow(() -> new RuntimeException("Person not found"));
+        List<FaceCluster> faces = faceClusterRepository.findByPerson(person);
+        return faces.stream().map(this::toFaceDTO).toList();
+    }
+
+    public List<FaceDTO> getUnnamedFaces() {
+        List<FaceCluster> unassigned = faceClusterRepository.findUnassigned();
+        return unassigned.stream().map(this::toFaceDTO).toList();
+    }
+
+    @Transactional
+    public void assignFaceToPerson(Long faceId, Long personId) {
+        FaceCluster face = faceClusterRepository.findById(faceId)
+                .orElseThrow(() -> new RuntimeException("Face not found"));
+        Person person = personRepository.findById(personId)
+                .orElseThrow(() -> new RuntimeException("Person not found"));
+        face.setPerson(person);
+        faceClusterRepository.save(face);
+        // Update photo count
+        person.setPhotoCount(faceClusterRepository.findByPerson(person).size());
+        personRepository.save(person);
+    }
+
+    @Transactional
+    public void setCoverFace(Long personId, Long faceId) {
+        Person person = personRepository.findById(personId)
+                .orElseThrow(() -> new RuntimeException("Person not found"));
+        FaceCluster face = faceClusterRepository.findById(faceId)
+                .orElseThrow(() -> new RuntimeException("Face not found"));
+        person.setCoverFace(face);
+        personRepository.save(person);
     }
 
     /**
@@ -261,6 +297,26 @@ public class FaceService {
             dto.setOriginalUrl(storageService.getPhotoUrl(photo.getFilePath()));
         } catch (Exception e) {
             log.warn("Failed to resolve URLs for photo {}", photo.getId());
+        }
+        return dto;
+    }
+
+    private FaceDTO toFaceDTO(FaceCluster face) {
+        FaceDTO dto = new FaceDTO();
+        dto.setId(face.getId());
+        dto.setBboxJson(face.getBboxJson());
+        dto.setConfidence(face.getConfidence());
+        if (face.getPerson() != null) {
+            dto.setPersonId(face.getPerson().getId());
+            dto.setPersonName(face.getPerson().getName());
+        }
+        if (face.getPhoto() != null) {
+            dto.setPhotoId(face.getPhoto().getId());
+            try {
+                dto.setPhotoUrl(storageService.getPhotoUrl(face.getPhoto().getFilePath()));
+            } catch (Exception e) {
+                log.warn("Failed to resolve photo URL for face {}", face.getId());
+            }
         }
         return dto;
     }

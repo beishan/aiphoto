@@ -19,6 +19,23 @@ export interface Photo {
   createdAt: string
 }
 
+export interface Tag {
+  id: number
+  name: string
+  color: string | null
+  type: string
+  category: string | null
+  confidence: number | null
+  source: string | null
+}
+
+export interface PhotoDetail extends Omit<Photo, 'tags'> {
+  fileHashMd5: string | null
+  fileHashPhash: string | null
+  tags: Tag[]
+  people: Person[]
+}
+
 export interface Album {
   id: number
   name: string

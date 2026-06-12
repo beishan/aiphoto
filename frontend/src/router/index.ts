@@ -89,6 +89,11 @@ const routes: RouteRecordRaw[] = [
         name: 'Folders',
         component: () => import('@/views/FoldersView.vue'),
       },
+      {
+        path: 'photos/:id',
+        name: 'PhotoDetail',
+        component: () => import('@/views/PhotoDetailView.vue'),
+      },
     ],
   },
 ]
