@@ -1,0 +1,133 @@
+# 飞牛 NAS Jenkins 部署指南
+
+本方案仿照 `ai-book` 的发布流程，将 `git@github.com:beishan/aiphoto.git`
+的 `main` 分支部署到家庭网络内飞牛 NAS 的 Docker。Jenkins 默认也运行在
+该 NAS 的 Docker 中，通过 Docker Socket 管理宿主机容器。
+
+## 1. 部署内容
+
+Pipeline 会自动执行：检出 `main`、后端测试、构建前端/后端/AI 版本
+镜像和内置 schema 的 pgvector 镜像、备份 PostgreSQL、Compose 滚动更新、
+容器与局域网健康检查。发布
+失败时自动恢复上一版的三个应用镜像，不回滚数据。
+
+默认局域网端口：
+
+| 服务 | 端口 |
+|---|---:|
+| MemoryVault Web | 8391 |
+| Spring Boot API | 8392 |
+| MinIO API / 控制台 | 9300 / 9301 |
+| RabbitMQ 管理页 | 15682 |
+
+PostgreSQL、Redis、RabbitMQ AMQP 和 AI API 仅在 Docker 内部网络开放。
+
+## 2. NAS 与 Jenkins 前置条件
+
+Jenkins 容器需要具备 `git`、`docker`、`docker compose`和 `curl`，并挂载：
+
+```text
+/var/run/docker.sock:/var/run/docker.sock
+```
+
+这个 Socket 等同于 NAS Docker 管理权限，只应交给可信的 Jenkins 管理员。
+NAS 需已安装 NVIDIA 驱动、NVIDIA Container Toolkit，且以下命令可成功：
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
+```
+
+## 3. 准备 NAS 目录
+
+例如创建：
+
+```text
+/vol1/photos
+/vol1/docker/memoryvault/ai-models/insightface/models
+/vol1/docker/memoryvault/ai-models/ultralytics
+/vol1/docker/memoryvault/ai-models/clip
+/vol1/docker/memoryvault/ai-models/chinese-clip
+```
+
+将现有 `ai-models` 目录的子目录内容放到对应位置。至少确保存在：
+
+```text
+ultralytics/yolov8n.pt
+chinese-clip/clip_cn_vit-b-16.pt
+insightface/models/buffalo_l/
+```
+
+照片库以只读方式挂载到后端 `/photos`，在 MemoryVault 的扫描目录中应填
+`/photos` 或其子目录。用于上传的照片和缩略图存在 MinIO 持久卷，不依赖
+Jenkins 工作区。
+
+## 4. Jenkins 生产凭据
+
+1. 复制 `docker/.env.production.example` 到本地临时文件。
+2. 替换全部密码和两个 NAS 绝对路径。JWT 密钥可用
+   `openssl rand -base64 48` 生成。
+3. Jenkins 中新建 `Secret file` 凭据，ID 必须是
+   `memoryvault-production-env`。
+
+真实生产环境文件不要提交到 Git。
+
+## 5. 创建 Pipeline
+
+新建 **Pipeline script from SCM** 任务：
+
+- Repository URL：`git@github.com:beishan/aiphoto.git`
+- Branch Specifier：`*/main`
+- Script Path：`Jenkinsfile`
+- SSH Credentials：选择已可读取该 GitHub 仓库的凭据
+
+Pipeline 参数中的 `NAS_HOST`、`FRONTEND_PORT`、`BACKEND_PORT` 会覆盖凭据
+文件同名值。端口被其他 NAS 应用占用时，发布前直接修改参数。
+
+如果 Jenkins 只在家庭局域网中，GitHub 无法主动访问 Webhook，可在任务中
+使用 `Poll SCM`，例如每五分钟：`H/5 * * * *`。
+
+## 6. 首次部署和访问
+
+首次部署会下载 CUDA/PyTorch 大镜像与 Maven/npm 依赖，时间较长。没有旧
+PostgreSQL 时跳过备份，没有上一版镜像时不能回滚，都属于正常现象。
+
+```text
+http://192.168.31.155:8391/
+http://192.168.31.155:8392/actuator/health
+http://192.168.31.155:9301/
+http://192.168.31.155:15682/
+```
+
+## 7. 运维命令
+
+在仓库中指定生产环境文件：
+
+```bash
+./scripts/deploy.sh health /path/to/memoryvault-production.env
+./scripts/deploy.sh logs /path/to/memoryvault-production.env
+./scripts/rollback.sh /path/to/memoryvault-production.env
+```
+
+每次发布前的 PostgreSQL custom-format 备份保存在
+`memoryvault-backups` Docker Volume，默认保留 10 份。上一版镜像信息保存在
+`memoryvault-deploy-state` Volume。手动回滚只替换前端、后端和 AI 镜像，
+不会删除 PostgreSQL、Redis、RabbitMQ、MinIO 和照片数据。
+
+查看备份：
+
+```bash
+docker run --rm -v memoryvault-backups:/backups alpine:3.20 ls -lh /backups
+```
+
+故障排查优先使用：
+
+```bash
+docker ps --filter name=memoryvault
+docker logs --tail=200 memoryvault-ai
+docker logs --tail=200 memoryvault-backend
+docker exec memoryvault-ai nvidia-smi
+```
+
+如 AI 容器一直 `unhealthy`，重点检查 NVIDIA Container Toolkit、模型目录结构和
+NAS 文件权限。如 Compose 报挂载源不存在，检查的是 NAS 宿主机路径，
+而不是 Jenkins 容器内路径。

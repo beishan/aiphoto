@@ -1,0 +1,222 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: ${DOCKER_LOG_MAX_FILE:-3}
+
+services:
+  postgres:
+    image: memoryvault-postgres:pg16
+    build:
+      context: ../backend
+      dockerfile: ../docker/postgres.Dockerfile
+    container_name: memoryvault-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: memoryvault
+      POSTGRES_USER: memoryvault
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?please configure DB_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memoryvault -d memoryvault"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: memoryvault-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?please configure REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  rabbitmq:
+    image: docker.m.daocloud.io/library/rabbitmq:3-management-alpine
+    container_name: memoryvault-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: memoryvault
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?please configure RABBITMQ_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${RABBITMQ_MGMT_PORT:-15682}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:${MINIO_IMAGE_TAG:-latest}
+    container_name: memoryvault-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-memoryvault}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?please configure MINIO_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MINIO_API_PORT:-9300}:9000"
+      - "${MINIO_CONSOLE_PORT:-9301}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  ai-service:
+    image: ${AI_IMAGE:-memoryvault-ai:latest}
+    build:
+      context: ../ai-service
+      dockerfile: Dockerfile
+    container_name: memoryvault-ai
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      HF_HOME: /opt/models/clip
+      TRANSFORMERS_CACHE: /opt/models/clip
+      OPENCLIP_CACHE_DIR: /opt/models/clip
+      CHINESE_CLIP_CACHE_DIR: /opt/models/chinese-clip
+    volumes:
+      - type: bind
+        source: ${AI_MODELS_PATH:?please configure AI_MODELS_PATH}/insightface/models
+        target: /root/.insightface/models
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_MODELS_PATH}/ultralytics
+        target: /root/.ultralytics
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_MODELS_PATH}/clip
+        target: /opt/models/clip
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_MODELS_PATH}/chinese-clip
+        target: /opt/models/chinese-clip
+        bind:
+          create_host_path: false
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  backend:
+    image: ${BACKEND_IMAGE:-memoryvault-backend:latest}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: memoryvault-backend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Asia/Shanghai}
+      JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/memoryvault
+      SPRING_DATASOURCE_USERNAME: memoryvault
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: memoryvault
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_USER:-memoryvault}
+      MINIO_SECRET_KEY: ${MINIO_PASSWORD}
+      AI_SERVICE_URL: http://ai-service:8000
+      JWT_SECRET: ${JWT_SECRET:?please configure JWT_SECRET}
+    ports:
+      - "${BACKEND_PORT:-8392}:8080"
+    volumes:
+      - type: bind
+        source: ${PHOTO_LIBRARY_PATH:?please configure PHOTO_LIBRARY_PATH}
+        target: /photos
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      ai-service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-memoryvault-frontend:latest}
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: memoryvault-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8391}:80"
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    logging: *default-logging
+    networks: [memoryvault-network]
+
+volumes:
+  postgres_data: {name: memoryvault-postgres-data}
+  redis_data: {name: memoryvault-redis-data}
+  rabbitmq_data: {name: memoryvault-rabbitmq-data}
+  minio_data: {name: memoryvault-minio-data}
+  backups_data: {name: memoryvault-backups}
+  deploy_state: {name: memoryvault-deploy-state}
+
+networks:
+  memoryvault-network:
+    name: memoryvault-network
+    driver: bridge

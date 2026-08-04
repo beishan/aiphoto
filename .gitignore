@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+docker/.env.production
+.memoryvault-previous-images
 
 # Code index
 .codegraph/
