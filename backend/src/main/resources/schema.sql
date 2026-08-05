@@ -82,9 +82,17 @@ CREATE TABLE IF NOT EXISTS face_clusters (
     confidence DOUBLE PRECISION
 );
 
--- Add foreign key for people.cover_face_id
-ALTER TABLE people ADD CONSTRAINT fk_people_cover_face
-    FOREIGN KEY (cover_face_id) REFERENCES face_clusters(id);
+-- Add foreign key for people.cover_face_id (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_people_cover_face' AND table_name = 'people'
+    ) THEN
+        ALTER TABLE people ADD CONSTRAINT fk_people_cover_face
+            FOREIGN KEY (cover_face_id) REFERENCES face_clusters(id);
+    END IF;
+END $$;
 
 -- Tags table
 CREATE TABLE IF NOT EXISTS tags (
@@ -175,9 +183,20 @@ CREATE TABLE IF NOT EXISTS scan_folders (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Foreign key: photos.source_folder_id -> scan_folders.id
-ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
-    FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
+-- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_photos_source_folder' AND table_name = 'photos'
+    ) THEN
+        ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
+            FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- Unique index for categories name (ensures ON CONFLICT works)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories (name);
 
 -- Indexes
 -- Embedding indexes
@@ -224,4 +243,4 @@ INSERT INTO categories (name, icon, color, is_system) VALUES
     ('活动', 'event', '#ff9f0a', TRUE),
     ('截图', 'screenshot', '#8e8e93', TRUE),
     ('文档', 'document', '#636366', TRUE)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
