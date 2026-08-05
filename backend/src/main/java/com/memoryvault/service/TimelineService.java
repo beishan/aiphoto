@@ -3,7 +3,7 @@ package com.memoryvault.service;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +15,7 @@ import java.util.*;
 public class TimelineService {
 
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
 
     public Map<Integer, Map<Integer, List<PhotoDTO>>> getTimelineGrouped() {
         List<Photo> photos = photoRepository.findAll().stream()

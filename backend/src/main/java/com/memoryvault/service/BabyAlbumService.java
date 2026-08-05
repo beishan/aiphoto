@@ -5,7 +5,7 @@ import com.memoryvault.entity.Album;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.AlbumRepository;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +20,7 @@ public class BabyAlbumService {
 
     private final AlbumRepository albumRepository;
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
 
     /**
      * Get baby album with age labels.

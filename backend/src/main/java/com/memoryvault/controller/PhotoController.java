@@ -1,7 +1,5 @@
 package com.memoryvault.controller;
 
-import com.memoryvault.async.PhotoIndexingConsumer;
-import com.memoryvault.config.RabbitMQConfig;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.dto.PhotoDetailDTO;
 import com.memoryvault.entity.AiTask;
@@ -11,9 +9,9 @@ import com.memoryvault.entity.User;
 import com.memoryvault.repository.AiTaskRepository;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.repository.UserRepository;
+import com.memoryvault.async.PhotoIndexingService;
 import com.memoryvault.service.PhotoService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +32,7 @@ public class PhotoController {
     private final UserRepository userRepository;
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
-    private final RabbitTemplate rabbitTemplate;
+    private final PhotoIndexingService photoIndexingService;
 
     @GetMapping
     public ResponseEntity<Page<PhotoDTO>> listPhotos(
@@ -188,10 +186,7 @@ public class PhotoController {
         aiTask.setPhotoIdsJson(photoIds.toString());
         aiTask = aiTaskRepository.save(aiTask);
 
-        PhotoIndexingConsumer.PhotoIndexMessage message = new PhotoIndexingConsumer.PhotoIndexMessage();
-        message.setTaskId(aiTask.getId());
-        message.setPhotoIds(photoIds);
-        rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_PHOTO_INDEX, message);
+        photoIndexingService.indexPhotos(aiTask.getId(), photoIds);
 
         return ResponseEntity.ok(Map.of("taskId", aiTask.getId(), "count", photoIds.size()));
     }

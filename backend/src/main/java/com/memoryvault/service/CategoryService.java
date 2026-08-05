@@ -10,7 +10,7 @@ import com.memoryvault.repository.CategoryRepository;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.repository.PhotoTagRepository;
 import com.memoryvault.repository.TagRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,7 +31,7 @@ public class CategoryService {
     private final PhotoRepository photoRepository;
     private final PhotoTagRepository photoTagRepository;
     private final TagRepository tagRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
 
     public List<CategoryDTO> listCategories() {
         return categoryRepository.findAll().stream().map(this::toDTO).toList();

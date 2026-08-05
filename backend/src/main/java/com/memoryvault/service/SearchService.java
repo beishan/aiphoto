@@ -5,7 +5,7 @@ import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.dto.SearchRequest;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 public class SearchService {
 
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
     private final AiServiceClient aiServiceClient;
     private final SettingService settingService;
 

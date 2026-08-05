@@ -4,7 +4,7 @@ import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.AlbumRepository;
 import com.memoryvault.repository.CategoryRepository;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.util.*;
 public class DedupService {
 
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
     private final AlbumRepository albumRepository;
     private final CategoryRepository categoryRepository;
 

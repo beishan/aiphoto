@@ -3,7 +3,7 @@ package com.memoryvault.controller;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.entity.Photo;
 import com.memoryvault.service.DedupService;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +20,7 @@ import java.util.Map;
 public class DedupController {
 
     private final DedupService dedupService;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
 
     @GetMapping("/groups")
     public ResponseEntity<List<List<PhotoDTO>>> getDuplicateGroups() {

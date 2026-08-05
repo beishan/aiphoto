@@ -1,32 +1,30 @@
 package com.memoryvault.async;
 
 import com.memoryvault.ai.AiServiceClient;
-import com.memoryvault.config.RabbitMQConfig;
+import com.memoryvault.dto.TaskProgressDTO;
 import com.memoryvault.entity.*;
 import com.memoryvault.repository.*;
-import java.util.Map;
 import com.memoryvault.service.SettingService;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import com.memoryvault.websocket.ProgressWebSocketHandler;
-import com.memoryvault.dto.TaskProgressDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PhotoIndexingConsumer {
+public class PhotoIndexingService {
 
     private final AiServiceClient aiServiceClient;
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final ProgressWebSocketHandler progressHandler;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
     private final FaceClusterRepository faceClusterRepository;
     private final PersonRepository personRepository;
     private final TagRepository tagRepository;
@@ -34,18 +32,17 @@ public class PhotoIndexingConsumer {
     private final SettingService settingService;
     private final CategoryRepository categoryRepository;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_PHOTO_INDEX)
-    public void handlePhotoIndex(PhotoIndexMessage message) {
-        log.info("Processing photo indexing task: {}", message.getTaskId());
+    @Async
+    public void indexPhotos(Long taskId, List<Long> photoIds) {
+        log.info("Processing photo indexing task: {}", taskId);
 
-        AiTask task = aiTaskRepository.findById(message.getTaskId()).orElse(null);
+        AiTask task = aiTaskRepository.findById(taskId).orElse(null);
         if (task == null) return;
 
         task.setStatus(AiTask.TaskStatus.RUNNING);
         aiTaskRepository.save(task);
 
         try {
-            List<Long> photoIds = message.getPhotoIds();
             int total = photoIds.size();
 
             for (int i = 0; i < total; i++) {
@@ -53,7 +50,7 @@ public class PhotoIndexingConsumer {
                 if (photo == null) continue;
 
                 try {
-                    // Download photo from MinIO
+                    // Read photo from local storage
                     byte[] data = storageService.downloadBytes(photo.getFilePath());
 
                     // 1. CLIP embedding
@@ -62,21 +59,18 @@ public class PhotoIndexingConsumer {
 
                     // 2. Face detection with auto-clustering
                     AiServiceClient.FaceDetectionResponse faceResp = aiServiceClient.detectFaces(data, photo.getOriginalFilename());
-                    // Read face clustering threshold from settings
                     String thresholdStr = settingService.getSetting(1L, "ai_face_cluster_threshold");
                     double faceThreshold = thresholdStr != null ? Double.parseDouble(thresholdStr) / 100.0 : 0.5;
 
                     for (AiServiceClient.FaceDetectionResponse.FaceResult face : faceResp.getFaces()) {
                         float[] faceEmbedding = toFloatArray(face.getEmbedding());
 
-                        // Try to find an existing person with similar face
                         String vectorStr = vectorToString(faceEmbedding);
                         List<Long> similarPersonIds = faceClusterRepository.findPersonIdByVectorSimilarity(
                                 vectorStr, faceThreshold, 1);
 
                         Person person = null;
                         if (!similarPersonIds.isEmpty() && similarPersonIds.get(0) != null) {
-                            // Found a similar face — reuse the same person
                             person = personRepository.findById(similarPersonIds.get(0)).orElse(null);
                             if (person != null) {
                                 person.setPhotoCount(person.getPhotoCount() + 1);
@@ -93,7 +87,6 @@ public class PhotoIndexingConsumer {
                         }
 
                         if (person == null) {
-                            // No match — create a new person
                             person = new Person();
                             person.setPhotoCount(1);
                             person.setFirstSeen(photo.getExifDate());
@@ -109,7 +102,6 @@ public class PhotoIndexingConsumer {
                         fc.setConfidence(face.getConfidence());
                         faceClusterRepository.save(fc);
 
-                        // Set cover face for the person if not set (use native query to avoid lazy loading)
                         if (person.getCoverFace() == null) {
                             personRepository.setCoverFaceId(person.getId(), fc.getId());
                         }
@@ -128,7 +120,7 @@ public class PhotoIndexingConsumer {
                         photoTagRepository.save(pt);
                     }
 
-                    // 3.5 Auto-assign photo to matching system categories based on YOLO results
+                    // 3.5 Auto-assign photo to matching system categories
                     autoAssignToCategories(photo, classifyResp);
 
                     // 4. BLIP-2 caption (lazy-loaded, best effort)
@@ -165,18 +157,12 @@ public class PhotoIndexingConsumer {
         }
     }
 
-    /**
-     * YOLO category -> system category icon mapping.
-     * YOLO returns categories like "person", "animal", "food" etc.
-     * We map these to the system category icon field.
-     */
     private static final Map<String, String> YOLO_TO_CATEGORY_ICON = Map.of(
             "person", "person",
             "animal", "animal",
             "food", "food"
     );
 
-    // "potted plant" in COCO maps to YOLO category "furniture", but belongs to our "plant" category
     private static final Map<String, String> YOLO_NAME_OVERRIDE = Map.of(
             "potted plant", "plant"
     );
@@ -186,23 +172,19 @@ public class PhotoIndexingConsumer {
             List<Category> systemCategories = categoryRepository.findByIsSystemTrue();
             if (systemCategories.isEmpty()) return;
 
-            // Build a set of matching category icons from YOLO results
             java.util.Set<String> matchedIcons = new java.util.HashSet<>();
             for (AiServiceClient.ClassifyResponse.TagResult tag : classifyResp.getTags()) {
-                // Check name override first (e.g., "potted plant" -> "plant")
                 String overrideIcon = YOLO_NAME_OVERRIDE.get(tag.getName());
                 if (overrideIcon != null) {
                     matchedIcons.add(overrideIcon);
                     continue;
                 }
-                // Map YOLO category to system category icon
                 String icon = YOLO_TO_CATEGORY_ICON.get(tag.getCategory());
                 if (icon != null) {
                     matchedIcons.add(icon);
                 }
             }
 
-            // Assign photo to matching categories using native queries (avoid lazy loading)
             for (Category category : systemCategories) {
                 if (matchedIcons.contains(category.getIcon())) {
                     if (!categoryRepository.existsPhotoInCategory(category.getId(), photo.getId())) {
@@ -256,11 +238,5 @@ public class PhotoIndexingConsumer {
         tag.setType(Tag.TagType.AI);
         tag.setCategory(category);
         return tag;
-    }
-
-    @lombok.Data
-    public static class PhotoIndexMessage {
-        private Long taskId;
-        private List<Long> photoIds;
     }
 }

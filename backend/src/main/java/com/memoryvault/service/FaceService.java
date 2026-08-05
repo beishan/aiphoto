@@ -9,7 +9,7 @@ import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.FaceClusterRepository;
 import com.memoryvault.repository.PersonRepository;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -31,7 +31,7 @@ public class FaceService {
     private final PersonRepository personRepository;
     private final FaceClusterRepository faceClusterRepository;
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
     private final SettingService settingService;
 
     public List<PersonDTO> listPeople() {

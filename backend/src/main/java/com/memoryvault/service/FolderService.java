@@ -5,8 +5,7 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
-import com.memoryvault.async.PhotoIndexingConsumer;
-import com.memoryvault.config.RabbitMQConfig;
+import com.memoryvault.async.PhotoIndexingService;
 import com.memoryvault.dto.PhotoDTO;
 import com.memoryvault.dto.ScanFolderDTO;
 import com.memoryvault.entity.AiTask;
@@ -15,11 +14,10 @@ import com.memoryvault.entity.ScanFolder;
 import com.memoryvault.repository.AiTaskRepository;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.repository.ScanFolderRepository;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,9 +45,9 @@ public class FolderService {
 
     private final ScanFolderRepository scanFolderRepository;
     private final PhotoRepository photoRepository;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
     private final AiTaskRepository aiTaskRepository;
-    private final RabbitTemplate rabbitTemplate;
+    private final PhotoIndexingService photoIndexingService;
 
     private static final Set<String> IMAGE_EXTENSIONS = Set.of(
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif", ".webp", ".heic", ".heif"
@@ -246,10 +244,7 @@ public class FolderService {
             aiTask.setPhotoIdsJson("[" + photoId + "]");
             aiTask = aiTaskRepository.save(aiTask);
 
-            PhotoIndexingConsumer.PhotoIndexMessage message = new PhotoIndexingConsumer.PhotoIndexMessage();
-            message.setTaskId(aiTask.getId());
-            message.setPhotoIds(List.of(photoId));
-            rabbitTemplate.convertAndSend(RabbitMQConfig.QUEUE_PHOTO_INDEX, message);
+            photoIndexingService.indexPhotos(aiTask.getId(), List.of(photoId));
         } catch (Exception e) {
             log.warn("Failed to trigger AI indexing for photo {}: {}", photoId, e.getMessage());
         }

@@ -1,18 +1,16 @@
 package com.memoryvault.async;
 
 import com.memoryvault.ai.AiServiceClient;
-import com.memoryvault.config.RabbitMQConfig;
+import com.memoryvault.dto.TaskProgressDTO;
 import com.memoryvault.entity.*;
 import com.memoryvault.repository.*;
-import com.memoryvault.storage.MinioStorageService;
+import com.memoryvault.storage.LocalStorageService;
 import com.memoryvault.websocket.ProgressWebSocketHandler;
-import com.memoryvault.dto.TaskProgressDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -20,7 +18,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class TrainingTaskConsumer {
+public class TrainingTaskService {
 
     private final AiServiceClient aiServiceClient;
     private final AlbumRepository albumRepository;
@@ -28,26 +26,25 @@ public class TrainingTaskConsumer {
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final ProgressWebSocketHandler progressHandler;
-    private final MinioStorageService storageService;
+    private final LocalStorageService storageService;
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_TRAINING)
-    public void handleTrainingTask(TrainingMessage message) {
-        log.info("Processing training task for album: {}", message.getAlbumId());
+    @Async
+    public void trainAlbum(Long taskId, Long albumId, Double threshold) {
+        log.info("Processing training task for album: {}", albumId);
 
-        AiTask task = aiTaskRepository.findById(message.getTaskId()).orElse(null);
+        AiTask task = aiTaskRepository.findById(taskId).orElse(null);
         if (task == null) return;
 
         task.setStatus(AiTask.TaskStatus.RUNNING);
         aiTaskRepository.save(task);
 
         try {
-            Album album = albumRepository.findById(message.getAlbumId())
+            Album album = albumRepository.findById(albumId)
                     .orElseThrow(() -> new RuntimeException("Album not found"));
 
             List<Photo> positiveSamples = album.getPhotos();
             List<List<Float>> embeddings = new ArrayList<>();
 
-            // Get embeddings for all positive samples
             for (int i = 0; i < positiveSamples.size(); i++) {
                 Photo photo = positiveSamples.get(i);
                 byte[] data = storageService.downloadBytes(photo.getFilePath());
@@ -80,18 +77,18 @@ public class TrainingTaskConsumer {
                     .orElse(new TrainingSet());
             trainingSet.setAlbum(album);
             trainingSet.setPrototypeVector(centroid);
-            trainingSet.setThreshold(message.getThreshold() != null ? message.getThreshold() : 0.75);
+            trainingSet.setThreshold(threshold != null ? threshold : 0.75);
             trainingSetRepository.save(trainingSet);
 
             // Scan all photos and find matches above threshold
             String vectorStr = vectorToString(centroidList);
-            double threshold = trainingSet.getThreshold();
+            double thr = trainingSet.getThreshold();
             List<Photo> allPhotos = photoRepository.findAll();
             int matched = 0;
             for (int i = 0; i < allPhotos.size(); i++) {
                 Photo p = allPhotos.get(i);
                 if (p.getEmbedding() != null && !album.getPhotos().contains(p)) {
-                    List<Photo> similar = photoRepository.findByVectorSimilarity(vectorStr, 1.0 - threshold, 1);
+                    List<Photo> similar = photoRepository.findByVectorSimilarity(vectorStr, 1.0 - thr, 1);
                     if (!similar.isEmpty() && similar.get(0).getId().equals(p.getId())) {
                         album.getPhotos().add(p);
                         matched++;
@@ -132,12 +129,5 @@ public class TrainingTaskConsumer {
         return "[" + vector.stream()
                 .map(String::valueOf)
                 .collect(Collectors.joining(",")) + "]";
-    }
-
-    @lombok.Data
-    public static class TrainingMessage {
-        private Long taskId;
-        private Long albumId;
-        private Double threshold;
     }
 }
