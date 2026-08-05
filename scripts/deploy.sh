@@ -78,7 +78,7 @@ validate_configuration() {
 
     value="$(effective_value JWT_SECRET)"
     if ((${#value} < 32)); then
-        echo "错误：JWT_SECRET 至少需要 32 个字符。" >&2
+        echo "错误：JWT_SECRET 至少需要 32 个字符（纯文本，无需 Base64）。" >&2
         return 1
     fi
 
