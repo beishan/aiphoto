@@ -98,30 +98,13 @@ services:
     environment:
       TZ: ${TZ:-Asia/Shanghai}
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
-      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
-      HF_HOME: /opt/models/clip
-      TRANSFORMERS_CACHE: /opt/models/clip
-      OPENCLIP_CACHE_DIR: /opt/models/clip
-      CHINESE_CLIP_CACHE_DIR: /opt/models/chinese-clip
+      AI_MODEL_ROOT: /models
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     volumes:
       - type: bind
-        source: ${AI_MODELS_PATH:?please configure AI_MODELS_PATH}/insightface/models
-        target: /root/.insightface/models
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${AI_MODELS_PATH}/ultralytics
-        target: /root/.ultralytics
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${AI_MODELS_PATH}/clip
-        target: /opt/models/clip
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ${AI_MODELS_PATH}/chinese-clip
-        target: /opt/models/chinese-clip
+        source: ${AI_MODELS_PATH:?please configure AI_MODELS_PATH}
+        target: /models
         bind:
           create_host_path: false
     deploy:
@@ -164,6 +147,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_USER:-memoryvault}
       MINIO_SECRET_KEY: ${MINIO_PASSWORD}
       AI_SERVICE_URL: http://ai-service:8000
+      AI_MODEL_ROOT: /models
       JWT_SECRET: ${JWT_SECRET:?please configure JWT_SECRET}
     ports:
       - "${BACKEND_PORT:-8392}:8080"
@@ -172,6 +156,11 @@ services:
         source: ${PHOTO_LIBRARY_PATH:?please configure PHOTO_LIBRARY_PATH}
         target: /photos
         read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_MODELS_PATH:?please configure AI_MODELS_PATH}
+        target: /models
         bind:
           create_host_path: false
     depends_on:

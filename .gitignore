@@ -34,7 +34,7 @@ ai-service/models/__pycache__/
 
 # Docker data
 data/
-models/
+/models/
 
 # OS
 .DS_Store

@@ -2,35 +2,23 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
-
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 
-from models.clip_model import CLIPModel
-from models.insightface_model import InsightFaceModel
-from models.yolo_model import YOLOModel
-from models.blip_model import BLIPModel
+from model_manager import ModelManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Global model instances
-clip_model: Optional[CLIPModel] = None
-face_model: Optional[InsightFaceModel] = None
-yolo_model: Optional[YOLOModel] = None
-blip_model: Optional[BLIPModel] = None
+model_manager = ModelManager()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load models on startup."""
-    global clip_model, face_model, yolo_model
-    logger.info("Loading AI models...")
-    clip_model = CLIPModel()
-    face_model = InsightFaceModel()
-    yolo_model = YOLOModel()
-    logger.info("AI models loaded successfully")
+    logger.info("Loading configured local AI models from %s", model_manager.root)
+    model_manager.load_enabled()
+    logger.info("Local AI model initialization complete")
     yield
     logger.info("Shutting down AI service")
 
@@ -76,6 +64,11 @@ class EmbedTextRequest(BaseModel):
     text: str
 
 
+class ModelConfigRequest(BaseModel):
+    path: str
+    enabled: bool = True
+
+
 class BatchEmbedResponse(BaseModel):
     embeddings: list[list[float]]
 
@@ -91,17 +84,39 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         models={
-            "clip": clip_model is not None,
-            "insightface": face_model is not None,
-            "yolo": yolo_model is not None,
-            "blip": blip_model is not None,
+            item["name"]: item["loaded"] for item in model_manager.status()["models"]
         },
     )
+
+
+@app.get("/models")
+async def model_status():
+    """Return local model repository configuration and load status."""
+    return model_manager.status()
+
+
+@app.put("/models/{model_name}")
+async def configure_model(model_name: str, request: ModelConfigRequest):
+    """Persist and load a model from a path below AI_MODEL_ROOT."""
+    try:
+        return model_manager.update(model_name, request.path, request.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/models/{model_name}/reload")
+async def reload_model(model_name: str):
+    """Reload one model without restarting the service."""
+    try:
+        return model_manager.reload(model_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/ai/embed", response_model=EmbeddingResponse)
 async def embed(file: UploadFile = File(...)):
     """Generate CLIP embedding for an image/video."""
+    clip_model = model_manager.get("clip")
     if clip_model is None:
         raise HTTPException(status_code=503, detail="CLIP model not loaded")
 
@@ -118,6 +133,7 @@ async def embed(file: UploadFile = File(...)):
 @app.post("/ai/detect-faces", response_model=FaceDetectionResponse)
 async def detect_faces(file: UploadFile = File(...)):
     """Detect faces in an image/video using InsightFace."""
+    face_model = model_manager.get("insightface")
     if face_model is None:
         raise HTTPException(status_code=503, detail="InsightFace model not loaded")
 
@@ -143,6 +159,7 @@ async def detect_faces(file: UploadFile = File(...)):
 @app.post("/ai/classify", response_model=ClassifyResponse)
 async def classify(file: UploadFile = File(...)):
     """Classify image/video using YOLOv8."""
+    yolo_model = model_manager.get("yolo")
     if yolo_model is None:
         raise HTTPException(status_code=503, detail="YOLO model not loaded")
 
@@ -164,12 +181,10 @@ async def classify(file: UploadFile = File(...)):
 @app.post("/ai/caption", response_model=CaptionResponse)
 async def caption(file: UploadFile = File(...)):
     """Generate image caption using BLIP-2."""
-    global blip_model
-
-    # Lazy load BLIP-2 (heavy model)
+    # BLIP-2 remains lazy because it requires substantially more GPU memory.
+    blip_model = model_manager.get("blip", lazy=True)
     if blip_model is None:
-        logger.info("Loading BLIP-2 model on demand...")
-        blip_model = BLIPModel()
+        raise HTTPException(status_code=503, detail="BLIP-2 local model not loaded")
 
     try:
         data = await file.read()
@@ -183,6 +198,7 @@ async def caption(file: UploadFile = File(...)):
 @app.post("/ai/embed-text", response_model=EmbeddingResponse)
 async def embed_text(request: EmbedTextRequest):
     """Generate CLIP embedding for text."""
+    clip_model = model_manager.get("clip")
     if clip_model is None:
         raise HTTPException(status_code=503, detail="CLIP model not loaded")
 
@@ -197,6 +213,7 @@ async def embed_text(request: EmbedTextRequest):
 @app.post("/ai/batch-embed", response_model=BatchEmbedResponse)
 async def batch_embed(files: list[UploadFile] = File(...)):
     """Batch embed multiple images."""
+    clip_model = model_manager.get("clip")
     if clip_model is None:
         raise HTTPException(status_code=503, detail="CLIP model not loaded")
 

@@ -30,7 +30,10 @@ services:
       - MINIO_ACCESS_KEY=memoryvault
       - MINIO_SECRET_KEY=${MINIO_PASSWORD:-memoryvault}
       - AI_SERVICE_URL=http://ai-service:8000
+      - AI_MODEL_ROOT=/models
       - JWT_SECRET=${JWT_SECRET:-zyuaaRF5NrCVNn6ubybATQ3/Oeik70oNSsflUKKgF/Q=}
+    volumes:
+      - ${AI_MODELS_PATH:-./ai-models}:/models
     depends_on:
       - postgres
       - redis
@@ -44,12 +47,8 @@ services:
     ports:
       - "${AI_SERVICE_PORT:-8000}:8000"
     volumes:
-      - ${MODEL_PATH:-./models}:/data/models
-      # Mount AI models to avoid re-downloading
-      - ./ai-models/insightface/models:/root/.insightface/models
-      - ./ai-models/ultralytics:/root/.ultralytics
-      - ./ai-models/clip:/opt/models/clip
-      - ./ai-models/chinese-clip:/opt/models/chinese-clip
+      # All models are externally managed and shared with the backend settings API.
+      - ${AI_MODELS_PATH:-./ai-models}:/models
     # deploy:
     #   resources:
     #     reservations:
@@ -58,13 +57,10 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     environment:
-      - MODEL_PATH=/data/models
+      - AI_MODEL_ROOT=/models
       - CUDA_VISIBLE_DEVICES=0
-      - HF_ENDPOINT=https://hf-mirror.com
-      - HF_HOME=/opt/models/clip
-      - TRANSFORMERS_CACHE=/opt/models/clip
-      - OPENCLIP_CACHE_DIR=/opt/models/clip
-      - CHINESE_CLIP_CACHE_DIR=/opt/models/chinese-clip
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
     restart: unless-stopped
 
   postgres:

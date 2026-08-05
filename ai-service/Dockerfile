@@ -14,11 +14,8 @@ RUN apt-get update && apt-get install -y \
     wget unzip ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Create model directories (models will be mounted via volume)
-RUN mkdir -p /root/.insightface/models \
-             /root/.ultralytics \
-             /opt/models/clip \
-             /opt/models/chinese-clip
+# Models are never baked into the image or downloaded at startup.
+RUN mkdir -p /models
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements.txt

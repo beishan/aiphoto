@@ -88,7 +88,9 @@ Pipeline 参数中的 `NAS_HOST`、`FRONTEND_PORT`、`BACKEND_PORT` 会覆盖凭
 
 ## 6. 首次部署和访问
 
-首次部署会下载 CUDA/PyTorch 大镜像与 Maven/npm 依赖，时间较长。没有旧
+首次部署会下载 CUDA/PyTorch 基础镜像与 Maven/npm 依赖，时间较长；AI 模型
+不会自动下载，请提前放入 `AI_MODELS_PATH`，或部署后在“设置 → 本地模型管理”
+中上传并配置。没有旧
 PostgreSQL 时跳过备份，没有上一版镜像时不能回滚，都属于正常现象。
 
 ```text
