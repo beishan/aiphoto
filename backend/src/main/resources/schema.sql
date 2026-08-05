@@ -82,17 +82,10 @@ CREATE TABLE IF NOT EXISTS face_clusters (
     confidence DOUBLE PRECISION
 );
 
--- Add foreign key for people.cover_face_id (idempotent)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_people_cover_face' AND table_name = 'people'
-    ) THEN
-        ALTER TABLE people ADD CONSTRAINT fk_people_cover_face
-            FOREIGN KEY (cover_face_id) REFERENCES face_clusters(id);
-    END IF;
-END $$;
+-- Add foreign key for people.cover_face_id (idempotent: drop then add)
+ALTER TABLE people DROP CONSTRAINT IF EXISTS fk_people_cover_face;
+ALTER TABLE people ADD CONSTRAINT fk_people_cover_face
+    FOREIGN KEY (cover_face_id) REFERENCES face_clusters(id);
 
 -- Tags table
 CREATE TABLE IF NOT EXISTS tags (
@@ -183,17 +176,10 @@ CREATE TABLE IF NOT EXISTS scan_folders (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_photos_source_folder' AND table_name = 'photos'
-    ) THEN
-        ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
-            FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
-    END IF;
-END $$;
+-- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent: drop then add)
+ALTER TABLE photos DROP CONSTRAINT IF EXISTS fk_photos_source_folder;
+ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
+    FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
 
 -- Unique index for categories name (ensures ON CONFLICT works)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories (name);
@@ -215,16 +201,8 @@ CREATE INDEX IF NOT EXISTS idx_photo_categories_category ON photo_categories (ca
 CREATE INDEX IF NOT EXISTS idx_photo_categories_photo ON photo_categories (photo_id);
 CREATE INDEX IF NOT EXISTS idx_photos_source_folder ON photos (source_folder_id);
 
--- Migration: Add category column to tags table (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'tags' AND column_name = 'category'
-    ) THEN
-        ALTER TABLE tags ADD COLUMN category VARCHAR(50);
-    END IF;
-END $$;
+-- Migration: Add category column to tags table (idempotent)
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS category VARCHAR(50);
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, role) VALUES
