@@ -10,6 +10,8 @@ pipeline {
 
     parameters {
         string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名')
+        string(name: 'PHOTO_LIBRARY_PATH', defaultValue: '/vol2/1000/aiphotoslib', description: 'NAS 宿主机照片库绝对路径（必须已存在）')
+        string(name: 'AI_MODELS_PATH', defaultValue: '/vol1/1000/aiphotos/models', description: 'NAS 宿主机 AI 模型根目录绝对路径（必须已存在）')
         string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')

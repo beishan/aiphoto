@@ -64,10 +64,13 @@ Jenkins 工作区。
 ## 4. Jenkins 生产凭据
 
 1. 复制 `docker/.env.production.example` 到本地临时文件。
-2. 替换全部密码和两个 NAS 绝对路径。JWT 密钥可用
+2. 替换全部密码。JWT 密钥可用
    `openssl rand -base64 48` 生成。
 3. Jenkins 中新建 `Secret file` 凭据，ID 必须是
    `memoryvault-production-env`。
+
+照片库和 AI 模型根目录可保留示例文件中的默认值，部署时会由
+Jenkins 构建参数中的同名值覆盖。
 
 真实生产环境文件不要提交到 Git。
 
@@ -80,8 +83,19 @@ Jenkins 工作区。
 - Script Path：`Jenkinsfile`
 - SSH Credentials：选择已可读取该 GitHub 仓库的凭据
 
-Pipeline 参数中的 `NAS_HOST`、`FRONTEND_PORT`、`BACKEND_PORT` 会覆盖凭据
-文件同名值。端口被其他 NAS 应用占用时，发布前直接修改参数。
+Pipeline 中可在每次“Build with Parameters”时填写：
+
+| 参数 | 用途 |
+|---|---|
+| `NAS_HOST` | 飞牛 NAS 局域网 IP 或域名 |
+| `PHOTO_LIBRARY_PATH` | NAS 宿主机照片库绝对路径 |
+| `AI_MODELS_PATH` | NAS 宿主机 AI 模型根目录绝对路径 |
+| `FRONTEND_PORT` | 前端对外端口 |
+| `BACKEND_PORT` | 后端对外端口 |
+
+这些参数会覆盖凭据文件中的同名值。两个目录必须是 Docker 宿主机上
+已存在的安全绝对路径；模型的 `chinese-clip`、`insightface/models`、
+`ultralytics` 等子目录仍位于 `AI_MODELS_PATH` 之下。
 
 如果 Jenkins 只在家庭局域网中，GitHub 无法主动访问 Webhook，可在任务中
 使用 `Poll SCM`，例如每五分钟：`H/5 * * * *`。
