@@ -117,10 +117,20 @@ record_previous_images() {
 }
 
 backup_database() {
-    local backup_name
+    local backup_name postgres_status
     if ! docker inspect memoryvault-postgres >/dev/null 2>&1; then
         echo "PostgreSQL 容器尚未运行，跳过首次部署前备份。"
         return 0
+    fi
+
+    postgres_status="$(docker inspect --format '{{.State.Status}}' memoryvault-postgres 2>/dev/null || true)"
+    if [[ "${postgres_status}" == "created" ]]; then
+        echo "PostgreSQL 容器只已创建但尚未启动，跳过首次部署前备份。"
+        return 0
+    fi
+    if [[ "${postgres_status}" != "running" ]]; then
+        echo "错误：PostgreSQL 容器当前状态为 ${postgres_status:-unknown}，无法在部署前安全备份。" >&2
+        return 1
     fi
 
     backup_name="memoryvault-$(date '+%Y%m%d-%H%M%S').dump"
