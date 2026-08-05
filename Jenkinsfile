@@ -22,7 +22,8 @@ pipeline {
         COMPOSE_PROJECT_NAME = 'memoryvault'
         PRODUCTION_ENV_CREDENTIAL_ID = 'memoryvault-production-env'
         PREVIOUS_IMAGES_FILE = '.memoryvault-previous-images'
-        IMAGE_RETENTION_COUNT = '5'
+        // 保留当前版和上一版，确保仍可自动回滚。
+        IMAGE_RETENTION_COUNT = '2'
     }
 
     stages {

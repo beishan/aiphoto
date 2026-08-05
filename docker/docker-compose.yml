@@ -10,6 +10,8 @@ services:
     build:
       context: ../backend
       dockerfile: ../docker/postgres.Dockerfile
+      labels:
+        com.memoryvault.managed: "true"
     container_name: memoryvault-postgres
     restart: unless-stopped
     environment:
@@ -93,6 +95,8 @@ services:
     build:
       context: ../ai-service
       dockerfile: Dockerfile
+      labels:
+        com.memoryvault.managed: "true"
     container_name: memoryvault-ai
     restart: unless-stopped
     environment:
@@ -128,6 +132,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
+      labels:
+        com.memoryvault.managed: "true"
     container_name: memoryvault-backend
     restart: unless-stopped
     environment:
@@ -183,6 +189,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      labels:
+        com.memoryvault.managed: "true"
     container_name: memoryvault-frontend
     restart: unless-stopped
     ports:

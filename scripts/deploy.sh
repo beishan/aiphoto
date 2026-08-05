@@ -14,7 +14,7 @@ DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-memoryvault-deploy-state}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
-IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-5}"
+IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-2}"
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_COMMAND=(docker compose)
@@ -71,6 +71,11 @@ validate_configuration() {
     value="$(effective_value JWT_SECRET)"
     if ((${#value} < 32)); then
         echo "错误：JWT_SECRET 至少需要 32 个字符。" >&2
+        return 1
+    fi
+
+    if [[ ! "${IMAGE_RETENTION_COUNT}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "错误：IMAGE_RETENTION_COUNT 必须是大于 0 的整数。" >&2
         return 1
     fi
 }
@@ -200,16 +205,26 @@ rollback_from_state() {
 }
 
 cleanup_repository_images() {
-    local repository="$1" current_image="$2" kept=0 image_ref
+    local repository="$1" current_image="$2" retained_previous=0 image_ref
+    local previous_limit=$((IMAGE_RETENTION_COUNT - 1))
     while IFS= read -r image_ref; do
         [[ -n "${image_ref}" && "${image_ref}" != *':<none>' ]] || continue
-        if [[ "${image_ref}" == "${current_image}" || ${kept} -lt ${IMAGE_RETENTION_COUNT} ]]; then
-            kept=$((kept + 1))
+        if [[ "${image_ref}" == "${current_image}" ]]; then
+            continue
+        fi
+        if ((retained_previous < previous_limit)); then
+            retained_previous=$((retained_previous + 1))
             continue
         fi
         echo "清理旧镜像：${image_ref}"
         docker image rm "${image_ref}" >/dev/null 2>&1 || true
     done < <(docker image ls "${repository}" --format '{{.Repository}}:{{.Tag}}' | awk '!seen[$0]++')
+}
+
+cleanup_dangling_images() {
+    echo "清理 MemoryVault 悬空镜像。"
+    docker image prune --force \
+        --filter 'label=com.memoryvault.managed=true' >/dev/null 2>&1 || true
 }
 
 deploy_release() {
@@ -254,6 +269,7 @@ case "${ACTION}" in
         cleanup_repository_images memoryvault-backend "$(container_image memoryvault-backend)"
         cleanup_repository_images memoryvault-frontend "$(container_image memoryvault-frontend)"
         cleanup_repository_images memoryvault-ai "$(container_image memoryvault-ai)"
+        cleanup_dangling_images
         ;;
     rollback)
         rollback_from_state
