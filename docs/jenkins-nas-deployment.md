@@ -33,7 +33,8 @@ Jenkins 容器需要具备 `git`、`docker`、`docker compose`和 `curl`，并�
 ```
 
 这个 Socket 等同于 NAS Docker 管理权限，只应交给可信的 Jenkins 管理员。
-NAS 需已安装 NVIDIA 驱动、NVIDIA Container Toolkit，且以下命令可成功：
+GPU 加速为可选功能。NAS 已安装 NVIDIA 驱动、NVIDIA Container Toolkit，
+且以下命令成功时，可在 Jenkins 中勾选 `ENABLE_GPU`：
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
@@ -94,6 +95,7 @@ Pipeline 中可在每次“Build with Parameters”时填写：
 | `AI_MODELS_PATH` | NAS 宿主机 AI 模型根目录绝对路径 |
 | `FRONTEND_PORT` | 前端对外端口 |
 | `BACKEND_PORT` | 后端对外端口 |
+| `ENABLE_GPU` | 是否申请 NVIDIA GPU；未安装 Container Toolkit 时不要勾选 |
 
 这些参数会覆盖凭据文件中的同名值。两个目录必须是 Docker 宿主机上
 已存在的安全绝对路径；模型的 `chinese-clip`、`insightface/models`、

@@ -14,6 +14,7 @@ pipeline {
         string(name: 'AI_MODELS_PATH', defaultValue: '/vol1/1000/aiphotos/models', description: 'NAS 宿主机 AI 模型根目录绝对路径（必须已存在）')
         string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口')
+        booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 

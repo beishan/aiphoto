@@ -5,6 +5,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
+COMPOSE_GPU_FILE="${PROJECT_DIR}/docker/docker-compose.gpu.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.memoryvault-previous-images}"
@@ -45,6 +46,13 @@ effective_value() {
     fi
 }
 
+gpu_enabled() {
+    case "$(effective_value ENABLE_GPU)" in
+        1 | true | TRUE | yes | YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 validate_configuration() {
     local key value
     local required=(
@@ -78,13 +86,24 @@ validate_configuration() {
         echo "错误：IMAGE_RETENTION_COUNT 必须是大于 0 的整数。" >&2
         return 1
     fi
+
+    value="$(effective_value ENABLE_GPU)"
+    if [[ -n "${value}" && ! "${value}" =~ ^(0|1|true|false|TRUE|FALSE|yes|no|YES|NO)$ ]]; then
+        echo "错误：ENABLE_GPU 必须是 true 或 false。" >&2
+        return 1
+    fi
 }
 
 compose() {
+    local compose_files=(--file "${COMPOSE_FILE}")
+    if gpu_enabled; then
+        compose_files+=(--file "${COMPOSE_GPU_FILE}")
+    fi
+
     "${COMPOSE_COMMAND[@]}" \
         --project-name "${COMPOSE_PROJECT_NAME}" \
         --env-file "${ENV_FILE}" \
-        --file "${COMPOSE_FILE}" \
+        "${compose_files[@]}" \
         "$@"
 }
 
@@ -240,6 +259,11 @@ cleanup_dangling_images() {
 deploy_release() {
     record_previous_images
     backup_database
+    if gpu_enabled; then
+        echo "AI 服务将使用 NVIDIA GPU 模式。"
+    else
+        echo "AI 服务将使用 CPU 模式。"
+    fi
     echo "正在更新 MemoryVault 服务。"
     if ! compose up -d --remove-orphans; then
         compose logs --no-color --tail=300 || true
