@@ -4,7 +4,6 @@ services:
     container_name: memoryvault-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
-      - "${FRONTEND_SSL_PORT:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
