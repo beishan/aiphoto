@@ -39,7 +39,7 @@ app:
     photos-dir: ${STORAGE_PHOTOS_DIR:./data/photos}
     thumbs-dir: ${STORAGE_THUMBS_DIR:./data/thumbs}
   jwt:
-    secret: ${JWT_SECRET:zyuaaRF5NrCVNn6ubybATQ3/Oeik70oNSsflUKKgF/Q=}
+    secret: ${JWT_SECRET:lDW0/F18wQVhRXMDuICETossPbtVaJ0qbJTWAwdNPE/OkzbNvYaXyf+OtD1dShLq}
     expiration: 86400000  # 24 hours
 
 springdoc:
