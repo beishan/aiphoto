@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS face_clusters (
     confidence DOUBLE PRECISION
 );
 
--- Add foreign key for people.cover_face_id
+-- Add foreign key for people.cover_face_id (idempotent: drop then add)
+ALTER TABLE people DROP CONSTRAINT IF EXISTS fk_people_cover_face;
 ALTER TABLE people ADD CONSTRAINT fk_people_cover_face
     FOREIGN KEY (cover_face_id) REFERENCES face_clusters(id);
 
@@ -175,9 +176,13 @@ CREATE TABLE IF NOT EXISTS scan_folders (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Foreign key: photos.source_folder_id -> scan_folders.id
+-- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent: drop then add)
+ALTER TABLE photos DROP CONSTRAINT IF EXISTS fk_photos_source_folder;
 ALTER TABLE photos ADD CONSTRAINT fk_photos_source_folder
     FOREIGN KEY (source_folder_id) REFERENCES scan_folders(id) ON DELETE SET NULL;
+
+-- Unique index for categories name (ensures ON CONFLICT works)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_unique ON categories (name);
 
 -- Indexes
 -- Embedding indexes
@@ -196,16 +201,8 @@ CREATE INDEX IF NOT EXISTS idx_photo_categories_category ON photo_categories (ca
 CREATE INDEX IF NOT EXISTS idx_photo_categories_photo ON photo_categories (photo_id);
 CREATE INDEX IF NOT EXISTS idx_photos_source_folder ON photos (source_folder_id);
 
--- Migration: Add category column to tags table (for existing databases)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'tags' AND column_name = 'category'
-    ) THEN
-        ALTER TABLE tags ADD COLUMN category VARCHAR(50);
-    END IF;
-END $$;
+-- Migration: Add category column to tags table (idempotent)
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS category VARCHAR(50);
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, role) VALUES
@@ -224,4 +221,4 @@ INSERT INTO categories (name, icon, color, is_system) VALUES
     ('活动', 'event', '#ff9f0a', TRUE),
     ('截图', 'screenshot', '#8e8e93', TRUE),
     ('文档', 'document', '#636366', TRUE)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;

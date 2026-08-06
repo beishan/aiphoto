@@ -23,7 +23,7 @@ services:
       - AI_MODEL_ROOT=/models
       - STORAGE_PHOTOS_DIR=/data/photos
       - STORAGE_THUMBS_DIR=/data/thumbs
-      - JWT_SECRET=${JWT_SECRET:-zyuaaRF5NrCVNn6ubybATQ3/Oeik70oNSsflUKKgF/Q=}
+      - JWT_SECRET=${JWT_SECRET:-lDW0/F18wQVhRXMDuICETossPbtVaJ0qbJTWAwdNPE/OkzbNvYaXyf+OtD1dShLq}
     volumes:
       - ${AI_MODELS_PATH:-./ai-models}:/models
       - ${STORAGE_DATA:-./data/storage}:/data
