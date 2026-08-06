@@ -130,7 +130,7 @@ const sfIcons: Record<string, string> = {
     </header>
 
     <!-- Main content -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'has-tab-bar': isTabRoute }">
       <router-view v-slot="{ Component }">
         <transition name="slide-fade" mode="out-in">
           <component :is="Component" />
@@ -213,8 +213,11 @@ const sfIcons: Record<string, string> = {
 
 .main-content {
   flex: 1;
-  padding-bottom: var(--tab-content-padding);
   overflow-y: auto;
+}
+
+.main-content.has-tab-bar {
+  padding-bottom: var(--tab-content-padding);
 }
 
 .tab-bar {
