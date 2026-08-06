@@ -72,7 +72,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'more',
         name: 'More',
-        component: () => import('@/views/MoreView.vue'),
+        redirect: '/settings',
       },
       {
         path: 'dedup',

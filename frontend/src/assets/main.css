@@ -14,13 +14,13 @@
   --tab-bar-bottom: calc(20px + var(--safe-bottom));
   --tab-bar-left: 50%;
   --tab-bar-right: auto;
-  --tab-bar-width: calc(100% - 32px);
-  --tab-bar-max-width: 420px;
+  --tab-bar-width: calc(100% - 24px);
+  --tab-bar-max-width: 720px;
   --tab-bar-translate: translateX(-50%);
-  --tab-bar-radius: 24px;
+  --tab-bar-radius: 20px;
   --tab-bar-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
   --tab-bar-height: 64px;
-  --tab-content-padding: calc(100px + var(--safe-bottom));
+  --tab-content-padding: calc(96px + var(--safe-bottom));
 }
 
 /* Dark theme (default) */

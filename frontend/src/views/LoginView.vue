@@ -26,6 +26,7 @@ async function handleSubmit() {
     } else {
       const { data } = await authApi.login(form.value.username, form.value.password)
       localStorage.setItem('token', data.token)
+      sessionStorage.setItem('user', JSON.stringify(data.user))
       message.success('登录成功')
       router.push('/')
     }

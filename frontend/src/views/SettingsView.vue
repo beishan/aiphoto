@@ -171,7 +171,7 @@ async function handleSearchThresholdChange() {
   <div class="settings-page">
     <!-- 页面顶栏 -->
     <div class="settings-header">
-      <button class="back-btn" @click="router.push('/more')">
+      <button class="back-btn" @click="router.push('/')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
