@@ -113,9 +113,8 @@ public class TagService {
             newId.setTagId(targetId);
             if (!photoTagRepository.existsById(newId)) {
                 PhotoTag newPt = new PhotoTag();
-                newPt.setId(newId);
-                newPt.setTagId(targetId);
                 newPt.setPhotoId(pt.getPhotoId());
+                newPt.setTagId(targetId);
                 newPt.setSource(pt.getSource());
                 newPt.setConfidence(pt.getConfidence());
                 photoTagRepository.save(newPt);
@@ -137,10 +136,9 @@ public class TagService {
         if (photoTagRepository.existsById(id)) return;
 
         PhotoTag pt = new PhotoTag();
-        pt.setId(id);
         pt.setPhotoId(photoId);
         pt.setTagId(tagId);
-        pt.setSource(PhotoTag.Source.MANUAL);
+        pt.setSource(Tag.TagType.MANUAL);
         pt.setConfidence(1.0);
         photoTagRepository.save(pt);
     }

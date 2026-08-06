@@ -1097,10 +1097,10 @@ async function loadSystemInfo() {
               </div>
             </div>
             <div class="disk-usage-bar">
-              <div class="disk-used" :style="{ width: ((1 - (storageInfo.diskFreeSpace as number / storageInfo.diskTotalSpace as number)) * 100).toFixed(1) + '%' }"></div>
+              <div class="disk-used" :style="{ width: ((1 - ((storageInfo.diskFreeSpace as number) / (storageInfo.diskTotalSpace as number))) * 100).toFixed(1) + '%' }"></div>
             </div>
             <div class="disk-usage-meta">
-              <span>已用: {{ formatSize((storageInfo.diskTotalSpace as number - storageInfo.diskFreeSpace as number)) }}</span>
+              <span>已用: {{ formatSize((storageInfo.diskTotalSpace as number) - (storageInfo.diskFreeSpace as number)) }}</span>
               <span>可用: {{ formatSize(storageInfo.diskFreeSpace as number) }}</span>
               <span>总计: {{ formatSize(storageInfo.diskTotalSpace as number) }}</span>
             </div>
@@ -1148,7 +1148,7 @@ async function loadSystemInfo() {
               <span class="label-text">JVM 内存</span>
             </div>
             <div class="disk-usage-bar">
-              <div class="disk-used" :style="{ width: ((systemInfo.jvmUsedMemory as number / systemInfo.jvmMaxMemory as number) * 100).toFixed(1) + '%' }"></div>
+              <div class="disk-used" :style="{ width: (((systemInfo.jvmUsedMemory as number) / (systemInfo.jvmMaxMemory as number)) * 100).toFixed(1) + '%' }"></div>
             </div>
             <div class="disk-usage-meta">
               <span>已用: {{ formatSize(systemInfo.jvmUsedMemory as number || 0) }}</span>

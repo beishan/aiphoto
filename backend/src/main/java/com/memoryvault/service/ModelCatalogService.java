@@ -94,18 +94,18 @@ public class ModelCatalogService {
     private Map<String, Object> buildOnlineModel(String id, String name, ModelType type,
                                                     String version, long size, String device,
                                                     String precision, String performance, String source) {
-        return Map.of(
-                "id", id,
-                "name", name,
-                "typeKey", type.getKey(),
-                "typeLabel", type.getLabel(),
-                "version", version,
-                "size", size,
-                "device", device,
-                "precision", precision,
-                "performance", performance,
-                "source", source,
-                "url", "https://huggingface.co/" + source + "/resolve/main/" + id + ".bin"
+        return Map.ofEntries(
+                Map.entry("id", id),
+                Map.entry("name", name),
+                Map.entry("typeKey", type.getKey()),
+                Map.entry("typeLabel", type.getLabel()),
+                Map.entry("version", version),
+                Map.entry("size", size),
+                Map.entry("device", device),
+                Map.entry("precision", precision),
+                Map.entry("performance", performance),
+                Map.entry("source", source),
+                Map.entry("url", "https://huggingface.co/" + source + "/resolve/main/" + id + ".bin")
         );
     }
 
