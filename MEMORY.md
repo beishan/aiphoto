@@ -4,7 +4,7 @@
 
 - **Project Created**: 2025-05-27 from `docs/requires_v0.md` requirements document
 - **Tech Stack**: Spring Boot 3.3 + Vue 3 + Python FastAPI + PostgreSQL 16 + pgvector
-- **Deployment**: Docker Compose with 7 services (frontend, backend, ai-service, postgres, redis, rabbitmq, minio)
+- **Deployment**: Docker Compose with 4 services (frontend, backend, ai-service, postgres)
 - **AI Models**: CLIP (ViT-B-32), InsightFace (buffalo_l), YOLOv8n, BLIP-2 (on-demand)
 
 ## Discovered Durable Knowledge
@@ -33,7 +33,6 @@
 ## Patterns
 
 ### Docker Service Startup Order
-- RabbitMQ connection may fail initially - Spring Boot auto-reconnects
 - Backend (Java) takes ~15s to start; check health via `POST /api/auth/login`
 - AI service depends on model downloads - check logs if startup fails
 

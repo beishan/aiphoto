@@ -138,7 +138,7 @@ public class FolderService {
                 .orElseThrow(() -> new RuntimeException("文件夹不存在"));
 
         // If LINK mode, we should delete associated photos since they reference external files
-        // If COPY mode, photos are in MinIO and can stay
+        // If COPY mode, photos are in persistent local storage and can stay
         if (folder.getStorageMode() == ScanFolder.StorageMode.LINK) {
             List<Photo> photos = photoRepository.findBySourceFolderId(id, Pageable.unpaged()).getContent();
             photoRepository.deleteAll(photos);
@@ -225,7 +225,7 @@ public class FolderService {
         String contentType = probeContentType(imagePath);
 
         if (folder.getStorageMode() == ScanFolder.StorageMode.COPY) {
-            // Copy to MinIO
+            // Copy to persistent local storage
             String objectName = hashMd5 + "/" + filename;
             storageService.uploadPhoto(data, objectName, contentType);
 
@@ -537,7 +537,7 @@ public class FolderService {
                 log.warn("Failed to encode file path: {}", e.getMessage());
             }
         } else {
-            // COPY mode - file is in MinIO
+            // COPY mode - file is in persistent local storage
             try {
                 String thumbExt = photo.getOriginalFilename() != null
                         && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";

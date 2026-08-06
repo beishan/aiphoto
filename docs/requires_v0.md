@@ -47,10 +47,9 @@
 | 网关层 | Nginx 反代理 | 路由分发：`/api` → Java，`/ai` → Python |
 | 业务层 | Spring Boot 3 (Java 21) | REST API、WebSocket、业务逻辑 |
 | AI 层 | FastAPI (Python 3.11) | CLIP / InsightFace / YOLO 推理 |
-| 任务层 | Spring Async + RabbitMQ | 异步任务队列、进度推送 |
+| 任务层 | Spring Async | 异步任务、进度推送 |
 | 数据层 | PostgreSQL 16 + pgvector | 主数据库 + 向量存储 |
-| 缓存层 | Redis 7 | 会话、缓存、消息队列 |
-| 存储层 | MinIO + NAS 目录挂载 | 原图、缩略图、视频对象存储 |
+| 存储层 | NAS 本地目录挂载 | 原图、缩略图、视频存储 |
 
 ### 2.2 服务间调用关系
 
@@ -96,16 +95,14 @@ Java Spring Boot 层负责所有业务逻辑、用户认证、数据存储。当
 | ORM | Spring Data JPA + Hibernate | 6.x | 配合 PostgreSQL |
 | 数据库连接池 | HikariCP | 内置 | 高性能连接池 |
 | 认证 | Spring Security + JJWT | 最新 | JWT + HTTPOnly Cookie |
-| 异步任务 | Spring @Async + RabbitMQ | 3.x | AI 推理 / 转码异步处理 |
+| 异步任务 | Spring @Async | 内置 | AI 推理 / 转码异步处理 |
 | WebSocket | Spring WebSocket (STOMP) | 内置 | 任务进度推送 |
-| 文件存储 | MinIO Java SDK | 8.x | S3 兼容 API |
+| 文件存储 | Java NIO | 内置 | NAS 本地持久化目录 |
 | 图片处理 | Thumbnailator + Imgscalr | 最新 | 缩略图生成、旋转 |
 | 视频处理 | FFmpeg-cli-wrapper (Java) | 最新 | 调用 FFmpeg 进行转码截帧 |
 | EXIF 解析 | metadata-extractor | 2.x | 读取拍摄时间、GPS 等信息 |
-| 对象存储 | AWS S3 SDK (MinIO 兼容) | 2.x | 文件上传 / 下载 / 预签名 URL |
 | 关系映射 | MapStruct | 1.x | DTO / Entity 转换 |
 | API 文档 | SpringDoc OpenAPI 3 | 2.x | 自动生成 Swagger UI |
-| 对象缓存 | Redis (Spring Cache) | 内置 | 缩略图 URL、用户信息缓存 |
 
 ### 3.3 AI 推理服务：Python FastAPI
 
@@ -128,9 +125,7 @@ AI 服务作为独立容器运行，仅负责模型封装，不包含任何业�
 |------|------|------|------|
 | PostgreSQL | 16 | 主数据库 | 配合 pgvector 扩展存储向量 |
 | pgvector | 0.7+ | 向量存储 & 检索 | 替代独立 Milvus，减少容器数量 |
-| Redis | 7 | 缓存 / 消息队列 | Spring Cache + RabbitMQ Broker |
-| RabbitMQ | 3.x | 异步任务队列 | AI 推理、转码、批量操作 |
-| MinIO | 最新稳定版 | 对象存储 | S3 兼容，挂载 NAS 目录 |
+| NAS 本地目录 | - | 媒体文件存储 | 通过 Docker bind mount 持久化 |
 
 ---
 
@@ -217,7 +212,7 @@ AI 服务作为独立容器运行，仅负责模型封装，不包含任何业�
 **详细步骤：**
 
 1. 用户创建「训练集相册」，拖入 20~100 张正样本图片
-2. RabbitMQ 异步任务：CLIP 提取所有图片特征向量，计算质心向量作为该类别「原型」
+2. Spring 异步任务：CLIP 提取所有图片特征向量，计算质心向量作为该类别「原型」
 3. 可选负样本（反例图片）进一步提升精度
 4. 训练完成通知（WebSocket），展示匹配效果预览
 5. 自动扫描：全库图片与原型向量做余弦相似度比较，超过阈值（默认 0.75，用户可调）自动加入目标相册
@@ -319,9 +314,6 @@ CREATE INDEX ON photos (file_hash_phash);
 | `backend` | eclipse-temurin:21-jre-alpine | 8080 | 无 GPU |
 | `ai-service` | pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime | 8000 | GPU: 1 (RTX 2060) |
 | `postgres` | pgvector/pgvector:pg16 | 5432 | SHM: 256m |
-| `redis` | redis:7-alpine | 6379 | 无 GPU |
-| `rabbitmq` | rabbitmq:3-management-alpine | 5672, 15672 | 无 GPU |
-| `minio` | minio/minio:latest | 9000, 9001 | 无 GPU |
 
 ### 7.2 NAS 目录挂载
 
@@ -331,7 +323,7 @@ CREATE INDEX ON photos (file_hash_phash);
 | `/volume1/memoryvault/thumbs` | `/data/thumbs` | 缩略图缓存，读写 |
 | `/volume1/memoryvault/models` | `/data/models` | AI 模型文件，只读 |
 | `/volume1/memoryvault/postgres` | `/var/lib/postgresql/data` | PG 数据目录，读写 |
-| `/volume1/memoryvault/minio` | `/data/minio` | MinIO 数据目录，读写 |
+| `/volume1/memoryvault/storage` | `/data` | 上传照片和缩略图，读写 |
 
 ### 7.3 docker-compose.yml 关键片段
 
@@ -355,15 +347,13 @@ services:
       - "8080:8080"
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
-      - SPRING_REDIS_HOST=redis
-      - SPRING_RABBITMQ_HOST=rabbitmq
-      - MINIO_ENDPOINT=http://minio:9000
       - AI_SERVICE_URL=http://ai-service:8000
+      - STORAGE_PHOTOS_DIR=/data/photos
+      - STORAGE_THUMBS_DIR=/data/thumbs
+    volumes:
+      - /volume1/memoryvault/storage:/data
     depends_on:
       - postgres
-      - redis
-      - rabbitmq
-      - minio
 
   ai-service:
     build: ./ai-service
@@ -393,24 +383,6 @@ services:
       - /volume1/memoryvault/postgres:/var/lib/postgresql/data
     shm_size: 256m
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    environment:
-      - RABBITMQ_DEFAULT_USER=memoryvault
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
-
-  minio:
-    image: minio/minio:latest
-    command: server /data/minio --console-address ":9001"
-    volumes:
-      - /volume1/memoryvault/minio:/data/minio
-    environment:
-      - MINIO_ROOT_USER=memoryvault
-      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
 ```
 
 > NAS 需要提前安装 **NVIDIA Container Toolkit**，并确保宿主机驱动版本 ≥ 525。
@@ -442,9 +414,9 @@ server {
         proxy_set_header Connection "upgrade";
     }
 
-    # 媒体文件（缩略图走 MinIO 预签名 URL，原图走此路径）
+    # 媒体文件由后端从 NAS 持久化目录提供
     location /media/ {
-        proxy_pass http://minio:9000/;
+        proxy_pass http://backend:8080;
     }
 }
 ```
@@ -483,17 +455,15 @@ memoryvault/
 │       ├── dto/                # DTO 请求/响应对象
 │       ├── ai/                 # AI 服务调用封装
 │       │   └── AiServiceClient.java
-│       ├── async/              # RabbitMQ 消费者和异步处理器
+│       ├── async/              # 异步处理器
 │       │   ├── PhotoIndexingConsumer.java
 │       │   └── TrainingTaskConsumer.java
 │       ├── websocket/          # WebSocket / STOMP 配置
 │       │   └── ProgressWebSocketHandler.java
-│       ├── storage/            # MinIO 文件存储封装
-│       │   └── MinioStorageService.java
+│       ├── storage/            # NAS 本地文件存储封装
+│       │   └── LocalStorageService.java
 │       └── config/             # Spring 配置类
 │           ├── SecurityConfig.java
-│           ├── RedisConfig.java
-│           └── RabbitMQConfig.java
 │
 ├── ai-service/                 # Python AI 推理服务
 │   ├── main.py                 # FastAPI 入口
@@ -542,7 +512,7 @@ memoryvault/
 
 #### Phase 1 — 基础框架（4 周）
 
-- Docker Compose 基础服务搭通（PostgreSQL、Redis、RabbitMQ、MinIO、Spring Boot、Vue）
+- Docker Compose 基础服务搭通（PostgreSQL、Spring Boot、Vue）
 - 用户认证（JWT 登录 / 注册 / 多用户）
 - 文件夹管理、照片上传入库
 - EXIF 解析、缩略图生成（WebP）
@@ -570,7 +540,7 @@ memoryvault/
 - CLIP 语义向量化 + pgvector 搜索
 - YOLOv8 自动标签
 - AI 训练分类功能（原型向量 + 全库匹配 + 阈值调节）
-- RabbitMQ 异步任务队列 + WebSocket 进度推送
+- Spring 异步任务 + WebSocket 进度推送
 
 **交付物**：AI 功能全面上线
 
@@ -591,7 +561,7 @@ memoryvault/
 #### Phase 5 — 性能 & 运维（2 周）
 
 - 全量照片向量化性能优化（批处理，显存管理）
-- 自动备份方案（pg_dump + MinIO 定时备份）
+- 自动备份方案（pg_dump + NAS 定时备份）
 - 多语言支持（中 / 英）
 - 用户手册文档
 

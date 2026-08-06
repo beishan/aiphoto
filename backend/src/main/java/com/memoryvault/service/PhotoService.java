@@ -82,7 +82,7 @@ public class PhotoService {
         String namingRule = settingService.getSetting(userId, "photo_naming_rule");
         String renamedFilename = applyNamingRule(namingRule, originalFilename);
 
-        // Upload original to MinIO
+        // Upload original to persistent local storage
         String objectName = hashMd5 + "/" + renamedFilename;
         storageService.uploadPhoto(data, objectName, file.getContentType());
 
@@ -242,7 +242,7 @@ public class PhotoService {
             }
             personRepository.saveAll(affectedPersons);
         }
-        // Delete files from MinIO storage
+        // Delete files from persistent local storage
         try {
             storageService.deleteObject(photo.getFilePath());
             String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :

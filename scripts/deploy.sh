@@ -56,8 +56,7 @@ gpu_enabled() {
 validate_configuration() {
     local key value
     local required=(
-        DB_PASSWORD REDIS_PASSWORD RABBITMQ_PASSWORD MINIO_PASSWORD JWT_SECRET
-        PHOTO_LIBRARY_PATH AI_MODELS_PATH
+        DB_PASSWORD JWT_SECRET PHOTO_LIBRARY_PATH AI_MODELS_PATH STORAGE_DATA_PATH
     )
 
     for key in "${required[@]}"; do
@@ -68,7 +67,7 @@ validate_configuration() {
         fi
     done
 
-    for key in PHOTO_LIBRARY_PATH AI_MODELS_PATH; do
+    for key in PHOTO_LIBRARY_PATH AI_MODELS_PATH STORAGE_DATA_PATH; do
         value="$(effective_value "${key}")"
         if [[ "${value}" != /* || "${value}" == "/" || "${value}" == *".."* ]]; then
             echo "错误：${key} 必须是 NAS 上的安全绝对路径：${value}" >&2
@@ -166,8 +165,7 @@ backup_database() {
 wait_for_containers() {
     local attempt container_name status all_healthy
     local containers=(
-        memoryvault-postgres memoryvault-redis memoryvault-rabbitmq
-        memoryvault-minio memoryvault-ai memoryvault-backend memoryvault-frontend
+        memoryvault-postgres memoryvault-ai memoryvault-backend memoryvault-frontend
     )
 
     for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do

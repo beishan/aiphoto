@@ -16,9 +16,8 @@ MemoryVault 是一个面向家庭/个人的私有化部署 AI 相册系统，运
 | 前端 | Vue 3 + Vite 5 + Naive UI + Pinia + Vue Router 4 |
 | 后端 | Java 21 + Spring Boot 3.3 + Spring Data JPA + Spring Security |
 | AI 服务 | Python 3.11 + FastAPI + PyTorch (CUDA 12.1) |
-| 数据库 | PostgreSQL 16 + pgvector + Redis 7 |
-| 消息队列 | RabbitMQ 3.x |
-| 对象存储 | MinIO (S3 兼容) |
+| 数据库 | PostgreSQL 16 + pgvector |
+| 文件存储 | NAS 本地目录挂载 |
 | 部署 | Docker Compose + Nginx 反代理 |
 
 ## 项目结构
@@ -39,9 +38,9 @@ ai-photo/
 │       ├── entity/             # JPA 实体类
 │       ├── dto/                # DTO 对象
 │       ├── ai/                 # AI 服务调用客户端
-│       ├── async/              # RabbitMQ 消费者
+│       ├── async/              # 异步任务
 │       ├── websocket/          # WebSocket 处理
-│       ├── storage/            # MinIO 存储服务
+│       ├── storage/            # NAS 本地存储服务
 │       ├── security/           # JWT 认证
 │       └── config/             # Spring 配置
 │
@@ -192,15 +191,15 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 # 数据库密码
 DB_PASSWORD=memoryvault
-REDIS_PASSWORD=memoryvault
-RABBITMQ_PASSWORD=memoryvault
-MINIO_PASSWORD=memoryvault
 
 # JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key
 
 # AI 模型路径
 MODEL_PATH=./models
+
+# 上传照片和缩略图持久化路径
+STORAGE_DATA_PATH=./data/storage
 ```
 
 ## 硬件要求
@@ -224,6 +223,6 @@ MODEL_PATH=./models
 
 1. **BLIP-2 按需加载**: 图片描述生成模型较大(4.5GB显存)，首次调用时加载
 2. **pgvector 索引**: HNSW 索引在大数据量时提供高效的向量相似度搜索
-3. **MinIO 预签名 URL**: 缩略图通过预签名 URL 访问，有效期 24 小时
+3. **本地媒体 URL**: 照片和缩略图由后端从 NAS 持久化目录提供
 4. **WebSocket**: 任务进度通过 STOMP over WebSocket 推送
 5. **JWT 认证**: Token 存储在 localStorage，24 小时过期

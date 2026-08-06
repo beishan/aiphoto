@@ -19,10 +19,8 @@ Pipeline 会自动执行：检出 `main`、后端测试、构建前端/后端/AI
 |---|---:|
 | MemoryVault Web | 8391 |
 | Spring Boot API | 8392 |
-| MinIO API / 控制台 | 9300 / 9301 |
-| RabbitMQ 管理页 | 15682 |
 
-PostgreSQL、Redis、RabbitMQ AMQP 和 AI API 仅在 Docker 内部网络开放。
+PostgreSQL 和 AI API 仅在 Docker 内部网络开放。
 
 ## 2. NAS 与 Jenkins 前置条件
 
@@ -50,6 +48,7 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 /vol1/docker/memoryvault/ai-models/ultralytics
 /vol1/docker/memoryvault/ai-models/clip
 /vol1/docker/memoryvault/ai-models/chinese-clip
+/vol1/docker/memoryvault/storage
 ```
 
 将现有 `ai-models` 目录的子目录内容放到对应位置。至少确保存在：
@@ -61,8 +60,8 @@ insightface/models/buffalo_l/
 ```
 
 照片库以只读方式挂载到后端 `/photos`，在 MemoryVault 的扫描目录中应填
-`/photos` 或其子目录。用于上传的照片和缩略图存在 MinIO 持久卷，不依赖
-Jenkins 工作区。
+`/photos` 或其子目录。用于上传的照片和缩略图存在
+`STORAGE_DATA_PATH` 指定的 NAS 目录，不依赖 Jenkins 工作区。
 
 ## 4. Jenkins 生产凭据
 
@@ -72,7 +71,7 @@ Jenkins 工作区。
 3. Jenkins 中新建 `Secret file` 凭据，ID 必须是
    `memoryvault-production-env`。
 
-照片库和 AI 模型根目录可保留示例文件中的默认值，部署时会由
+照片库、AI 模型根目录和本地存储目录可保留示例文件中的默认值，部署时会由
 Jenkins 构建参数中的同名值覆盖。
 
 真实生产环境文件不要提交到 Git。
@@ -93,11 +92,12 @@ Pipeline 中可在每次“Build with Parameters”时填写：
 | `NAS_HOST` | 飞牛 NAS 局域网 IP 或域名 |
 | `PHOTO_LIBRARY_PATH` | NAS 宿主机照片库绝对路径 |
 | `AI_MODELS_PATH` | NAS 宿主机 AI 模型根目录绝对路径 |
+| `STORAGE_DATA_PATH` | NAS 宿主机上传照片和缩略图存储目录 |
 | `FRONTEND_PORT` | 前端对外端口 |
 | `BACKEND_PORT` | 后端对外端口 |
 | `ENABLE_GPU` | 是否申请 NVIDIA GPU；未安装 Container Toolkit 时不要勾选 |
 
-这些参数会覆盖凭据文件中的同名值。两个目录必须是 Docker 宿主机上
+这些参数会覆盖凭据文件中的同名值。三个目录必须是 Docker 宿主机上
 已存在的安全绝对路径；模型的 `chinese-clip`、`insightface/models`、
 `ultralytics` 等子目录仍位于 `AI_MODELS_PATH` 之下。
 
@@ -114,8 +114,6 @@ PostgreSQL 时跳过备份，没有上一版镜像时不能回滚，都属于正
 ```text
 http://192.168.31.155:8391/
 http://192.168.31.155:8392/actuator/health
-http://192.168.31.155:9301/
-http://192.168.31.155:15682/
 ```
 
 ## 7. 运维命令
@@ -131,7 +129,7 @@ http://192.168.31.155:15682/
 每次发布前的 PostgreSQL custom-format 备份保存在
 `memoryvault-backups` Docker Volume，默认保留 10 份。上一版镜像信息保存在
 `memoryvault-deploy-state` Volume。手动回滚只替换前端、后端和 AI 镜像，
-不会删除 PostgreSQL、Redis、RabbitMQ、MinIO 和照片数据。
+不会删除 PostgreSQL、本地存储和照片数据。
 
 查看备份：
 

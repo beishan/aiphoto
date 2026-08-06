@@ -56,7 +56,7 @@ public class ScanFolder {
     private LocalDateTime updatedAt;
 
     public enum StorageMode {
-        COPY,   // 复制到 MinIO
+        COPY,   // 复制到本地持久化存储
         LINK    // 只记录原始路径
     }
 

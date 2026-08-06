@@ -432,7 +432,7 @@ function closeAddDialog() {
                 >
                   <span class="mode-icon">📦</span>
                   <span class="mode-label">复制</span>
-                  <span class="mode-desc">复制到 MinIO 存储</span>
+                  <span class="mode-desc">复制到本地持久化存储</span>
                 </button>
                 <button
                   class="mode-btn"
