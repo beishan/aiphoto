@@ -34,6 +34,11 @@ public class FolderController {
         return ResponseEntity.ok(folderService.getFolder(id));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<ScanFolderDTO> updateFolder(@PathVariable Long id, @RequestBody ScanFolderDTO dto) {
+        return ResponseEntity.ok(folderService.updateFolder(id, dto));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteFolder(@PathVariable Long id) {
         folderService.deleteFolder(id);
@@ -44,6 +49,22 @@ public class FolderController {
     public ResponseEntity<Map<String, String>> scanFolder(@PathVariable Long id) {
         folderService.scanFolder(id);
         return ResponseEntity.ok(Map.of("message", "扫描已开始"));
+    }
+
+    @PostMapping("/scan-all")
+    public ResponseEntity<Map<String, String>> scanAllFolders() {
+        folderService.scanAllFolders();
+        return ResponseEntity.ok(Map.of("message", "全部扫描已开始"));
+    }
+
+    @PostMapping("/{id}/toggle-enabled")
+    public ResponseEntity<ScanFolderDTO> toggleEnabled(@PathVariable Long id) {
+        return ResponseEntity.ok(folderService.toggleEnabled(id));
+    }
+
+    @PostMapping("/{id}/toggle-hidden")
+    public ResponseEntity<ScanFolderDTO> toggleHidden(@PathVariable Long id) {
+        return ResponseEntity.ok(folderService.toggleHidden(id));
     }
 
     @GetMapping("/{id}/photos")

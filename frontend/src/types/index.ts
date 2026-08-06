@@ -12,10 +12,12 @@ export interface Photo {
   fileSize: number | null
   mediaType: 'PHOTO' | 'VIDEO' | 'GIF' | 'RAW'
   favorite: boolean
+  inTimeline: boolean
   originalFilename: string | null
   thumbnailUrl: string | null
   originalUrl: string | null
   tags: string[]
+  sourceFolderId: number | null
   createdAt: string
 }
 
@@ -25,8 +27,12 @@ export interface Tag {
   color: string | null
   type: string
   category: string | null
+  description: string | null
+  sortOrder: number
+  photoCount: number
   confidence: number | null
   source: string | null
+  createdAt: string
 }
 
 export interface PhotoDetail extends Omit<Photo, 'tags'> {
@@ -34,6 +40,7 @@ export interface PhotoDetail extends Omit<Photo, 'tags'> {
   fileHashPhash: string | null
   tags: Tag[]
   people: Person[]
+  sourceFolderName: string | null
 }
 
 export interface Album {
@@ -77,6 +84,10 @@ export interface User {
   username: string
   role: string
   avatar: string | null
+  nickname: string | null
+  enabled: boolean
+  createdAt: string
+  lastLoginAt: string | null
 }
 
 export interface LoginResponse {
@@ -114,6 +125,11 @@ export interface ScanFolder {
   scanStatus: 'IDLE' | 'SCANNING' | 'COMPLETED' | 'ERROR'
   lastScanAt: string | null
   photoCount: number
+  videoCount: number
+  fileCount: number
+  scanProgress: number
+  enabled: boolean
+  hidden: boolean
   errorMessage: string | null
   createdAt: string
 }

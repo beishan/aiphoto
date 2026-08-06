@@ -11,8 +11,16 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     avatar VARCHAR(255),
+    nickname VARCHAR(100),
+    enabled BOOLEAN DEFAULT TRUE,
+    last_login_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migration: Add new columns to users table (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;
 
 -- Photos table
 CREATE TABLE IF NOT EXISTS photos (
@@ -23,7 +31,7 @@ CREATE TABLE IF NOT EXISTS photos (
     exif_date TIMESTAMP,
     gps_lat DOUBLE PRECISION,
     gps_lng DOUBLE PRECISION,
-    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    rating INTEGER CHECK (rating >= 0 AND rating <= 5),
     note TEXT,
     ai_caption TEXT,
     embedding vector(512),
@@ -34,9 +42,13 @@ CREATE TABLE IF NOT EXISTS photos (
     favorite BOOLEAN DEFAULT FALSE,
     original_filename VARCHAR(255),
     source_folder_id BIGINT,
+    in_timeline BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migration: Add in_timeline column to photos (idempotent)
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS in_timeline BOOLEAN DEFAULT FALSE;
 
 -- Albums table
 CREATE TABLE IF NOT EXISTS albums (
@@ -94,8 +106,14 @@ CREATE TABLE IF NOT EXISTS tags (
     color VARCHAR(7),
     type VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
     category VARCHAR(50),
+    description VARCHAR(500),
+    sort_order INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migration: Add new columns to tags table (idempotent)
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS description VARCHAR(500);
+ALTER TABLE tags ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
 
 -- Photo-Tag many-to-many
 CREATE TABLE IF NOT EXISTS photo_tags (
@@ -171,10 +189,22 @@ CREATE TABLE IF NOT EXISTS scan_folders (
     scan_status VARCHAR(20) NOT NULL DEFAULT 'IDLE',
     last_scan_at TIMESTAMP,
     photo_count INTEGER DEFAULT 0,
+    video_count INTEGER DEFAULT 0,
+    file_count INTEGER DEFAULT 0,
+    scan_progress INTEGER DEFAULT 0,
+    enabled BOOLEAN DEFAULT TRUE,
+    hidden BOOLEAN DEFAULT FALSE,
     error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migration: Add new columns to scan_folders table (idempotent)
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS video_count INTEGER DEFAULT 0;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS file_count INTEGER DEFAULT 0;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS scan_progress INTEGER DEFAULT 0;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE;
 
 -- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent: drop then add)
 ALTER TABLE photos DROP CONSTRAINT IF EXISTS fk_photos_source_folder;
@@ -200,6 +230,12 @@ CREATE INDEX IF NOT EXISTS idx_categories_is_system ON categories (is_system);
 CREATE INDEX IF NOT EXISTS idx_photo_categories_category ON photo_categories (category_id);
 CREATE INDEX IF NOT EXISTS idx_photo_categories_photo ON photo_categories (photo_id);
 CREATE INDEX IF NOT EXISTS idx_photos_source_folder ON photos (source_folder_id);
+
+-- Index for timeline photos
+CREATE INDEX IF NOT EXISTS idx_photos_in_timeline ON photos (in_timeline) WHERE in_timeline = TRUE;
+CREATE INDEX IF NOT EXISTS idx_photos_rating ON photos (rating);
+CREATE INDEX IF NOT EXISTS idx_photos_source_folder_enabled ON scan_folders (enabled);
+CREATE INDEX IF NOT EXISTS idx_tags_sort_order ON tags (sort_order);
 
 -- Migration: Add category column to tags table (idempotent)
 ALTER TABLE tags ADD COLUMN IF NOT EXISTS category VARCHAR(50);

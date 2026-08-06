@@ -21,12 +21,28 @@ export const folderApi = {
     return http.post<ScanFolder>('/folders', data)
   },
 
+  update(id: number, data: Partial<ScanFolder>) {
+    return http.put<ScanFolder>(`/folders/${id}`, data)
+  },
+
   delete(id: number) {
     return http.delete(`/folders/${id}`)
   },
 
   scan(id: number) {
     return http.post<{ message: string }>(`/folders/${id}/scan`)
+  },
+
+  scanAll() {
+    return http.post<{ message: string }>('/folders/scan-all')
+  },
+
+  toggleEnabled(id: number) {
+    return http.post<ScanFolder>(`/folders/${id}/toggle-enabled`)
+  },
+
+  toggleHidden(id: number) {
+    return http.post<ScanFolder>(`/folders/${id}/toggle-hidden`)
   },
 
   getPhotos(id: number, page = 0, size = 20) {

@@ -150,6 +150,29 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("success", success, "total", ids.size()));
     }
 
+    @PostMapping("/batch-timeline")
+    public ResponseEntity<Map<String, Object>> batchTimeline(@RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<Number>) request.get("ids")).stream().map(Number::longValue).toList();
+        Boolean inTimeline = (Boolean) request.get("inTimeline");
+        photoService.batchToggleTimeline(ids, inTimeline);
+        return ResponseEntity.ok(Map.of("success", ids.size(), "total", ids.size()));
+    }
+
+    @PostMapping("/batch-note")
+    public ResponseEntity<Map<String, Object>> batchNote(@RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<Long> ids = ((List<Number>) request.get("ids")).stream().map(Number::longValue).toList();
+        String note = (String) request.get("note");
+        photoService.batchSetNote(ids, note);
+        return ResponseEntity.ok(Map.of("success", ids.size(), "total", ids.size()));
+    }
+
+    @PostMapping("/{id}/toggle-timeline")
+    public ResponseEntity<PhotoDTO> toggleTimeline(@PathVariable Long id) {
+        return ResponseEntity.ok(photoService.toggleTimeline(id));
+    }
+
     @GetMapping("/favorites")
     public ResponseEntity<Page<PhotoDTO>> getFavorites(
             @RequestParam(defaultValue = "0") int page,

@@ -20,10 +20,13 @@ public class PhotoDetailDTO {
     private Long fileSize;
     private String mediaType;
     private Boolean favorite;
+    private Boolean inTimeline;
     private String originalFilename;
     private String thumbnailUrl;
     private String originalUrl;
     private LocalDateTime createdAt;
+    private Long sourceFolderId;
+    private String sourceFolderName;
 
     private List<TagDTO> tags;
     private List<PersonDTO> people;

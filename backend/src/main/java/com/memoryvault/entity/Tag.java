@@ -30,6 +30,11 @@ public class Tag {
     @Column(length = 50)
     private String category;
 
+    @Column(length = 500)
+    private String description;
+
+    private Integer sortOrder = 0;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

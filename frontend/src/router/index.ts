@@ -70,6 +70,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/BabyAlbumView.vue'),
       },
       {
+        path: 'tags',
+        name: 'Tags',
+        component: () => import('@/views/TagsView.vue'),
+      },
+      {
+        path: 'tags/:id',
+        name: 'TagDetail',
+        component: () => import('@/views/TagDetailView.vue'),
+      },
+      {
         path: 'more',
         name: 'More',
         redirect: '/settings',

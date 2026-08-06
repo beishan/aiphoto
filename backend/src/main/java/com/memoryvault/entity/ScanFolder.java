@@ -36,6 +36,16 @@ public class ScanFolder {
 
     private Integer photoCount = 0;
 
+    private Integer videoCount = 0;
+
+    private Integer fileCount = 0;
+
+    private Integer scanProgress = 0;
+
+    private Boolean enabled = true;
+
+    private Boolean hidden = false;
+
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 

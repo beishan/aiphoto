@@ -5,11 +5,13 @@ import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.PhotoRepository;
 import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TimelineService {
@@ -18,10 +20,8 @@ public class TimelineService {
     private final LocalStorageService storageService;
 
     public Map<Integer, Map<Integer, List<PhotoDTO>>> getTimelineGrouped() {
-        List<Photo> photos = photoRepository.findAll().stream()
-                .filter(p -> p.getExifDate() != null)
-                .sorted(Comparator.comparing(Photo::getExifDate).reversed())
-                .toList();
+        // Only show photos that are added to timeline
+        List<Photo> photos = photoRepository.findTimelinePhotos();
 
         Map<Integer, Map<Integer, List<PhotoDTO>>> result = new TreeMap<>(Comparator.reverseOrder());
 
@@ -39,6 +39,7 @@ public class TimelineService {
 
     public List<PhotoDTO> getPhotosByDateRange(LocalDateTime start, LocalDateTime end) {
         return photoRepository.findByExifDateRange(start, end).stream()
+                .filter(p -> p.getInTimeline() != null && p.getInTimeline())
                 .map(this::toDTO)
                 .toList();
     }
@@ -58,11 +59,15 @@ public class TimelineService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setInTimeline(photo.getInTimeline());
+        dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
+        dto.setSourceFolderId(photo.getSourceFolderId());
         try {
             String thumbExt = photo.getOriginalFilename() != null
                     && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
             dto.setThumbnailUrl(storageService.getThumbnailUrl(photo.getFileHashMd5() + "/thumb." + thumbExt));
+            dto.setOriginalUrl(storageService.getPhotoUrl(photo.getFilePath()));
         } catch (Exception e) {
             // ignore
         }

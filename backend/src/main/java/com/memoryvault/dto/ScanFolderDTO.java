@@ -13,6 +13,11 @@ public class ScanFolderDTO {
     private String scanStatus;    // IDLE / SCANNING / COMPLETED / ERROR
     private LocalDateTime lastScanAt;
     private Integer photoCount;
+    private Integer videoCount;
+    private Integer fileCount;
+    private Integer scanProgress;
+    private Boolean enabled;
+    private Boolean hidden;
     private String errorMessage;
     private LocalDateTime createdAt;
 }

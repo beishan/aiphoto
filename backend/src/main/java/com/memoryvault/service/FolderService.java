@@ -92,6 +92,47 @@ public class FolderService {
     }
 
     @Transactional
+    public ScanFolderDTO updateFolder(Long id, ScanFolderDTO dto) {
+        ScanFolder folder = scanFolderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("文件夹不存在"));
+        if (dto.getName() != null) folder.setName(dto.getName());
+        if (dto.getPath() != null) folder.setPath(dto.getPath());
+        if (dto.getStorageMode() != null) folder.setStorageMode(ScanFolder.StorageMode.valueOf(dto.getStorageMode()));
+        folder = scanFolderRepository.save(folder);
+        return toDTO(folder);
+    }
+
+    @Transactional
+    public ScanFolderDTO toggleEnabled(Long id) {
+        ScanFolder folder = scanFolderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("文件夹不存在"));
+        folder.setEnabled(!folder.getEnabled());
+        folder = scanFolderRepository.save(folder);
+        return toDTO(folder);
+    }
+
+    @Transactional
+    public ScanFolderDTO toggleHidden(Long id) {
+        ScanFolder folder = scanFolderRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("文件夹不存在"));
+        folder.setHidden(!folder.getHidden());
+        folder = scanFolderRepository.save(folder);
+        return toDTO(folder);
+    }
+
+    @Async
+    public void scanAllFolders() {
+        List<ScanFolder> folders = scanFolderRepository.findByEnabledTrue();
+        for (ScanFolder folder : folders) {
+            try {
+                scanFolder(folder.getId());
+            } catch (Exception e) {
+                log.error("Failed to scan folder {}: {}", folder.getName(), e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
     public void deleteFolder(Long id) {
         ScanFolder folder = scanFolderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("文件夹不存在"));
@@ -459,6 +500,11 @@ public class FolderService {
         dto.setScanStatus(folder.getScanStatus().name());
         dto.setLastScanAt(folder.getLastScanAt());
         dto.setPhotoCount(folder.getPhotoCount());
+        dto.setVideoCount(folder.getVideoCount());
+        dto.setFileCount(folder.getFileCount());
+        dto.setScanProgress(folder.getScanProgress());
+        dto.setEnabled(folder.getEnabled());
+        dto.setHidden(folder.getHidden());
         dto.setErrorMessage(folder.getErrorMessage());
         dto.setCreatedAt(folder.getCreatedAt());
         return dto;

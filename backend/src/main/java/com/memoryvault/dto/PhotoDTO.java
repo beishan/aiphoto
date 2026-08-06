@@ -20,9 +20,11 @@ public class PhotoDTO {
     private Long fileSize;
     private String mediaType;
     private Boolean favorite;
+    private Boolean inTimeline;
     private String originalFilename;
     private String thumbnailUrl;
     private String originalUrl;
     private List<String> tags;
+    private Long sourceFolderId;
     private LocalDateTime createdAt;
 }

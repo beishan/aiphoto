@@ -29,6 +29,13 @@ public class User {
 
     private String avatar;
 
+    @Column(length = 100)
+    private String nickname;
+
+    private Boolean enabled = true;
+
+    private LocalDateTime lastLoginAt;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

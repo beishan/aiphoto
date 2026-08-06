@@ -48,6 +48,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -154,10 +155,12 @@ public class PhotoService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setInTimeline(photo.getInTimeline());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
         dto.setFileHashMd5(photo.getFileHashMd5());
         dto.setFileHashPhash(photo.getFileHashPhash());
+        dto.setSourceFolderId(photo.getSourceFolderId());
 
         try {
             String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :
@@ -211,6 +214,7 @@ public class PhotoService {
         if (updates.getRating() != null) photo.setRating(updates.getRating());
         if (updates.getNote() != null) photo.setNote(updates.getNote());
         if (updates.getFavorite() != null) photo.setFavorite(updates.getFavorite());
+        if (updates.getInTimeline() != null) photo.setInTimeline(updates.getInTimeline());
 
         photo = photoRepository.save(photo);
         return toDTO(photo);
@@ -257,6 +261,45 @@ public class PhotoService {
 
     public Page<PhotoDTO> getByRating(int minRating, Pageable pageable) {
         return photoRepository.findByMinRating(minRating, pageable).map(this::toDTO);
+    }
+
+    @Transactional
+    public PhotoDTO toggleTimeline(Long id) {
+        Photo photo = photoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Photo not found"));
+        photo.setInTimeline(!photo.getInTimeline());
+        photo = photoRepository.save(photo);
+        return toDTO(photo);
+    }
+
+    @Transactional
+    public void batchToggleTimeline(List<Long> ids, Boolean inTimeline) {
+        for (Long id : ids) {
+            try {
+                Photo photo = photoRepository.findById(id).orElse(null);
+                if (photo != null) {
+                    photo.setInTimeline(inTimeline);
+                    photoRepository.save(photo);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to toggle timeline for photo {}: {}", id, e.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    public void batchSetNote(List<Long> ids, String note) {
+        for (Long id : ids) {
+            try {
+                Photo photo = photoRepository.findById(id).orElse(null);
+                if (photo != null) {
+                    photo.setNote(note);
+                    photoRepository.save(photo);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to set note for photo {}: {}", id, e.getMessage());
+            }
+        }
     }
 
     private void extractExifData(Metadata metadata, Photo photo) {
@@ -436,8 +479,10 @@ public class PhotoService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setInTimeline(photo.getInTimeline());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
+        dto.setSourceFolderId(photo.getSourceFolderId());
 
         try {
             String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :

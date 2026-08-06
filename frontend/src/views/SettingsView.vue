@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref, inject, type Ref, onMounted } from 'vue'
+import { ref, inject, type Ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingStore } from '@/stores/settingStore'
-import { settingApi, type ModelFile, type ModelName, type ModelStatus } from '@/api/settingApi'
+import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
+import { taskApi, type AiTask } from '@/api/taskApi'
+import { userApi } from '@/api/userApi'
+import { tagApi } from '@/api/tagApi'
+import { folderApi } from '@/api/folderApi'
 import { useMessage } from 'naive-ui'
+import type { User, Tag, ScanFolder } from '@/types'
 
 const router = useRouter()
 const settingStore = useSettingStore()
@@ -12,28 +17,56 @@ const message = useMessage()
 const theme = inject<Ref<string>>('theme')!
 const setTheme = inject<(t: string) => void>('setTheme')!
 
+// ===== Settings menu structure =====
+const navItems = [
+  { key: 'general', label: '常规设置', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z' },
+  { key: 'users', label: '用户管理', icon: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
+  { key: 'folders', label: '扫描文件夹', icon: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' },
+  { key: 'models', label: '模型管理', icon: 'M4 6c0-1.1 3.58-2 8-2s8 .9 8 2-3.58 2-8 2-8-.9-8-2zm0 4v4c0 1.1 3.58 2 8 2s8-.9 8-2v-4c-1.72 1.21-5.03 1.75-8 1.75S5.72 11.21 4 10zm0 8v-2c1.72 1.21 5.03 1.75 8 1.75s6.28-.54 8-1.75v2c0 1.1-3.58 2-8 2s-8-.9-8-2z' },
+  { key: 'tags', label: '标签管理', icon: 'M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z' },
+  { key: 'photos', label: '照片与视频', icon: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z' },
+  { key: 'timeline', label: '时间线设置', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z' },
+  { key: 'tasks', label: '任务与日志', icon: 'M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z' },
+  { key: 'storage', label: '存储管理', icon: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z' },
+  { key: 'system', label: '系统信息', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z' },
+]
+
+const activeSection = ref('general')
+
+// ===== General Settings =====
 const namingRule = ref('original')
 const faceThreshold = ref(50)
 const searchThreshold = ref(80)
-const modelRoot = ref('/models')
-const models = ref<ModelStatus[]>([])
-const modelLoading = ref(false)
-const browserModel = ref<ModelName | null>(null)
-const browserDirectory = ref('')
-const browserFiles = ref<ModelFile[]>([])
-const uploadDirectory = ref('uploads')
-const uploading = ref(false)
 
-// 左侧导航：当前选中的板块
-const activeSection = ref('upload')
+// Dock config
+const dockConfig = ref({
+  opacity: 0.72,
+  blurStrength: 20,
+  iconSize: 22,
+  maxScale: 1.5,
+  animationSpeed: 0.25,
+})
 
-const navItems = [
-  { key: 'upload', label: '照片上传', icon: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z' },
-  { key: 'appearance', label: '外观主题', icon: 'M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-1-.01-.83.67-1.5 1.49-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z' },
-  { key: 'ai', label: 'AI 设置', icon: 'M21 10.12h-6.78l2.74-2.82c-2.73-2.7-7.15-2.8-9.88-.1-2.73 2.71-2.73 7.08 0 9.79 2.73 2.71 7.15 2.71 9.88 0C18.32 15.65 19 14.08 19 12.1h2c0 1.98-.88 4.55-2.64 6.29-3.51 3.48-9.21 3.48-12.72 0-3.5-3.47-3.53-9.11-.02-12.58 3.51-3.47 9.14-3.47 12.65 0L21 3v7.12zM12.5 8v4.25l3.5 2.08-.72 1.21L11 13V8h1.5z' },
-  { key: 'models', label: '模型管理', icon: 'M4 6c0-1.1 3.58-2 8-2s8 .9 8 2-3.58 2-8 2-8-.9-8-2zm0 4v4c0 1.1 3.58 2 8 2s8-.9 8-2v-4c-1.72 1.21-5.03 1.75-8 1.75S5.72 11.21 4 10zm0 8v-2c1.72 1.21 5.03 1.75 8 1.75s6.28-.54 8-1.75v2c0 1.1-3.58 2-8 2s-8-.9-8-2z' },
-]
+onMounted(async () => {
+  // Load settings
+  if (!settingStore.loaded) {
+    await settingStore.fetchSettings()
+  }
+  namingRule.value = settingStore.getSetting('photo_naming_rule', 'original')
+  faceThreshold.value = Number(settingStore.getSetting('ai_face_cluster_threshold', '50'))
+  searchThreshold.value = Number(settingStore.getSetting('ai_search_similarity_threshold', '80'))
 
+  // Load dock config
+  const stored = localStorage.getItem('dockConfig')
+  if (stored) {
+    try { dockConfig.value = { ...dockConfig.value, ...JSON.parse(stored) } } catch { /* ignore */ }
+  }
+
+  // Load users, tags, folders
+  await Promise.all([loadUsers(), loadTags(), loadFolders(), loadModels(), loadTasks(), loadStorageInfo(), loadSystemInfo()])
+})
+
+// ===== Theme =====
 const themeOptions = [
   { value: 'dark', label: '经典暗色', icon: '🌙', desc: '纯黑背景，护眼省电' },
   { value: 'light', label: '明亮模式', icon: '☀️', desc: '白色背景，清晰醒目' },
@@ -46,18 +79,227 @@ const namingOptions = [
   { value: 'date_time', label: '日期时间', example: '20240101_123456.jpg' },
   { value: 'uuid', label: 'UUID', example: 'a1b2c3d4.jpg' },
   { value: 'timestamp', label: '时间戳', example: '1704067200000.jpg' },
-  { value: 'custom', label: '自定义前缀', example: 'photo_1704067200000.jpg' },
 ]
 
-onMounted(async () => {
-  if (!settingStore.loaded) {
-    await settingStore.fetchSettings()
+// ===== User Management =====
+const users = ref<User[]>([])
+const showUserDialog = ref(false)
+const newUser = ref({ username: '', password: '', role: 'USER', nickname: '' })
+
+async function loadUsers() {
+  try {
+    const { data } = await userApi.list()
+    users.value = data
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '加载用户列表失败')
   }
-  namingRule.value = settingStore.getSetting('photo_naming_rule', 'original')
-  faceThreshold.value = Number(settingStore.getSetting('ai_face_cluster_threshold', '50'))
-  searchThreshold.value = Number(settingStore.getSetting('ai_search_similarity_threshold', '80'))
-  await loadModels()
-})
+}
+
+async function createUser() {
+  try {
+    await userApi.create(newUser.value)
+    message.success('用户创建成功')
+    showUserDialog.value = false
+    newUser.value = { username: '', password: '', role: 'USER', nickname: '' }
+    await loadUsers()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '创建失败')
+  }
+}
+
+async function deleteUser(id: number, username: string) {
+  if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) return
+  try {
+    await userApi.delete(id)
+    message.success('用户已删除')
+    await loadUsers()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '删除失败')
+  }
+}
+
+async function resetPassword(id: number) {
+  const password = prompt('请输入新密码')
+  if (!password) return
+  try {
+    await userApi.resetPassword(id, password)
+    message.success('密码已重置')
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '重置失败')
+  }
+}
+
+async function toggleEnabled(id: number) {
+  try {
+    await userApi.toggleEnabled(id)
+    await loadUsers()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '操作失败')
+  }
+}
+
+// ===== Tag Management =====
+const tags = ref<Tag[]>([])
+const showTagDialog = ref(false)
+const newTag = ref({ name: '', color: '#0a84ff', description: '' })
+const editingTag = ref<Tag | null>(null)
+const showEditTagDialog = ref(false)
+const editTagData = ref({ name: '', color: '#0a84ff', description: '' })
+const tagSearchQuery = ref('')
+
+const presetColors = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#00d4ff', '#007aff', '#af52de', '#ff2d55', '#8e8e93']
+
+async function loadTags() {
+  try {
+    const { data } = await tagApi.list()
+    tags.value = data
+  } catch { /* ignore */ }
+}
+
+async function createTag() {
+  try {
+    await tagApi.create(newTag.value)
+    message.success('标签创建成功')
+    showTagDialog.value = false
+    newTag.value = { name: '', color: '#0a84ff', description: '' }
+    await loadTags()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '创建失败')
+  }
+}
+
+async function deleteTag(id: number, name: string, count: number) {
+  if (!confirm(`确定要删除标签 "${name}" 吗？\n关联照片数：${count}\n删除后仅解除关联，不删除照片。`)) return
+  try {
+    await tagApi.delete(id)
+    message.success('标签已删除')
+    await loadTags()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '删除失败')
+  }
+}
+
+async function updateTagColor(tag: Tag, color: string) {
+  try {
+    await tagApi.update(tag.id, { color })
+    tag.color = color
+    message.success('颜色已更新')
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '更新失败')
+  }
+}
+
+function openEditTagDialog(tag: Tag) {
+  editingTag.value = tag
+  editTagData.value = { name: tag.name, color: tag.color || '#0a84ff', description: tag.description || '' }
+  showEditTagDialog.value = true
+}
+
+async function saveEditedTag() {
+  if (!editingTag.value) return
+  if (!editTagData.value.name.trim()) {
+    message.warning('标签名称不能为空')
+    return
+  }
+  try {
+    await tagApi.update(editingTag.value.id, {
+      name: editTagData.value.name,
+      color: editTagData.value.color,
+      description: editTagData.value.description,
+    })
+    message.success('标签已更新')
+    showEditTagDialog.value = false
+    await loadTags()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '更新失败')
+  }
+}
+
+// ===== Folder Management =====
+const folders = ref<ScanFolder[]>([])
+const showFolderDialog = ref(false)
+const newFolder = ref({ name: '', path: '', storageMode: 'COPY' })
+
+async function loadFolders() {
+  try {
+    const { data } = await folderApi.list()
+    folders.value = data
+  } catch { /* ignore */ }
+}
+
+async function createFolder() {
+  if (!newFolder.value.name || !newFolder.value.path) {
+    message.warning('请填写文件夹名称和路径')
+    return
+  }
+  try {
+    await folderApi.create(newFolder.value)
+    message.success('文件夹已添加')
+    showFolderDialog.value = false
+    newFolder.value = { name: '', path: '', storageMode: 'COPY' }
+    await loadFolders()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '添加失败')
+  }
+}
+
+async function toggleFolderEnabled(id: number) {
+  try {
+    await folderApi.toggleEnabled(id)
+    await loadFolders()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '操作失败')
+  }
+}
+
+async function toggleFolderHidden(id: number) {
+  try {
+    await folderApi.toggleHidden(id)
+    await loadFolders()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '操作失败')
+  }
+}
+
+async function scanFolder(id: number) {
+  try {
+    await folderApi.scan(id)
+    message.success('扫描已开始')
+    await loadFolders()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '扫描失败')
+  }
+}
+
+async function scanAll() {
+  try {
+    await folderApi.scanAll()
+    message.success('全部扫描已开始')
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '操作失败')
+  }
+}
+
+async function deleteFolder(id: number, name: string) {
+  if (!confirm(`确定要删除扫描文件夹 "${name}" 吗？`)) return
+  try {
+    await folderApi.delete(id)
+    message.success('文件夹已删除')
+    await loadFolders()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '删除失败')
+  }
+}
+
+// ===== Model Management =====
+const modelRoot = ref('/models')
+const models = ref<ModelStatus[]>([])
+const modelLoading = ref(false)
+const modelViewMode = ref<'local' | 'online' | 'downloads'>('local')
+const modelCatalog = ref<ModelCatalogItem[]>([])
+const onlineModels = ref<OnlineModel[]>([])
+const downloadTasks = ref<DownloadTask[]>([])
+const downloadPollTimer = ref<number | null>(null)
 
 const modelLabels: Record<ModelName, string> = {
   clip: 'Chinese-CLIP 语义模型',
@@ -66,16 +308,74 @@ const modelLabels: Record<ModelName, string> = {
   blip: 'BLIP-2 图片描述模型',
 }
 
+// Extended model type labels (for catalog)
+const modelTypeLabels: Record<string, string> = {
+  face_detection: '人脸检测模型',
+  face_recognition: '人脸识别模型',
+  image_classification: '图片分类模型',
+  image_caption: '图片描述模型',
+  ocr: 'OCR 文字识别模型',
+  image_vector: '图片向量模型',
+  similar_image: '相似图片识别模型',
+  duplicate_detection: '重复照片检测模型',
+  content_safety: '内容安全识别模型',
+  object_detection: '目标检测模型',
+}
+
+// Map catalog type keys to AI service model names
+const typeToAiName: Record<string, ModelName | null> = {
+  image_vector: 'clip',
+  face_detection: 'insightface',
+  face_recognition: 'insightface',
+  object_detection: 'yolo',
+  image_classification: 'yolo',
+  image_caption: 'blip',
+  ocr: null,
+  similar_image: null,
+  duplicate_detection: null,
+  content_safety: null,
+}
+
 async function loadModels() {
   modelLoading.value = true
   try {
-    const { data } = await settingApi.getModels()
-    modelRoot.value = data.root
-    models.value = data.models
-  } catch (error: any) {
-    message.error(error.response?.data?.message || '读取模型状态失败')
-  } finally {
-    modelLoading.value = false
+    const [statusRes, catalogRes, onlineRes, downloadsRes] = await Promise.all([
+      settingApi.getModels(),
+      settingApi.getModelCatalog(),
+      settingApi.getOnlineModels(),
+      settingApi.getAllDownloads().catch(() => ({ data: {} })),
+    ])
+    modelRoot.value = statusRes.data.root
+    models.value = statusRes.data.models
+    modelCatalog.value = catalogRes.data
+    onlineModels.value = onlineRes.data
+    downloadTasks.value = Object.values(downloadsRes.data)
+    // Start polling if there are active downloads
+    if (downloadTasks.value.some(t => t.status === 'DOWNLOADING' || t.status === 'PENDING' || t.status === 'INSTALLING')) {
+      startDownloadPolling()
+    }
+  } catch { /* ignore */ }
+  finally { modelLoading.value = false }
+}
+
+function startDownloadPolling() {
+  if (downloadPollTimer.value) return
+  downloadPollTimer.value = window.setInterval(async () => {
+    try {
+      const { data } = await settingApi.getAllDownloads()
+      downloadTasks.value = Object.values(data)
+      // Stop polling if no active downloads
+      if (!downloadTasks.value.some(t => t.status === 'DOWNLOADING' || t.status === 'PENDING' || t.status === 'INSTALLING')) {
+        stopDownloadPolling()
+      }
+    } catch { /* ignore */ }
+  }, 2000)
+}
+
+function stopDownloadPolling() {
+  if (downloadPollTimer.value) {
+    clearInterval(downloadPollTimer.value)
+    downloadPollTimer.value = null
   }
 }
 
@@ -84,12 +384,10 @@ async function saveModel(model: ModelStatus) {
   try {
     const { data } = await settingApi.configureModel(model.name, model.path, model.enabled)
     Object.assign(model, data)
-    data.loaded ? message.success(`${modelLabels[model.name]} 已加载`) : message.warning(data.error || '模型配置已保存，但未加载')
-  } catch (error: any) {
-    message.error(error.response?.data?.message || error.response?.data?.detail || '保存模型配置失败')
-  } finally {
-    modelLoading.value = false
-  }
+    data.loaded ? message.success(`${modelLabels[model.name]} 已加载`) : message.warning(data.error || '配置已保存')
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '保存失败')
+  } finally { modelLoading.value = false }
 }
 
 async function reloadModel(model: ModelStatus) {
@@ -97,63 +395,145 @@ async function reloadModel(model: ModelStatus) {
   try {
     const { data } = await settingApi.reloadModel(model.name)
     Object.assign(model, data)
-    data.loaded ? message.success('模型重新加载成功') : message.error(data.error || '模型加载失败')
-  } finally {
-    modelLoading.value = false
-  }
+    data.loaded ? message.success('模型重新加载成功') : message.error(data.error || '加载失败')
+  } finally { modelLoading.value = false }
 }
 
-async function openBrowser(model: ModelStatus) {
-  browserModel.value = model.name
-  browserDirectory.value = ''
-  await browseDirectory('')
-}
-
-async function browseDirectory(directory: string) {
+// Online model download
+async function startDownload(model: OnlineModel) {
   try {
-    const { data } = await settingApi.browseModels(directory)
-    browserDirectory.value = directory
-    browserFiles.value = data
-  } catch (error: any) {
-    message.error(error.response?.data?.message || '读取目录失败')
+    await settingApi.startDownload(model.id)
+    message.success(`开始下载: ${model.name}`)
+    await refreshDownloads()
+    startDownloadPolling()
+  } catch (e: any) {
+    message.error(e.response?.data?.message || '下载失败')
   }
 }
 
-function goParentDirectory() {
-  const parts = browserDirectory.value.split('/').filter(Boolean)
-  parts.pop()
-  browseDirectory(parts.join('/'))
+async function pauseDownload(taskId: string) {
+  try { await settingApi.pauseDownload(taskId); await refreshDownloads() }
+  catch { message.error('操作失败') }
 }
 
-function selectBrowserPath(path: string) {
-  const model = models.value.find(item => item.name === browserModel.value)
-  if (model) model.path = path
-  browserModel.value = null
+async function resumeDownload(taskId: string) {
+  try { await settingApi.resumeDownload(taskId); await refreshDownloads(); startDownloadPolling() }
+  catch { message.error('操作失败') }
 }
 
-async function handleModelUpload(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files || [])
-  if (!files.length) return
-  uploading.value = true
+async function cancelDownload(taskId: string) {
+  if (!confirm('确定要取消此下载吗？')) return
+  try { await settingApi.cancelDownload(taskId); await refreshDownloads() }
+  catch { message.error('操作失败') }
+}
+
+async function retryDownload(taskId: string) {
+  try { await settingApi.retryDownload(taskId); await refreshDownloads(); startDownloadPolling() }
+  catch { message.error('操作失败') }
+}
+
+async function setCurrentModel(taskId: string) {
   try {
-    for (const file of files) await settingApi.uploadModel(uploadDirectory.value, file)
-    message.success(`已上传 ${files.length} 个模型文件`)
-    if (browserModel.value) await browseDirectory(browserDirectory.value)
-  } catch (error: any) {
-    message.error(error.response?.data?.message || '上传失败')
-  } finally {
-    uploading.value = false
-    input.value = ''
-  }
+    await settingApi.setCurrentModel(taskId)
+    message.success('已设为当前模型')
+    await refreshDownloads()
+    await loadModels()
+  } catch { message.error('操作失败') }
 }
 
-function formatSize(size: number | null) {
-  if (size == null) return '目录'
+async function refreshDownloads() {
+  try {
+    const { data } = await settingApi.getAllDownloads()
+    downloadTasks.value = Object.values(data)
+  } catch { /* ignore */ }
+}
+
+function formatSize(size: number | null): string {
+  if (size == null) return '-'
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
+function formatDownloadSpeed(task: DownloadTask): string {
+  if (task.status !== 'DOWNLOADING') return ''
+  // This is a rough estimate based on progress
+  const elapsed = task.startTime ? (Date.now() - new Date(task.startTime).getTime()) / 1000 : 0
+  if (elapsed <= 0 || task.downloadedSize <= 0) return '-'
+  const speed = task.downloadedSize / elapsed
+  if (speed < 1024 * 1024) return `${(speed / 1024).toFixed(1)} KB/s`
+  return `${(speed / 1024 / 1024).toFixed(1)} MB/s`
+}
+
+function formatEta(task: DownloadTask): string {
+  if (task.status !== 'DOWNLOADING' || task.totalSize <= 0 || task.downloadedSize <= 0) return ''
+  const elapsed = task.startTime ? (Date.now() - new Date(task.startTime).getTime()) / 1000 : 0
+  if (elapsed <= 0) return '-'
+  const speed = task.downloadedSize / elapsed
+  if (speed <= 0) return '-'
+  const remaining = (task.totalSize - task.downloadedSize) / speed
+  if (remaining < 60) return `${Math.ceil(remaining)}s`
+  if (remaining < 3600) return `${Math.ceil(remaining / 60)}m`
+  return `${Math.ceil(remaining / 3600)}h`
+}
+
+function getDownloadStatusText(status: DownloadStatus): string {
+  const map: Record<string, string> = {
+    PENDING: '等待中',
+    DOWNLOADING: '下载中',
+    PAUSED: '已暂停',
+    COMPLETED: '已完成',
+    FAILED: '下载失败',
+    CANCELLED: '已取消',
+    INSTALLING: '安装中',
+    INSTALLED: '已安装',
+  }
+  return map[status] || status
+}
+
+function getDownloadStatusClass(status: DownloadStatus): string {
+  return status.toLowerCase()
+}
+
+// Check if online model is already downloaded
+function isModelDownloaded(modelId: string): boolean {
+  return downloadTasks.value.some(t => t.modelId === modelId && (t.status === 'COMPLETED' || t.status === 'INSTALLED'))
+}
+
+function getActiveDownloadForModel(modelId: string): DownloadTask | null {
+  return downloadTasks.value.find(t => t.modelId === modelId && (t.status === 'DOWNLOADING' || t.status === 'PENDING' || t.status === 'PAUSED')) || null
+}
+
+// Get model status for catalog type
+function getModelStatusForType(typeKey: string): { loaded: boolean; exists: boolean; enabled: boolean; error: string | null } {
+  const aiName = typeToAiName[typeKey]
+  if (!aiName) return { loaded: false, exists: false, enabled: false, error: null }
+  const model = models.value.find(m => m.name === aiName)
+  if (!model) return { loaded: false, exists: false, enabled: false, error: null }
+  return { loaded: model.loaded, exists: model.exists, enabled: model.enabled, error: model.error }
+}
+
+function getModelStatusText(typeKey: string): string {
+  const status = getModelStatusForType(typeKey)
+  if (status.loaded) return '使用中'
+  if (status.error) return '加载失败'
+  if (status.exists && status.enabled) return '已安装'
+  if (status.exists) return '已安装'
+  const aiName = typeToAiName[typeKey]
+  if (!aiName) return '未配置'
+  return '未下载'
+}
+
+function getModelStatusClass(typeKey: string): string {
+  const text = getModelStatusText(typeKey)
+  if (text === '使用中') return 'in-use'
+  if (text === '已安装') return 'installed'
+  if (text === '加载失败') return 'failed'
+  if (text === '未配置') return 'not-configured'
+  return 'not-downloaded'
+}
+
+// ===== Settings save =====
 async function handleNamingRuleChange() {
   await settingStore.updateSettings({ photo_naming_rule: namingRule.value })
 }
@@ -165,11 +545,93 @@ async function handleThresholdChange() {
 async function handleSearchThresholdChange() {
   await settingStore.updateSettings({ ai_search_similarity_threshold: String(searchThreshold.value) })
 }
+
+function saveDockConfig() {
+  localStorage.setItem('dockConfig', JSON.stringify(dockConfig.value))
+  message.success('Dock 设置已保存，刷新页面生效')
+}
+
+function formatSizeLocal(size: number | null) {
+  if (size == null) return '-'
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+// Cleanup download polling on unmount
+import { onUnmounted } from 'vue'
+onUnmounted(() => stopDownloadPolling())
+
+// ===== Tasks & Logs =====
+const tasks = ref<AiTask[]>([])
+const taskFilter = ref<'all' | 'running' | 'completed' | 'failed'>('all')
+
+async function loadTasks() {
+  try {
+    const { data } = await taskApi.list(0, 50)
+    tasks.value = data.content
+  } catch { /* ignore */ }
+}
+
+const filteredTasks = computed(() => {
+  if (taskFilter.value === 'all') return tasks.value
+  if (taskFilter.value === 'running') return tasks.value.filter(t => t.status === 'RUNNING' || t.status === 'PENDING')
+  return tasks.value.filter(t => t.status === taskFilter.value.toUpperCase())
+})
+
+function getTaskTypeText(type: string): string {
+  const map: Record<string, string> = {
+    INDEX: '照片索引',
+    TRAIN: 'AI 训练',
+    DEDUP: '去重检测',
+    CAPTION: 'AI 描述',
+    BATCH_EMBED: '批量向量化',
+  }
+  return map[type] || type
+}
+
+function getTaskStatusText(status: string): string {
+  const map: Record<string, string> = {
+    PENDING: '等待中',
+    RUNNING: '运行中',
+    COMPLETED: '已完成',
+    FAILED: '失败',
+  }
+  return map[status] || status
+}
+
+function getTaskStatusClass(status: string): string {
+  return status.toLowerCase()
+}
+
+// ===== Storage Management =====
+const storageInfo = ref<Record<string, unknown>>({})
+
+async function loadStorageInfo() {
+  try {
+    const { data } = await settingApi.getStorageInfo()
+    storageInfo.value = data
+  } catch { /* ignore */ }
+}
+
+// ===== System Info =====
+const systemInfo = ref<Record<string, unknown>>({})
+
+async function loadSystemInfo() {
+  try {
+    const { data } = await settingApi.getSystemInfo()
+    systemInfo.value = data
+  } catch { /* ignore */ }
+}
 </script>
 
 <template>
   <div class="settings-page">
-    <!-- 页面顶栏 -->
+    <!-- Page header -->
     <div class="settings-header">
       <button class="back-btn" @click="router.push('/')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
@@ -179,9 +641,9 @@ async function handleSearchThresholdChange() {
       <h1 class="settings-title">设置</h1>
     </div>
 
-    <!-- 主体：左侧导航 + 右侧内容 -->
+    <!-- Body: left nav + right content (no divider line) -->
     <div class="settings-body">
-      <!-- 左侧导航 -->
+      <!-- Left navigation -->
       <nav class="settings-nav">
         <button
           v-for="item in navItems"
@@ -197,37 +659,17 @@ async function handleSearchThresholdChange() {
         </button>
       </nav>
 
-      <!-- 右侧内容区 -->
+      <!-- Right content -->
       <div class="settings-content">
-        <!-- ====== 照片上传 ====== -->
-        <div v-if="activeSection === 'upload'" class="content-panel">
-          <h2 class="panel-title">照片上传</h2>
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">文件命名规则</span>
-                <span class="label-desc">上传照片时按此规则重命名文件</span>
-              </div>
-              <select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
-                <option v-for="opt in namingOptions" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-            </div>
-            <div class="hint-box">
-              <span class="hint-label">示例</span>
-              <code class="hint-code">{{ namingOptions.find(o => o.value === namingRule)?.example }}</code>
-            </div>
-          </div>
-        </div>
+        <!-- ====== 常规设置 ====== -->
+        <div v-if="activeSection === 'general'" class="content-panel">
+          <h2 class="panel-title">常规设置</h2>
 
-        <!-- ====== 外观主题 ====== -->
-        <div v-if="activeSection === 'appearance'" class="content-panel">
-          <h2 class="panel-title">外观主题</h2>
+          <!-- Theme -->
           <div class="panel-card">
             <div class="setting-row">
               <div class="setting-info">
-                <span class="label-text">主题模式</span>
+                <span class="label-text">外观主题</span>
                 <span class="label-desc">选择应用的视觉风格</span>
               </div>
             </div>
@@ -245,147 +687,604 @@ async function handleSearchThresholdChange() {
               </button>
             </div>
           </div>
+
+          <!-- Dock config -->
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">底部 Dock 设置</span>
+                <span class="label-desc">自定义底部菜单栏的视觉效果和动画</span>
+              </div>
+              <button class="btn-primary" @click="saveDockConfig">保存</button>
+            </div>
+            <div class="dock-config-grid">
+              <div class="dock-config-item">
+                <label>透明度</label>
+                <input type="range" min="0.3" max="1" step="0.05" v-model.number="dockConfig.opacity" class="config-slider" />
+                <span class="config-value">{{ (dockConfig.opacity * 100).toFixed(0) }}%</span>
+              </div>
+              <div class="dock-config-item">
+                <label>模糊强度</label>
+                <input type="range" min="5" max="40" step="1" v-model.number="dockConfig.blurStrength" class="config-slider" />
+                <span class="config-value">{{ dockConfig.blurStrength }}px</span>
+              </div>
+              <div class="dock-config-item">
+                <label>图标大小</label>
+                <input type="range" min="16" max="32" step="1" v-model.number="dockConfig.iconSize" class="config-slider" />
+                <span class="config-value">{{ dockConfig.iconSize }}px</span>
+              </div>
+              <div class="dock-config-item">
+                <label>最大放大比例</label>
+                <input type="range" min="1.1" max="2" step="0.05" v-model.number="dockConfig.maxScale" class="config-slider" />
+                <span class="config-value">{{ dockConfig.maxScale.toFixed(2) }}x</span>
+              </div>
+              <div class="dock-config-item">
+                <label>动画速度</label>
+                <input type="range" min="0.1" max="0.5" step="0.05" v-model.number="dockConfig.animationSpeed" class="config-slider" />
+                <span class="config-value">{{ dockConfig.animationSpeed.toFixed(2) }}s</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Naming rule -->
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">文件命名规则</span>
+                <span class="label-desc">上传照片时按此规则重命名文件</span>
+              </div>
+              <select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
+                <option v-for="opt in namingOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        <!-- ====== AI 设置 ====== -->
-        <div v-if="activeSection === 'ai'" class="content-panel">
-          <h2 class="panel-title">AI 设置</h2>
-
+        <!-- ====== 用户管理 ====== -->
+        <div v-if="activeSection === 'users'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">用户管理</h2>
+            <button class="btn-primary" @click="showUserDialog = true">+ 新增用户</button>
+          </div>
           <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">人物聚合阈值</span>
-                <span class="label-desc">控制同一人物的合并灵敏度，值越大越容易合并</span>
+            <div class="user-table">
+              <div class="table-header">
+                <span>用户名</span>
+                <span>昵称</span>
+                <span>角色</span>
+                <span>状态</span>
+                <span>创建时间</span>
+                <span>最后登录</span>
+                <span>操作</span>
               </div>
-              <span class="threshold-badge">{{ (faceThreshold / 100).toFixed(2) }}</span>
-            </div>
-            <div class="slider-row">
-              <span class="slider-endpoint">严格</span>
-              <input
-                type="range"
-                min="20"
-                max="80"
-                step="5"
-                v-model.number="faceThreshold"
-                class="threshold-slider"
-                @change="handleThresholdChange"
-              />
-              <span class="slider-endpoint">宽松</span>
-            </div>
-            <div class="hint-box">
-              <span class="hint-label">说明</span>
-              <span class="hint-value">{{
-                faceThreshold <= 30 ? '严格模式：仅非常相似的面孔会被合并，可能产生多个人物条目' :
-                faceThreshold >= 70 ? '宽松模式：相似面孔容易合并，可能误合不同人' :
-                '均衡模式：推荐设置，平衡准确度和聚合效果'
-              }}</span>
+              <div v-for="u in users" :key="u.id" class="table-row">
+                <span class="cell-username">{{ u.username }}</span>
+                <span>{{ u.nickname || '-' }}</span>
+                <span><span class="role-badge" :class="u.role.toLowerCase()">{{ u.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></span>
+                <span><span class="status-badge" :class="u.enabled ? 'enabled' : 'disabled'">{{ u.enabled ? '启用' : '禁用' }}</span></span>
+                <span class="cell-date">{{ formatDate(u.createdAt) }}</span>
+                <span class="cell-date">{{ formatDate(u.lastLoginAt) }}</span>
+                <span class="cell-actions">
+                  <button class="action-link" @click="resetPassword(u.id)">重置密码</button>
+                  <button class="action-link" @click="toggleEnabled(u.id)">{{ u.enabled ? '禁用' : '启用' }}</button>
+                  <button class="action-link danger" @click="deleteUser(u.id, u.username)">删除</button>
+                </span>
+              </div>
+              <div v-if="users.length === 0" class="empty-text">暂无用户</div>
             </div>
           </div>
+        </div>
 
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">搜索相似度阈值</span>
-                <span class="label-desc">控制语义搜索结果的相似度要求</span>
-              </div>
-              <span class="threshold-badge">{{ (searchThreshold / 100).toFixed(2) }}</span>
-            </div>
-            <div class="slider-row">
-              <span class="slider-endpoint">严格</span>
-              <input
-                type="range"
-                min="20"
-                max="80"
-                step="5"
-                v-model.number="searchThreshold"
-                class="threshold-slider"
-                @change="handleSearchThresholdChange"
-              />
-              <span class="slider-endpoint">宽松</span>
-            </div>
-            <div class="hint-box">
-              <span class="hint-label">说明</span>
-              <span class="hint-value">{{
-                searchThreshold <= 40 ? '严格模式：仅高相似度结果，精确但可能遗漏' :
-                searchThreshold >= 70 ? '宽松模式：更多结果，可能包含不太相关的内容' :
-                '均衡模式：推荐设置，平衡精确度和召回率'
-              }}</span>
+        <!-- ====== 扫描文件夹 ====== -->
+        <div v-if="activeSection === 'folders'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">扫描文件夹</h2>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-primary" @click="showFolderDialog = true">+ 添加目录</button>
+              <button class="btn-secondary" @click="scanAll">扫描全部</button>
             </div>
           </div>
+          <div v-for="f in folders" :key="f.id" class="panel-card folder-card">
+            <div class="folder-header">
+              <div>
+                <strong>{{ f.name }}</strong>
+                <span class="folder-status" :class="f.scanStatus.toLowerCase()">{{ f.scanStatus }}</span>
+              </div>
+              <div class="folder-actions">
+                <button class="action-link" @click="toggleFolderEnabled(f.id)">{{ f.enabled ? '禁用' : '启用' }}</button>
+                <button class="action-link" @click="toggleFolderHidden(f.id)">{{ f.hidden ? '显示' : '隐藏' }}</button>
+                <button class="action-link" @click="scanFolder(f.id)">扫描</button>
+                <button class="action-link danger" @click="deleteFolder(f.id, f.name)">删除</button>
+              </div>
+            </div>
+            <div class="folder-info-grid">
+              <div><span class="info-label">路径</span><code>{{ f.path }}</code></div>
+              <div><span class="info-label">照片数</span><span>{{ f.photoCount }}</span></div>
+              <div><span class="info-label">启用</span><span>{{ f.enabled ? '是' : '否' }}</span></div>
+              <div><span class="info-label">隐藏</span><span>{{ f.hidden ? '是' : '否' }}</span></div>
+              <div><span class="info-label">上次扫描</span><span>{{ formatDate(f.lastScanAt) }}</span></div>
+            </div>
+            <div v-if="f.scanStatus === 'SCANNING'" class="scan-progress-bar">
+              <div class="progress-fill" :style="{ width: f.scanProgress + '%' }"></div>
+            </div>
+            <div v-if="f.errorMessage" class="folder-error">{{ f.errorMessage }}</div>
+          </div>
+          <div v-if="folders.length === 0" class="empty-text">暂无扫描文件夹，请添加 NAS 目录</div>
         </div>
 
         <!-- ====== 模型管理 ====== -->
         <div v-if="activeSection === 'models'" class="content-panel">
-          <h2 class="panel-title">本地模型管理</h2>
-
+          <h2 class="panel-title">模型管理</h2>
           <div class="panel-card model-root-card">
             <div class="model-root-info">
-              <span class="label-text">NAS 挂载根目录</span>
+              <span class="label-text">模型根目录</span>
               <code class="model-root-path">{{ modelRoot }}</code>
             </div>
-            <span class="offline-badge">仅本地 · 禁止联网下载</span>
           </div>
 
-          <div v-if="modelLoading && !models.length" class="empty-state">正在读取模型状态…</div>
+          <!-- Tab switcher -->
+          <div class="model-tab-bar">
+            <button class="model-tab" :class="{ active: modelViewMode === 'local' }" @click="modelViewMode = 'local'">本地模型</button>
+            <button class="model-tab" :class="{ active: modelViewMode === 'online' }" @click="modelViewMode = 'online'">在线下载</button>
+            <button class="model-tab" :class="{ active: modelViewMode === 'downloads' }" @click="modelViewMode = 'downloads'">
+              下载任务
+              <span v-if="downloadTasks.length > 0" class="tab-count-badge">{{ downloadTasks.length }}</span>
+            </button>
+          </div>
 
-          <div v-for="model in models" :key="model.name" class="panel-card model-card">
-            <div class="model-card-top">
-              <div class="model-name-row">
-                <strong>{{ modelLabels[model.name] }}</strong>
-                <span class="model-state" :class="{ loaded: model.loaded, error: model.error }">
-                  {{ model.loaded ? '● 已加载' : model.error ? '● 加载失败' : model.exists ? '● 未加载' : '● 文件不存在' }}
+          <!-- Local Models Tab -->
+          <div v-if="modelViewMode === 'local'">
+            <div v-for="item in modelCatalog" :key="item.key" class="panel-card model-type-card">
+              <div class="model-type-header">
+                <div class="model-type-info">
+                  <strong>{{ item.label }}</strong>
+                  <span class="model-default-name">{{ item.defaultModel }}</span>
+                </div>
+                <span class="model-type-status" :class="getModelStatusClass(item.key)">{{ getModelStatusText(item.key) }}</span>
+              </div>
+              <!-- Local path config for AI-service-supported models -->
+              <template v-if="typeToAiName[item.key]">
+                <div v-for="model in models.filter(m => m.name === typeToAiName[item.key])" :key="model.name" class="model-local-config">
+                  <label class="model-toggle">
+                    <input v-model="model.enabled" type="checkbox" /> 启用
+                  </label>
+                  <div class="model-path-row">
+                    <input v-model.trim="model.path" class="model-path-input" placeholder="模型文件路径" />
+                  </div>
+                  <div class="model-meta-row">
+                    <span v-if="model.loaded" class="model-meta-tag ok">已加载</span>
+                    <span v-else-if="model.exists" class="model-meta-tag">文件存在</span>
+                    <span v-else class="model-meta-tag warn">文件不存在</span>
+                    <span v-if="model.error" class="model-meta-tag err">{{ model.error }}</span>
+                  </div>
+                  <div class="model-actions">
+                    <button class="btn-primary" :disabled="modelLoading" @click="saveModel(model)">保存并加载</button>
+                    <button class="btn-secondary" :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</button>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="model-not-supported-hint">
+                <span class="info-label">此模型类型尚未集成到 AI 服务</span>
+                <button class="btn-secondary" @click="modelViewMode = 'online'">前往在线下载</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Online Catalog Tab -->
+          <div v-if="modelViewMode === 'online'">
+            <div class="online-models-grid">
+              <div v-for="om in onlineModels" :key="om.id" class="panel-card online-model-card">
+                <div class="online-model-top">
+                  <div class="online-model-name-row">
+                    <strong>{{ om.name }}</strong>
+                    <span class="online-model-type-tag">{{ om.typeLabel }}</span>
+                  </div>
+                  <span v-if="isModelDownloaded(om.id)" class="model-type-status installed">已下载</span>
+                </div>
+                <div class="online-model-meta">
+                  <div><span class="info-label">版本</span><span>v{{ om.version }}</span></div>
+                  <div><span class="info-label">大小</span><span>{{ formatSize(om.size) }}</span></div>
+                  <div><span class="info-label">设备</span><span>{{ om.device }}</span></div>
+                  <div><span class="info-label">精度</span><span>{{ om.precision }}</span></div>
+                  <div><span class="info-label">性能</span><span>{{ om.performance }}</span></div>
+                  <div><span class="info-label">来源</span><span class="source-text">{{ om.source }}</span></div>
+                </div>
+                <!-- Active download progress -->
+                <div v-if="getActiveDownloadForModel(om.id)" class="online-download-progress">
+                  <div class="download-progress-bar">
+                    <div class="progress-fill" :style="{ width: getActiveDownloadForModel(om.id)!.progress + '%' }"></div>
+                  </div>
+                  <div class="download-progress-meta">
+                    <span>{{ getActiveDownloadForModel(om.id)!.progress }}%</span>
+                    <span>{{ formatSize(getActiveDownloadForModel(om.id)!.downloadedSize) }} / {{ formatSize(getActiveDownloadForModel(om.id)!.totalSize) }}</span>
+                  </div>
+                  <div class="download-progress-actions">
+                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'DOWNLOADING' || getActiveDownloadForModel(om.id)!.status === 'PENDING'" class="action-link" @click="pauseDownload(getActiveDownloadForModel(om.id)!.taskId)">暂停</button>
+                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'PAUSED'" class="action-link" @click="resumeDownload(getActiveDownloadForModel(om.id)!.taskId)">继续</button>
+                    <button class="action-link danger" @click="cancelDownload(getActiveDownloadForModel(om.id)!.taskId)">取消</button>
+                  </div>
+                </div>
+                <!-- Download button -->
+                <div v-else class="online-model-actions">
+                  <button v-if="!isModelDownloaded(om.id)" class="btn-primary" @click="startDownload(om)">下载</button>
+                  <button v-else class="btn-secondary" disabled>已下载</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Download Tasks Tab -->
+          <div v-if="modelViewMode === 'downloads'">
+            <div v-if="downloadTasks.length === 0" class="empty-text">暂无下载任务</div>
+            <div v-for="task in downloadTasks" :key="task.taskId" class="panel-card download-task-card">
+              <div class="download-task-header">
+                <div>
+                  <strong>{{ task.modelName }}</strong>
+                  <span class="download-task-type">{{ modelTypeLabels[task.typeKey] || task.typeKey }}</span>
+                </div>
+                <span class="download-status-badge" :class="getDownloadStatusClass(task.status)">{{ getDownloadStatusText(task.status) }}</span>
+              </div>
+              <div class="download-progress-bar">
+                <div class="progress-fill" :style="{ width: task.progress + '%' }"></div>
+              </div>
+              <div class="download-task-meta">
+                <span>{{ task.progress }}%</span>
+                <span>{{ formatSize(task.downloadedSize) }} / {{ formatSize(task.totalSize) }}</span>
+                <span v-if="task.status === 'DOWNLOADING'">{{ formatDownloadSpeed(task) }}</span>
+                <span v-if="task.status === 'DOWNLOADING'">剩余 {{ formatEta(task) }}</span>
+              </div>
+              <div v-if="task.errorMessage" class="download-error-msg">{{ task.errorMessage }}</div>
+              <div class="download-task-actions">
+                <button v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="action-link" @click="pauseDownload(task.taskId)">暂停</button>
+                <button v-if="task.status === 'PAUSED'" class="action-link" @click="resumeDownload(task.taskId)">继续</button>
+                <button v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="action-link" @click="retryDownload(task.taskId)">重试</button>
+                <button v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="action-link danger" @click="cancelDownload(task.taskId)">取消</button>
+                <button v-if="task.status === 'COMPLETED'" class="action-link" @click="setCurrentModel(task.taskId)">设为当前模型</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 标签管理 ====== -->
+        <div v-if="activeSection === 'tags'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">标签管理</h2>
+            <button class="btn-primary" @click="showTagDialog = true">+ 新建标签</button>
+          </div>
+          <div class="panel-card">
+            <input v-model="tagSearchQuery" class="dialog-input tag-search-input" placeholder="搜索标签..." />
+            <div v-for="t in tags.filter(tg => !tagSearchQuery || tg.name.toLowerCase().includes(tagSearchQuery.toLowerCase()))" :key="t.id" class="tag-row">
+              <div class="tag-color-dot" :style="{ background: t.color || '#0a84ff' }"></div>
+              <span class="tag-name">{{ t.name }}</span>
+              <span v-if="t.description" class="tag-desc-text">{{ t.description }}</span>
+              <span class="tag-photo-count">{{ t.photoCount }} 张</span>
+              <div class="tag-color-picker">
+                <button
+                  v-for="c in presetColors"
+                  :key="c"
+                  class="color-swatch"
+                  :class="{ active: t.color === c }"
+                  :style="{ background: c }"
+                  @click="updateTagColor(t, c)"
+                ></button>
+              </div>
+              <button class="action-link" @click="openEditTagDialog(t)">编辑</button>
+              <button class="action-link danger" @click="deleteTag(t.id, t.name, t.photoCount)">删除</button>
+            </div>
+            <div v-if="tags.length === 0" class="empty-text">暂无标签</div>
+          </div>
+        </div>
+
+        <!-- ====== 照片与视频 ====== -->
+        <div v-if="activeSection === 'photos'" class="content-panel">
+          <h2 class="panel-title">照片与视频</h2>
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">AI 设置</span>
+                <span class="label-desc">人物聚合与搜索相似度阈值</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">人物聚合阈值</span>
+                <span class="label-desc">控制同一人物的合并灵敏度</span>
+              </div>
+              <span class="threshold-badge">{{ (faceThreshold / 100).toFixed(2) }}</span>
+            </div>
+            <div class="slider-row">
+              <input type="range" min="20" max="80" step="5" v-model.number="faceThreshold" class="threshold-slider" @change="handleThresholdChange" />
+            </div>
+          </div>
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">搜索相似度阈值</span>
+                <span class="label-desc">控制语义搜索结果相似度要求</span>
+              </div>
+              <span class="threshold-badge">{{ (searchThreshold / 100).toFixed(2) }}</span>
+            </div>
+            <div class="slider-row">
+              <input type="range" min="20" max="80" step="5" v-model.number="searchThreshold" class="threshold-slider" @change="handleSearchThresholdChange" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 时间线设置 ====== -->
+        <div v-if="activeSection === 'timeline'" class="content-panel">
+          <h2 class="panel-title">时间线设置</h2>
+          <div class="panel-card">
+            <div class="setting-info">
+              <span class="label-text">时间线说明</span>
+              <span class="label-desc">时间线页面只展示已添加到时间线的照片。在照片详情页或批量操作中可将照片添加到时间线。</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 任务与日志 ====== -->
+        <div v-if="activeSection === 'tasks'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">任务与日志</h2>
+            <button class="btn-secondary" @click="loadTasks()">刷新</button>
+          </div>
+          <!-- Filter tabs -->
+          <div class="task-filter-bar">
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="taskFilter = 'all'">全部</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="taskFilter = 'running'">运行中</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'completed' }" @click="taskFilter = 'completed'">已完成</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="taskFilter = 'failed'">失败</button>
+          </div>
+          <div v-if="filteredTasks.length === 0" class="empty-text">暂无任务记录</div>
+          <div v-for="t in filteredTasks" :key="t.id" class="panel-card task-log-card">
+            <div class="task-log-header">
+              <div class="task-log-info">
+                <strong>{{ getTaskTypeText(t.type) }}</strong>
+                <span class="task-log-id">#{{ t.id }}</span>
+              </div>
+              <span class="task-log-status" :class="getTaskStatusClass(t.status)">{{ getTaskStatusText(t.status) }}</span>
+            </div>
+            <div v-if="t.status === 'RUNNING' || t.status === 'PENDING'" class="download-progress-bar">
+              <div class="progress-fill" :style="{ width: t.progress + '%' }"></div>
+            </div>
+            <div class="task-log-meta">
+              <span v-if="t.progress > 0">进度: {{ t.progress }}%</span>
+              <span>创建: {{ formatDate(t.createdAt) }}</span>
+              <span v-if="t.finishedAt">完成: {{ formatDate(t.finishedAt) }}</span>
+            </div>
+            <div v-if="t.resultJson" class="task-log-result">{{ t.resultJson }}</div>
+          </div>
+        </div>
+
+        <!-- ====== 存储管理 ====== -->
+        <div v-if="activeSection === 'storage'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">存储管理</h2>
+            <button class="btn-secondary" @click="loadStorageInfo()">刷新</button>
+          </div>
+          <!-- Storage breakdown -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 14px;">
+              <span class="label-text">存储占用</span>
+              <span class="label-desc">照片、缩略图和模型文件的存储分布</span>
+            </div>
+            <div class="storage-breakdown">
+              <div class="storage-item">
+                <span class="storage-label">照片文件</span>
+                <span class="storage-value">{{ formatSize(storageInfo.photosSize as number || 0) }}</span>
+              </div>
+              <div class="storage-item">
+                <span class="storage-label">缩略图</span>
+                <span class="storage-value">{{ formatSize(storageInfo.thumbsSize as number || 0) }}</span>
+              </div>
+              <div class="storage-item">
+                <span class="storage-label">模型文件</span>
+                <span class="storage-value">{{ formatSize(storageInfo.modelsSize as number || 0) }}</span>
+              </div>
+              <div class="storage-item total">
+                <span class="storage-label">总占用</span>
+                <span class="storage-value">{{ formatSize(storageInfo.totalStorageSize as number || 0) }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Disk space -->
+          <div v-if="storageInfo.diskTotalSpace" class="panel-card">
+            <div class="setting-row" style="margin-bottom: 12px;">
+              <div class="setting-info">
+                <span class="label-text">磁盘空间</span>
+                <span class="label-desc">数据存储所在磁盘的可用空间</span>
+              </div>
+            </div>
+            <div class="disk-usage-bar">
+              <div class="disk-used" :style="{ width: ((1 - (storageInfo.diskFreeSpace as number / storageInfo.diskTotalSpace as number)) * 100).toFixed(1) + '%' }"></div>
+            </div>
+            <div class="disk-usage-meta">
+              <span>已用: {{ formatSize((storageInfo.diskTotalSpace as number - storageInfo.diskFreeSpace as number)) }}</span>
+              <span>可用: {{ formatSize(storageInfo.diskFreeSpace as number) }}</span>
+              <span>总计: {{ formatSize(storageInfo.diskTotalSpace as number) }}</span>
+            </div>
+          </div>
+          <!-- Directory paths -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">存储路径</span>
+            </div>
+            <div class="storage-path-list">
+              <div class="storage-path-item">
+                <span class="info-label">照片目录</span>
+                <code>{{ storageInfo.photosDir }}</code>
+              </div>
+              <div class="storage-path-item">
+                <span class="info-label">缩略图目录</span>
+                <code>{{ storageInfo.thumbsDir }}</code>
+              </div>
+              <div class="storage-path-item">
+                <span class="info-label">模型目录</span>
+                <code>{{ storageInfo.modelDir }}</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 系统信息 ====== -->
+        <div v-if="activeSection === 'system'" class="content-panel">
+          <div class="panel-header-row">
+            <h2 class="panel-title">系统信息</h2>
+            <button class="btn-secondary" @click="loadSystemInfo()">刷新</button>
+          </div>
+          <!-- App info -->
+          <div class="panel-card">
+            <div class="info-grid">
+              <div class="info-item"><span class="info-label">应用版本</span><span>{{ systemInfo.appName }} {{ systemInfo.appVersion }}</span></div>
+              <div class="info-item"><span class="info-label">操作系统</span><span>{{ systemInfo.osName }} {{ systemInfo.osVersion }} ({{ systemInfo.osArch }})</span></div>
+              <div class="info-item"><span class="info-label">Java 版本</span><span>{{ systemInfo.javaVersion }}</span></div>
+              <div class="info-item"><span class="info-label">CPU 核心</span><span>{{ systemInfo.availableProcessors }} 核</span></div>
+            </div>
+          </div>
+          <!-- Memory -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">JVM 内存</span>
+            </div>
+            <div class="disk-usage-bar">
+              <div class="disk-used" :style="{ width: ((systemInfo.jvmUsedMemory as number / systemInfo.jvmMaxMemory as number) * 100).toFixed(1) + '%' }"></div>
+            </div>
+            <div class="disk-usage-meta">
+              <span>已用: {{ formatSize(systemInfo.jvmUsedMemory as number || 0) }}</span>
+              <span>已分配: {{ formatSize(systemInfo.jvmTotalMemory as number || 0) }}</span>
+              <span>最大: {{ formatSize(systemInfo.jvmMaxMemory as number || 0) }}</span>
+            </div>
+          </div>
+          <!-- Database -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">数据库</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-item"><span class="info-label">类型</span><span>{{ systemInfo.databaseType }}</span></div>
+              <div class="info-item"><span class="info-label">连接地址</span><code style="font-size: 12px;">{{ systemInfo.databaseUrl }}</code></div>
+            </div>
+          </div>
+          <!-- Data statistics -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">数据统计</span>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-item"><span class="stat-value">{{ systemInfo.photoCount }}</span><span class="stat-label">照片</span></div>
+              <div class="stat-item"><span class="stat-value">{{ systemInfo.folderCount }}</span><span class="stat-label">扫描目录</span></div>
+              <div class="stat-item"><span class="stat-value">{{ systemInfo.tagCount }}</span><span class="stat-label">标签</span></div>
+              <div class="stat-item"><span class="stat-value">{{ systemInfo.personCount }}</span><span class="stat-label">人物</span></div>
+            </div>
+          </div>
+          <!-- AI Service -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">AI 服务</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">状态</span>
+                <span class="ai-status-badge" :class="systemInfo.aiServiceStatus === 'healthy' ? 'healthy' : 'offline'">
+                  {{ systemInfo.aiServiceStatus === 'healthy' ? '● 在线' : '● 离线' }}
                 </span>
               </div>
-              <label class="model-toggle">
-                <input v-model="model.enabled" type="checkbox" /> 启用
-              </label>
-            </div>
-            <div class="model-path-row">
-              <input v-model.trim="model.path" class="model-path-input" placeholder="相对于模型根目录的路径" />
-              <button class="btn-secondary" @click="openBrowser(model)">选择</button>
-            </div>
-            <p v-if="model.error" class="model-error">{{ model.error }}</p>
-            <div class="model-actions">
-              <button class="btn-primary" :disabled="modelLoading" @click="saveModel(model)">保存并加载</button>
-              <button class="btn-secondary" :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</button>
-            </div>
-          </div>
-
-          <div class="panel-card upload-panel">
-            <div class="setting-info">
-              <span class="label-text">上传到模型仓库</span>
-              <span class="label-desc">支持多文件；大型目录模型可分批上传到同一目标目录</span>
-            </div>
-            <div class="upload-row">
-              <input v-model.trim="uploadDirectory" class="model-path-input" placeholder="目标目录，如 blip2" />
-              <label class="btn-primary file-button">
-                {{ uploading ? '上传中…' : '选择文件并上传' }}
-                <input type="file" multiple :disabled="uploading" @change="handleModelUpload" />
-              </label>
+              <div class="info-item"><span class="info-label">服务地址</span><code style="font-size: 12px;">{{ systemInfo.aiServiceUrl }}</code></div>
+              <div v-if="systemInfo.aiServiceError" class="info-item"><span class="info-label">错误</span><span style="color: var(--danger); font-size: 12px;">{{ systemInfo.aiServiceError }}</span></div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 模型浏览器弹窗 -->
-    <div v-if="browserModel" class="browser-overlay" @click.self="browserModel = null">
-      <div class="browser-dialog">
-        <div class="browser-header">
-          <strong>选择 {{ modelLabels[browserModel] }}</strong>
-          <button class="close-btn" @click="browserModel = null">×</button>
+    <!-- User dialog -->
+    <div v-if="showUserDialog" class="dialog-overlay" @click.self="showUserDialog = false">
+      <div class="dialog-card">
+        <h3>新增用户</h3>
+        <div class="dialog-body">
+          <input v-model="newUser.username" class="dialog-input" placeholder="用户名" />
+          <input v-model="newUser.password" type="password" class="dialog-input" placeholder="密码" />
+          <input v-model="newUser.nickname" class="dialog-input" placeholder="昵称（可选）" />
+          <select v-model="newUser.role" class="dialog-input">
+            <option value="USER">普通用户</option>
+            <option value="ADMIN">管理员</option>
+          </select>
         </div>
-        <div class="browser-path"><code>/models/{{ browserDirectory }}</code></div>
-        <div class="browser-toolbar">
-          <button class="btn-secondary" :disabled="!browserDirectory" @click="goParentDirectory">上一级</button>
-          <button v-if="browserModel === 'insightface' || browserModel === 'blip'" class="btn-primary" @click="selectBrowserPath(browserDirectory)">选择当前目录</button>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="showUserDialog = false">取消</button>
+          <button class="btn-primary" @click="createUser">创建</button>
         </div>
-        <div class="browser-list">
-          <button v-for="file in browserFiles" :key="file.path" class="browser-entry" @dblclick="file.directory ? browseDirectory(file.path) : selectBrowserPath(file.path)">
-            <span class="entry-name" @click="file.directory ? browseDirectory(file.path) : selectBrowserPath(file.path)">{{ file.directory ? '📁' : '📄' }} {{ file.name }}</span>
-            <span>{{ formatSize(file.size) }}</span>
-          </button>
-          <div v-if="!browserFiles.length" class="empty-state">此目录为空</div>
+      </div>
+    </div>
+
+    <!-- Tag dialog -->
+    <div v-if="showTagDialog" class="dialog-overlay" @click.self="showTagDialog = false">
+      <div class="dialog-card">
+        <h3>新建标签</h3>
+        <div class="dialog-body">
+          <input v-model="newTag.name" class="dialog-input" placeholder="标签名称" />
+          <textarea v-model="newTag.description" class="dialog-input" placeholder="描述（可选）" rows="2"></textarea>
+          <div class="color-picker-row">
+            <span class="color-label">颜色：</span>
+            <button
+              v-for="c in presetColors"
+              :key="c"
+              class="color-swatch"
+              :class="{ active: newTag.color === c }"
+              :style="{ background: c }"
+              @click="newTag.color = c"
+            ></button>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="showTagDialog = false">取消</button>
+          <button class="btn-primary" @click="createTag">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Folder dialog -->
+    <div v-if="showFolderDialog" class="dialog-overlay" @click.self="showFolderDialog = false">
+      <div class="dialog-card">
+        <h3>添加扫描目录</h3>
+        <div class="dialog-body">
+          <input v-model="newFolder.name" class="dialog-input" placeholder="文件夹名称" />
+          <input v-model="newFolder.path" class="dialog-input" placeholder="NAS 目录完整路径（如 /mnt/photos）" />
+          <select v-model="newFolder.storageMode" class="dialog-input">
+            <option value="COPY">复制到本地存储</option>
+            <option value="LINK">仅链接（不复制）</option>
+          </select>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="showFolderDialog = false">取消</button>
+          <button class="btn-primary" @click="createFolder">添加</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit tag dialog -->
+    <div v-if="showEditTagDialog" class="dialog-overlay" @click.self="showEditTagDialog = false">
+      <div class="dialog-card">
+        <h3>编辑标签</h3>
+        <div class="dialog-body">
+          <input v-model="editTagData.name" class="dialog-input" placeholder="标签名称" />
+          <textarea v-model="editTagData.description" class="dialog-input" placeholder="描述（可选）" rows="2"></textarea>
+          <div class="color-picker-row">
+            <span class="color-label">颜色：</span>
+            <button
+              v-for="c in presetColors"
+              :key="c"
+              class="color-swatch"
+              :class="{ active: editTagData.color === c }"
+              :style="{ background: c }"
+              @click="editTagData.color = c"
+            ></button>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-secondary" @click="showEditTagDialog = false">取消</button>
+          <button class="btn-primary" @click="saveEditedTag">保存</button>
         </div>
       </div>
     </div>
@@ -400,7 +1299,6 @@ async function handleSearchThresholdChange() {
   min-height: 0;
 }
 
-/* ===== 顶栏 ===== */
 .settings-header {
   display: flex;
   align-items: center;
@@ -422,20 +1320,18 @@ async function handleSearchThresholdChange() {
   font-weight: 600;
 }
 
-/* ===== 主体布局：左导航 + 右内容 ===== */
+/* Body - no divider line, use spacing and background */
 .settings-body {
   display: flex;
   flex: 1;
   min-height: 0;
-  gap: 1px;
-  background: var(--separator);
+  gap: 16px;
 }
 
-/* ===== 左侧导航 ===== */
+/* Left nav */
 .settings-nav {
   width: 200px;
   flex-shrink: 0;
-  background: var(--bg-primary);
   padding: 8px;
   display: flex;
   flex-direction: column;
@@ -467,25 +1363,19 @@ async function handleSearchThresholdChange() {
   color: #ffffff;
 }
 
-.nav-icon {
-  flex-shrink: 0;
-}
+.nav-icon { flex-shrink: 0; }
+.nav-label { white-space: nowrap; }
 
-.nav-label {
-  white-space: nowrap;
-}
-
-/* ===== 右侧内容区 ===== */
+/* Right content */
 .settings-content {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  background: var(--bg-primary);
-  padding: 20px 24px;
+  padding: 8px 24px 24px;
 }
 
 .content-panel {
-  max-width: 720px;
+  max-width: 800px;
 }
 
 .panel-title {
@@ -495,7 +1385,18 @@ async function handleSearchThresholdChange() {
   color: var(--text-primary);
 }
 
-/* ===== 设置卡片 ===== */
+.panel-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.panel-header-row .panel-title {
+  margin-bottom: 0;
+}
+
+/* Cards */
 .panel-card {
   background: var(--bg-secondary);
   border-radius: var(--radius-md);
@@ -536,37 +1437,9 @@ async function handleSearchThresholdChange() {
   color: var(--text-primary);
   font-size: 14px;
   min-width: 160px;
-  cursor: pointer;
 }
 
-/* ===== 提示框 ===== */
-.hint-box {
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: var(--bg-tertiary);
-  border-radius: 8px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hint-label {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.hint-value {
-  color: var(--text-primary);
-}
-
-.hint-code {
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-
-/* ===== 主题选择卡片 ===== */
+/* Theme cards */
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -587,37 +1460,62 @@ async function handleSearchThresholdChange() {
   transition: all 0.2s;
 }
 
-.theme-card:hover {
-  border-color: var(--accent);
+.theme-card:hover { border-color: var(--accent); }
+.theme-card.active { border-color: var(--accent); background: rgba(10, 132, 255, 0.08); }
+.theme-icon-lg { font-size: 28px; }
+.theme-name-lg { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.theme-desc { font-size: 11px; color: var(--text-secondary); text-align: center; line-height: 1.4; }
+.theme-card.active .theme-name-lg { color: var(--accent); }
+
+/* Dock config */
+.dock-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
 }
 
-.theme-card.active {
-  border-color: var(--accent);
-  background: rgba(10, 132, 255, 0.08);
+.dock-config-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.theme-icon-lg {
-  font-size: 28px;
-}
-
-.theme-name-lg {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.theme-desc {
-  font-size: 11px;
+.dock-config-item label {
+  width: 100px;
+  font-size: 13px;
   color: var(--text-secondary);
-  text-align: center;
-  line-height: 1.4;
+  flex-shrink: 0;
 }
 
-.theme-card.active .theme-name-lg {
-  color: var(--accent);
+.config-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  outline: none;
 }
 
-/* ===== 滑块 ===== */
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.config-value {
+  width: 50px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Sliders */
 .slider-row {
   display: flex;
   align-items: center;
@@ -629,39 +1527,18 @@ async function handleSearchThresholdChange() {
   flex: 1;
   height: 4px;
   -webkit-appearance: none;
-  appearance: none;
   background: var(--bg-tertiary);
   border-radius: 2px;
   outline: none;
-  cursor: pointer;
 }
 
 .threshold-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  appearance: none;
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  border: 2px solid var(--bg-primary);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.threshold-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  cursor: pointer;
-  border: 2px solid var(--bg-primary);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.slider-endpoint {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
 }
 
 .threshold-badge {
@@ -675,20 +1552,146 @@ async function handleSearchThresholdChange() {
   border-radius: 8px;
 }
 
-/* ===== 模型管理 ===== */
+/* Buttons */
+.btn-primary, .btn-secondary {
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.btn-primary { color: white; background: var(--accent); }
+.btn-secondary { color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--separator); }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* User table */
+.user-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.table-header, .table-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 0.8fr 0.7fr 1.2fr 1.2fr 1.5fr;
+  gap: 8px;
+  padding: 10px 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.table-header {
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--separator);
+}
+
+.table-row {
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.role-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.role-badge.admin { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+.role-badge.user { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.status-badge.enabled { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.status-badge.disabled { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+
+.cell-date { font-size: 12px; color: var(--text-secondary); }
+.cell-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.action-link {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action-link.danger { color: var(--danger); }
+
+/* Folder cards */
+.folder-card { margin-bottom: 12px; }
+
+.folder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.folder-actions { display: flex; gap: 8px; }
+
+.folder-status {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.folder-status.idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+.folder-status.scanning { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+.folder-status.completed { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.folder-status.error { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+
+.folder-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.folder-info-grid .info-label {
+  color: var(--text-tertiary);
+  margin-right: 8px;
+}
+
+.folder-info-grid code {
+  font-size: 12px;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.scan-progress-bar {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.folder-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* Model cards */
 .model-root-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-}
-
-.model-root-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 .model-root-path {
@@ -700,21 +1703,10 @@ async function handleSearchThresholdChange() {
   border-radius: 6px;
 }
 
-.offline-badge {
-  font-size: 12px;
-  color: var(--success);
-  white-space: nowrap;
-}
-
-.model-card {
-  /* inherits panel-card */
-}
-
 .model-card-top {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
 }
 
@@ -722,40 +1714,14 @@ async function handleSearchThresholdChange() {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.model-state {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.model-state.loaded {
-  color: var(--success);
-}
-
-.model-state.error {
-  color: var(--danger);
-}
-
-.model-toggle {
-  white-space: nowrap;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.model-path-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.model-state { font-size: 12px; color: var(--text-tertiary); }
+.model-state.loaded { color: var(--success); }
+.model-state.error { color: var(--danger); }
 
 .model-path-input {
   flex: 1;
-  min-width: 0;
   padding: 9px 10px;
   border: 1px solid var(--separator);
   border-radius: 8px;
@@ -778,64 +1744,373 @@ async function handleSearchThresholdChange() {
   margin-top: 12px;
 }
 
-/* ===== 按钮 ===== */
-.btn-primary, .btn-secondary {
+/* Model Tab Bar */
+.model-tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.model-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
   border-radius: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
-  white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  color: var(--text-secondary);
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
 }
 
-.btn-primary {
-  color: white;
+.model-tab.active {
+  background: var(--bg-secondary);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tab-count-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
   background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 4px;
 }
 
-.btn-secondary {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--separator);
+/* Model Type Card (Local tab) */
+.model-type-card {
+  margin-bottom: 12px;
 }
 
-.btn-primary:disabled, .btn-secondary:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-.btn-primary:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-/* ===== 上传 ===== */
-.upload-panel .setting-info {
+.model-type-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 10px;
 }
 
-.upload-row {
+.model-type-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-type-info strong {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.model-default-name {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.model-type-status {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.model-type-status.in-use { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.model-type-status.installed { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+.model-type-status.failed { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+.model-type-status.not-configured { background: var(--bg-tertiary); color: var(--text-tertiary); }
+.model-type-status.not-downloaded { background: rgba(255, 159, 10, 0.15); color: #ff9500; }
+
+.model-local-config {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.model-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.model-meta-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.model-meta-tag.ok { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.model-meta-tag.warn { background: rgba(255, 159, 10, 0.15); color: #ff9500; }
+.model-meta-tag.err { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+
+.model-not-supported-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+/* Online Models Grid */
+.online-models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.online-model-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.online-model-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.online-model-name-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.file-button {
-  position: relative;
+.online-model-name-row strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.online-model-type-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--accent);
+}
+
+.online-model-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.online-model-meta > div {
+  display: flex;
+  gap: 6px;
+}
+
+.online-model-meta .info-label {
+  flex-shrink: 0;
+}
+
+.source-text {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.online-model-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* Download Progress */
+.online-download-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.download-progress-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
   overflow: hidden;
-  display: inline-flex;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.download-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.download-progress-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Download Task Card */
+.download-task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.download-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.download-task-header strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.download-task-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.download-status-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.download-status-badge.downloading { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+.download-status-badge.paused { background: rgba(255, 159, 10, 0.15); color: #ff9500; }
+.download-status-badge.completed { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.download-status-badge.installed { background: rgba(48, 209, 88, 0.2); color: var(--success); }
+.download-status-badge.failed { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+.download-status-badge.cancelled { background: var(--bg-tertiary); color: var(--text-tertiary); }
+.download-status-badge.pending { background: rgba(255, 159, 10, 0.15); color: #ff9500; }
+
+.download-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.download-error-msg {
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(255, 69, 58, 0.08);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.download-task-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Tag management */
+.tag-row {
+  display: flex;
   align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--separator);
 }
 
-.file-button input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+.tag-row:last-child { border-bottom: none; }
+
+.tag-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tag-name {
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+}
+
+.tag-photo-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tag-desc-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  flex: 0 1 auto;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tag-search-input {
+  margin-bottom: 12px;
+}
+
+.tag-color-picker {
+  display: flex;
+  gap: 3px;
+}
+
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
   cursor: pointer;
+  transition: transform 0.1s;
 }
 
-/* ===== 模型浏览器弹窗 ===== */
-.browser-overlay {
+.color-swatch:hover { transform: scale(1.2); }
+.color-swatch.active { border-color: var(--text-primary); }
+
+/* Info grid */
+.info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.info-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Dialogs */
+.dialog-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
@@ -845,81 +2120,275 @@ async function handleSearchThresholdChange() {
   padding: 16px;
 }
 
-.browser-dialog {
-  width: min(620px, 100%);
-  max-height: 75vh;
-  overflow: hidden;
+.dialog-card {
+  width: min(420px, 100%);
   background: var(--bg-secondary);
   border-radius: 14px;
-  padding: 16px;
+  padding: 20px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.dialog-card h3 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+
+.dialog-body {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
-.browser-header {
+.dialog-input {
+  padding: 10px 12px;
+  border: 1px solid var(--separator);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.dialog-input:focus { border-color: var(--accent); }
+
+.color-picker-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 16px;
+  gap: 6px;
 }
 
-.close-btn {
-  font-size: 26px;
+.color-label {
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1;
 }
 
-.browser-path {
-  padding: 10px;
-  margin: 10px 0;
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.empty-text {
+  padding: 20px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Tasks & Logs */
+.task-filter-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.task-filter-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.task-filter-btn.active {
+  background: var(--bg-secondary);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.task-log-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-log-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-log-info strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.task-log-id {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.task-log-status {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.task-log-status.pending { background: rgba(255, 159, 10, 0.15); color: #ff9500; }
+.task-log-status.running { background: rgba(10, 132, 255, 0.15); color: var(--accent); }
+.task-log-status.completed { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.task-log-status.failed { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+
+.task-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.task-log-result {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+/* Storage Management */
+.storage-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.storage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
   background: var(--bg-tertiary);
   border-radius: 8px;
 }
 
-.browser-path code {
+.storage-item.total {
+  background: rgba(10, 132, 255, 0.08);
+  border: 1px solid rgba(10, 132, 255, 0.2);
+}
+
+.storage-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.storage-item.total .storage-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.storage-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.disk-usage-bar {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.disk-used {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.disk-usage-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.storage-path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.storage-path-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.storage-path-item .info-label {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.storage-path-item code {
+  font-size: 12px;
   color: var(--accent);
   word-break: break-all;
 }
 
-.browser-toolbar {
+/* System Info - Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 4px;
+  padding: 14px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
 }
 
-.browser-list {
-  max-height: 45vh;
-  overflow: auto;
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
 }
 
-.browser-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px;
-  border-bottom: 1px solid var(--separator);
-  color: var(--text-primary);
-  text-align: left;
-}
-
-.entry-name {
-  flex: 1;
-}
-
-.empty-state {
-  padding: 20px;
+.stat-label {
+  font-size: 12px;
   color: var(--text-secondary);
-  text-align: center;
 }
 
-/* ===== 响应式：小屏改为顶部横向导航 ===== */
-@media (max-width: 640px) {
-  .settings-body {
-    flex-direction: column;
-  }
+.ai-status-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.ai-status-badge.healthy { background: rgba(48, 209, 88, 0.15); color: var(--success); }
+.ai-status-badge.offline { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-body { flex-direction: column; gap: 0; }
 
   .settings-nav {
     width: 100%;
@@ -927,37 +2396,27 @@ async function handleSearchThresholdChange() {
     overflow-x: auto;
     padding: 8px 12px;
     gap: 4px;
-    border-bottom: 0.5px solid var(--separator);
   }
 
-  .nav-item {
-    flex-shrink: 0;
-    padding: 8px 14px;
+  .nav-item { flex-shrink: 0; padding: 8px 14px; }
+  .nav-item .nav-label { font-size: 13px; }
+
+  .settings-content { padding: 16px; }
+
+  .table-header, .table-row {
+    grid-template-columns: 1fr 1fr;
+    font-size: 12px;
   }
 
-  .nav-item .nav-label {
-    font-size: 13px;
-  }
-
-  .settings-content {
-    padding: 16px;
-  }
-
-  .theme-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .model-path-row, .upload-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .model-actions {
-    justify-content: stretch;
-  }
-
-  .model-actions button {
-    flex: 1;
+  .table-header span:nth-child(3),
+  .table-header span:nth-child(4),
+  .table-header span:nth-child(5),
+  .table-header span:nth-child(6),
+  .table-row span:nth-child(3),
+  .table-row span:nth-child(4),
+  .table-row span:nth-child(5),
+  .table-row span:nth-child(6) {
+    display: none;
   }
 }
 </style>

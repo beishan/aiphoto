@@ -24,6 +24,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.favorite = true ORDER BY p.id DESC")
     Page<Photo> findFavorites(Pageable pageable);
 
+    @Query("SELECT p FROM Photo p WHERE p.inTimeline = true AND p.exifDate IS NOT NULL ORDER BY p.exifDate DESC")
+    List<Photo> findTimelinePhotos();
+
     @Query("SELECT p FROM Photo p WHERE p.fileHashMd5 = :hash")
     Optional<Photo> findByFileHashMd5(@Param("hash") String hash);
 
@@ -33,7 +36,7 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query(value = "SELECT * FROM photos WHERE to_tsvector('simple', coalesce(note, '') || ' ' || coalesce(ai_caption, '')) @@ plainto_tsquery('simple', :query)", nativeQuery = true)
     Page<Photo> fullTextSearch(@Param("query") String query, Pageable pageable);
 
-    @Query(value = "SELECT EXTRACT(YEAR FROM exif_date) as year, EXTRACT(MONTH FROM exif_date) as month, COUNT(*) as count FROM photos WHERE exif_date IS NOT NULL GROUP BY year, month ORDER BY year DESC, month DESC", nativeQuery = true)
+    @Query(value = "SELECT EXTRACT(YEAR FROM exif_date) as year, EXTRACT(MONTH FROM exif_date) as month, COUNT(*) as count FROM photos WHERE exif_date IS NOT NULL AND in_timeline = true GROUP BY year, month ORDER BY year DESC, month DESC", nativeQuery = true)
     List<Object[]> getTimelineGrouped();
 
     @Query(value = "SELECT * FROM photos WHERE file_hash_phash IS NOT NULL", nativeQuery = true)
@@ -46,4 +49,7 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     Page<Photo> findBySourceFolderId(Long sourceFolderId, Pageable pageable);
 
     long countBySourceFolderId(Long sourceFolderId);
+
+    @Query("SELECT p FROM Photo p WHERE p.sourceFolderId IN :folderIds ORDER BY p.id DESC")
+    Page<Photo> findBySourceFolderIds(@Param("folderIds") List<Long> folderIds, Pageable pageable);
 }

@@ -64,6 +64,8 @@ public class Photo {
 
     private Boolean favorite = false;
 
+    private Boolean inTimeline = false;
+
     @Column(length = 255)
     private String originalFilename;
 

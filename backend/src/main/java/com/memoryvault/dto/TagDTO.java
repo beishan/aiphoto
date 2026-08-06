@@ -2,6 +2,8 @@ package com.memoryvault.dto;
 
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 public class TagDTO {
     private Long id;
@@ -9,6 +11,10 @@ public class TagDTO {
     private String color;
     private String type;
     private String category;
+    private String description;
+    private Integer sortOrder;
+    private Integer photoCount;
     private Double confidence;
     private String source;
+    private LocalDateTime createdAt;
 }

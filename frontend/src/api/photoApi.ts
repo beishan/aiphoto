@@ -56,6 +56,18 @@ export const photoApi = {
     return http.post<{ success: number; total: number }>('/photos/batch-rating', { ids, rating })
   },
 
+  batchTimeline(ids: number[], inTimeline: boolean) {
+    return http.post<{ success: number; total: number }>('/photos/batch-timeline', { ids, inTimeline })
+  },
+
+  batchNote(ids: number[], note: string) {
+    return http.post<{ success: number; total: number }>('/photos/batch-note', { ids, note })
+  },
+
+  toggleTimeline(id: number) {
+    return http.post<Photo>(`/photos/${id}/toggle-timeline`)
+  },
+
   favorites(page = 0, size = 20) {
     return http.get<PageResponse<Photo>>('/photos/favorites', { params: { page, size } })
   },
