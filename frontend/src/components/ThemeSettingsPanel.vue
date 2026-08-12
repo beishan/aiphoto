@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref, watch, type Ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus'
+import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
 import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
 import { useDockIconStore } from '@/stores/dockIconStore'
 import {
@@ -32,20 +33,20 @@ const accent = ref(getAccent(theme.value))
 const background = ref<BackgroundConfig>(getBackground(theme.value))
 const dock = ref<DockConfig>(loadDockConfig())
 
-const tabs: Array<{ id: TabId; label: string; icon: string }> = [
-  { id: 'style', label: '主题样式', icon: '◐' },
-  { id: 'color', label: '主题色', icon: '✦' },
-  { id: 'background', label: '背景与表面', icon: '▱' },
-  { id: 'dock', label: 'Dock 设置', icon: '⌘' },
+const tabs = [
+  { id: 'style' as const, label: '主题样式', icon: Monitor },
+  { id: 'color' as const, label: '主题色', icon: Brush },
+  { id: 'background' as const, label: '背景与表面', icon: Picture },
+  { id: 'dock' as const, label: 'Dock 设置', icon: Operation },
 ]
 const backgroundModeOptions = [
   { label: '纯色', value: 'solid' },
   { label: '渐变', value: 'gradient' },
 ]
 const dockIconStyleOptions = [
-  { label: '现代简洁', value: 'minimal' },
-  { label: 'macOS 26', value: 'macos26' },
-  { label: '自定义', value: 'custom' },
+  { label: '现代简洁', value: 'minimal' as const, description: '高对比矢量图形', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
+  { label: 'macOS 26', value: 'macos26' as const, description: '液态玻璃与彩色渐变', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
+  { label: '自定义', value: 'custom' as const, description: '完整显示自己上传的图片', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
 ]
 const customIconItems: Array<{ name: DockIconName; label: string }> = [
   { name: 'photo', label: '照片' }, { name: 'timeline', label: '时间线' },
@@ -213,10 +214,11 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
     <div class="theme-nav-row">
       <el-tabs v-model="activeTab" class="theme-tabs" stretch aria-label="主题风格设置">
         <el-tab-pane v-for="tab in tabs" :key="tab.id" :name="tab.id">
-          <template #label><span class="element-tab-label"><span>{{ tab.icon }}</span>{{ tab.label }}</span></template>
+          <template #label>
+            <span class="element-tab-label"><el-icon class="theme-tab-icon"><component :is="tab.icon" /></el-icon>{{ tab.label }}</span>
+          </template>
         </el-tab-pane>
       </el-tabs>
-      <span class="auto-save-status"><span>✓</span>修改后自动保存</span>
     </div>
 
     <section v-if="activeTab === 'style'" class="settings-section">
@@ -303,7 +305,32 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
       <div class="dock-layout">
         <div class="dock-stage"><i class="orb one"></i><i class="orb two"></i><div class="dock-preview" :style="dockPreviewStyle"><span v-for="(item,index) in customIconItems.slice(0,7)" :key="item.name" class="dock-preview-item" :class="[item.name,{ magnified:index===2,custom:dock.iconStyle==='custom' }]"><DockIcon :name="item.name" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls[item.name]" /></span><span class="dock-preview-item trash"><DockIcon name="trashFull" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls.trashFull" /></span></div><span class="preview-label">实时预览</span></div>
         <div class="dock-controls">
-          <div class="dock-icon-style"><div><b>图标风格</b><small>选择系统图标、macOS 26 图标或上传自己的图标。</small></div><el-segmented :model-value="dock.iconStyle" :options="dockIconStyleOptions" @change="updateDockIconStyle" /></div>
+          <section class="dock-icon-config">
+            <div class="dock-icon-config-copy"><b>图标风格</b><small>选择系统图标、macOS 26 图标或上传自己的图标。</small></div>
+            <div class="dock-icon-options">
+              <button
+                v-for="option in dockIconStyleOptions"
+                :key="option.value"
+                type="button"
+                class="dock-icon-option"
+                :class="{ active: dock.iconStyle === option.value }"
+                :aria-pressed="dock.iconStyle === option.value"
+                @click="updateDockIconStyle(option.value)"
+              >
+                <span class="dock-icon-option-preview">
+                  <DockIcon
+                    v-for="icon in option.previewIcons"
+                    :key="icon"
+                    :name="icon"
+                    :variant="option.value"
+                    :custom-src="option.value === 'custom' ? dockIconStore.iconUrls[icon] : undefined"
+                  />
+                </span>
+                <span class="dock-icon-option-text"><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
+                <span class="dock-icon-option-check">✓</span>
+              </button>
+            </div>
+          </section>
           <label class="range-control"><span><b>Dock 透明度</b><output>{{ Math.round(dock.opacity * 100) }}%</output></span><small>控制玻璃托盘底色的浓淡。</small><el-slider :model-value="dock.opacity" :min="0.3" :max="1" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('opacity', sliderValue(value))" /></label>
           <label class="range-control"><span><b>玻璃模糊</b><output>{{ dock.blurStrength }} px</output></span><small>调整背景折射的柔和程度。</small><el-slider :model-value="dock.blurStrength" :min="5" :max="40" :show-tooltip="false" @input="(value: number | number[]) => updateDock('blurStrength', sliderValue(value))" /></label>
           <label class="range-control"><span><b>图标大小</b><output>{{ dock.iconSize }} px</output></span><small>调整图标和玻璃托盘的整体尺寸。</small><el-slider :model-value="dock.iconSize" :min="16" :max="32" :show-tooltip="false" @input="(value: number | number[]) => updateDock('iconSize', sliderValue(value))" /></label>
@@ -345,4 +372,447 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
 .surface-color-grid label{display:grid;grid-template-columns:1fr;align-items:initial}.surface-color-grid label>.element-color-row{display:grid;grid-row:auto;grid-template-columns:34px minmax(0,1fr);gap:7px;color:var(--text-primary);font-family:var(--font-mono)}.element-color-row :deep(.el-color-picker__trigger){width:34px;height:32px;border-radius:9px}.element-color-row :deep(.el-input__wrapper){border-radius:9px}.element-color-row :deep(.el-input__inner){font-family:var(--font-mono);font-size:11px}.range-control :deep(.el-slider){height:24px}.range-control :deep(.el-slider__bar){background:var(--accent)}.range-control :deep(.el-slider__button){border-color:var(--accent)}
 .dock-preview-item :deep(.dock-glyph){width:58%;height:58%}.dock-preview-item.custom :deep(.dock-glyph){width:100%;height:100%}.dock-preview-item.tags{background:linear-gradient(145deg,#ff8dc7,#eb3d84 56%,#9e1c61)}.dock-preview-item.baby{background:linear-gradient(145deg,#67dfbd,#18a881 56%,#08715d)}.dock-preview-item.search{background:linear-gradient(145deg,#ab9cff,#655ee8 56%,#3b36a8)}.dock-preview-item.trash{background:linear-gradient(145deg,#edf1f4,#9aa8b4 56%,#53626f)}.dock-icon-style{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--separator)}.dock-icon-style>div{display:grid;gap:4px}.dock-icon-style b{color:var(--text-primary);font-size:12px}.dock-icon-style small{color:var(--text-tertiary);font-size:10px}.custom-icon-settings{margin-top:22px}.custom-icon-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.custom-icon-card{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:9px;padding:10px;border:1px solid var(--separator);border-radius:12px;background:var(--bg-card)}.custom-icon-card>strong{overflow:hidden;color:var(--text-primary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.custom-icon-image{display:grid;width:52px;height:52px;grid-row:span 2;place-items:center;overflow:hidden;border-radius:12px;background:var(--bg-tertiary);color:var(--text-primary)}.custom-icon-image img{width:100%;height:100%;object-fit:contain}.custom-icon-image :deep(.dock-glyph){width:55%;height:55%}.custom-icon-actions{display:flex;align-items:center;gap:4px}
 @media (max-width:760px){.theme-nav-row{flex-direction:column}.theme-tabs{grid-template-columns:repeat(2,1fr)}.auto-save-status{min-height:40px}.style-grid{grid-template-columns:1fr}.color-layout,.background-layout,.dock-layout{grid-template-columns:1fr}.live-preview,.dock-stage{min-height:300px}.background-presets{grid-template-columns:repeat(2,1fr)}}
+
+/* 与 aibook Theme Settings 保持同构的视觉规则 */
+.theme-settings {
+  width: 100%;
+  overflow: hidden;
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
+}
+
+.theme-nav-row {
+  display: block;
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-hover) 55%, transparent);
+}
+
+.theme-tabs {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.theme-tabs :deep(.el-tabs__nav) {
+  gap: 7px;
+}
+
+.theme-tabs :deep(.el-tabs__item) {
+  height: 42px;
+  padding: 0 18px !important;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: color .18s ease, background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.theme-tabs :deep(.el-tabs__item:hover) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.theme-tabs :deep(.el-tabs__item.is-active) {
+  border-color: var(--primary-alpha-20);
+  background: var(--surface-elevated);
+  color: var(--primary);
+  box-shadow: 0 5px 18px var(--shadow-color);
+}
+
+.theme-tabs :deep(.el-tabs__active-bar),
+.theme-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.element-tab-label {
+  gap: 8px;
+  font-weight: 650;
+}
+
+.theme-tab-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--primary-alpha-10);
+  color: var(--text-secondary);
+  font-size: 15px;
+  transition: color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.theme-tabs :deep(.el-tabs__item.is-active) .theme-tab-icon {
+  background: var(--primary-alpha-15);
+  color: var(--primary);
+  transform: scale(1.04);
+}
+
+.settings-section {
+  min-height: 500px;
+  padding: var(--spacing-xl);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: theme-pane-in .22s ease-out both;
+}
+
+@keyframes theme-pane-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.section-intro {
+  margin-bottom: var(--spacing-lg);
+}
+
+.section-intro h2 {
+  font-size: var(--font-size-lg);
+}
+
+.section-intro p {
+  margin-top: 5px;
+  font-size: var(--font-size-sm);
+}
+
+.current-badge {
+  padding: 6px 11px;
+  border-color: var(--primary-alpha-20);
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+}
+
+.style-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.style-card {
+  padding: 0;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: transparent;
+}
+
+.style-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.style-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-alpha-20);
+}
+
+.style-preview {
+  height: 120px;
+  border-radius: 0;
+}
+
+.style-copy {
+  padding: var(--spacing-md);
+}
+
+.style-copy b {
+  font-size: 14px;
+}
+
+.style-copy small {
+  min-height: 34px;
+  font-size: var(--font-size-xs);
+}
+
+.selected-check {
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  bottom: auto;
+  width: 24px;
+  height: 24px;
+  background: var(--primary);
+}
+
+.color-layout,
+.background-layout,
+.dock-layout {
+  grid-template-columns: minmax(300px, .9fr) minmax(380px, 1.1fr);
+  gap: var(--spacing-xl);
+}
+
+.live-preview,
+.dock-stage {
+  min-height: 330px;
+  border-color: var(--primary-alpha-20);
+  border-radius: 24px;
+  box-shadow: inset 0 1px white, 0 18px 42px var(--primary-alpha-15);
+}
+
+.dock-stage {
+  min-height: 300px;
+}
+
+.color-controls,
+.surface-controls,
+.dock-controls {
+  align-content: center;
+  gap: var(--spacing-xl);
+}
+
+.accent-presets {
+  gap: 9px;
+}
+
+.accent-presets button {
+  padding: 9px;
+  border-color: var(--border-color-light);
+  border-radius: 11px;
+  background: var(--surface-card);
+}
+
+.accent-presets button:hover {
+  border-color: var(--primary-alpha-30);
+  background: var(--surface-hover);
+  transform: translateY(-2px);
+}
+
+.accent-presets button.active {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+  box-shadow: 0 0 0 2px var(--primary-alpha-10);
+}
+
+.dock-icon-config {
+  display: grid;
+  gap: 13px;
+  padding: 4px 4px 16px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.dock-icon-config-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.dock-icon-config-copy b {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.dock-icon-config-copy small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.dock-icon-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+}
+
+.dock-icon-option {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface-card) 82%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.dock-icon-option:hover {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-10);
+  transform: translateY(-1px);
+}
+
+.dock-icon-option.active {
+  border-color: var(--primary);
+  background: linear-gradient(145deg, var(--primary-alpha-10), color-mix(in srgb, var(--surface-elevated) 72%, transparent));
+  box-shadow: inset 0 0 0 1px var(--primary-alpha-10);
+}
+
+.dock-icon-option-preview {
+  display: flex;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  color: var(--primary-dark);
+}
+
+.dock-icon-option-preview :deep(.dock-glyph) {
+  width: 30px;
+  height: 30px;
+}
+
+.dock-icon-option-preview :deep(.dock-glyph--minimal) {
+  width: 21px;
+  height: 21px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-alpha-10);
+}
+
+.dock-icon-option-text {
+  display: grid;
+  gap: 2px;
+}
+
+.dock-icon-option-text strong {
+  font-size: 13px;
+}
+
+.dock-icon-option-text small {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-icon-option-check {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+  transform: scale(.7);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.dock-icon-option.active .dock-icon-option-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.dock-controls > .range-control {
+  display: grid;
+  grid-template-columns: minmax(180px, .92fr) minmax(150px, 1.08fr);
+  align-items: center;
+  gap: 4px var(--spacing-xl);
+  padding: 16px 4px;
+  border-top: 0;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.dock-controls > .range-control > span {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.dock-controls > .range-control > small {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dock-controls > .range-control > :deep(.el-slider) {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.dock-controls > .range-control :deep(.el-slider__runway) {
+  height: 5px;
+  background: var(--primary-alpha-10);
+}
+
+.dock-controls > .range-control :deep(.el-slider__bar) {
+  height: 5px;
+  background: linear-gradient(90deg, var(--primary-light), var(--primary));
+}
+
+.dock-controls > .range-control :deep(.el-slider__button) {
+  width: 18px;
+  height: 18px;
+  border: 3px solid white;
+  background: var(--primary);
+  box-shadow: 0 2px 8px var(--primary-alpha-30);
+}
+
+.custom-icon-settings {
+  margin: 0 var(--spacing-xl) var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.custom-icon-card {
+  border-color: var(--border-color-light);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--surface-card) 76%, transparent);
+}
+
+@media (max-width: 1080px) {
+  .color-layout,
+  .background-layout,
+  .dock-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .theme-nav-row {
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .theme-tabs :deep(.el-tabs__nav-scroll) {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .theme-tabs :deep(.el-tabs__nav) {
+    min-width: 520px;
+  }
+
+  .theme-tabs :deep(.el-tabs__item) {
+    padding: 0 12px !important;
+  }
+
+  .settings-section {
+    padding: var(--spacing-lg);
+  }
+
+  .style-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .dock-controls > .range-control {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .dock-controls > .range-control > span,
+  .dock-controls > .range-control > small,
+  .dock-controls > .range-control > :deep(.el-slider) {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .dock-icon-options {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

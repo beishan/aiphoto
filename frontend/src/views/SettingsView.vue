@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useSettingStore } from '@/stores/settingStore'
 import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
 import { taskApi, type AiTask } from '@/api/taskApi'
@@ -12,7 +11,6 @@ import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 
-const router = useRouter()
 const settingStore = useSettingStore()
 const message = ElMessage
 
@@ -25,17 +23,17 @@ async function confirmAction(content: string, title = '确认操作') {
 
 // ===== Settings menu structure =====
 const navItems = [
-  { key: 'profile', label: '个人设置', icon: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' },
-  { key: 'general', label: '主题风格', icon: 'M12 3a9 9 0 100 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.37-.6-.37-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 005-5c0-4.42-4.03-8-9-8zM6.5 12A1.5 1.5 0 118 10.5 1.5 1.5 0 016.5 12zm2-4A1.5 1.5 0 1110 6.5 1.5 1.5 0 018.5 8zm4-1A1.5 1.5 0 1114 5.5 1.5 1.5 0 0112.5 7zm4 2a1.5 1.5 0 110-3 1.5 1.5 0 010 3z' },
-  { key: 'users', label: '用户管理', icon: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
-  { key: 'folders', label: '扫描文件夹', icon: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' },
-  { key: 'models', label: '模型管理', icon: 'M4 6c0-1.1 3.58-2 8-2s8 .9 8 2-3.58 2-8 2-8-.9-8-2zm0 4v4c0 1.1 3.58 2 8 2s8-.9 8-2v-4c-1.72 1.21-5.03 1.75-8 1.75S5.72 11.21 4 10zm0 8v-2c1.72 1.21 5.03 1.75 8 1.75s6.28-.54 8-1.75v2c0 1.1-3.58 2-8 2s-8-.9-8-2z' },
-  { key: 'tags', label: '标签管理', icon: 'M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z' },
-  { key: 'photos', label: '照片与视频', icon: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z' },
-  { key: 'timeline', label: '时间线设置', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z' },
-  { key: 'tasks', label: '任务与日志', icon: 'M19 3H5c-1.11 0-2 .89-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z' },
-  { key: 'storage', label: '存储管理', icon: 'M2 20h20v-4H2v4zm2-3h2v2H4v-2zM2 4v4h20V4H2zm4 3H4V5h2v2zm-4 7h20v-4H2v4zm2-3h2v2H4v-2z' },
-  { key: 'system', label: '系统信息', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z' },
+  { key: 'profile', label: '个人设置', icon: '👤' },
+  { key: 'general', label: '主题风格', icon: '🎨' },
+  { key: 'users', label: '用户管理', icon: '👥' },
+  { key: 'folders', label: '扫描文件夹', icon: '📁' },
+  { key: 'models', label: '模型管理', icon: '🤖' },
+  { key: 'tags', label: '标签管理', icon: '🏷️' },
+  { key: 'photos', label: '照片与视频', icon: '🖼️' },
+  { key: 'timeline', label: '时间线设置', icon: '📅' },
+  { key: 'tasks', label: '任务与日志', icon: '📋' },
+  { key: 'storage', label: '存储管理', icon: '💾' },
+  { key: 'system', label: '系统信息', icon: 'ℹ️' },
 ]
 
 const sessionUser = (() => {
@@ -639,47 +637,35 @@ async function loadSystemInfo() {
 </script>
 
 <template>
-  <div class="settings-page">
-    <div class="settings-body">
-      <aside class="settings-sidebar">
-        <div class="settings-brand">
-          <button class="back-btn" aria-label="返回照片" @click="router.push('/')">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-            </svg>
-          </button>
-          <div>
-            <span class="settings-eyebrow">MEMORYVAULT</span>
-            <h1 class="settings-title">设置中心</h1>
-          </div>
-        </div>
-        <nav class="settings-nav" aria-label="设置分类">
+  <div class="settings-view">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">系统设置</h1>
+        <p class="page-subtitle">管理您的相册配置</p>
+      </div>
+    </div>
+
+    <div class="settings-layout">
+        <nav class="settings-nav" aria-label="设置导航">
           <div v-for="group in navGroups" :key="group.label" class="settings-nav-group">
-            <div class="settings-nav-group-title">{{ group.label }}</div>
+            <div class="settings-nav-title">{{ group.label }}</div>
             <button
               v-for="item in group.items"
               :key="item.key"
-              class="nav-item"
+              type="button"
+              class="settings-nav-item"
               :class="{ active: activeSection === item.key }"
               :aria-current="activeSection === item.key ? 'page' : undefined"
               @click="activeSection = item.key"
             >
-              <span class="nav-icon-wrap">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                  <path :d="item.icon" />
-                </svg>
-              </span>
-              <span class="nav-label">{{ item.label }}</span>
-              <svg class="nav-chevron" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                <path d="M9.29 6.71a1 1 0 000 1.42L13.17 12l-3.88 3.88a1 1 0 101.42 1.42l4.59-4.59a1 1 0 000-1.42L10.71 6.7a1 1 0 00-1.42.01z" />
-              </svg>
+              <span class="settings-nav-icon">{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
             </button>
           </div>
         </nav>
-      </aside>
 
       <!-- Right content -->
-      <div class="settings-content">
+      <main class="settings-content">
         <!-- ====== 个人设置 ====== -->
         <div v-if="activeSection === 'profile'" class="content-panel">
           <PersonalSettingsPanel />
@@ -1145,7 +1131,7 @@ async function loadSystemInfo() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
 
     <!-- User dialog -->
@@ -3066,6 +3052,186 @@ async function loadSystemInfo() {
 
   .tag-photo-count {
     display: none;
+  }
+}
+
+/* aibook 设置页同构外壳 */
+.settings-view {
+  width: min(1200px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: var(--spacing-lg) 0 calc(var(--tab-content-padding) + var(--spacing-xl));
+}
+
+.page-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.page-title {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-on-page-bg);
+  font-size: var(--font-size-4xl);
+  font-weight: 700;
+  text-shadow: var(--text-on-page-bg-shadow);
+}
+
+.page-subtitle {
+  margin: 0;
+  color: var(--text-on-page-bg-secondary);
+  font-size: var(--font-size-base);
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--spacing-xl);
+}
+
+.settings-nav {
+  position: sticky;
+  top: var(--spacing-lg);
+  display: block;
+  width: auto;
+  max-height: calc(100vh - 2 * var(--spacing-lg));
+  padding: var(--spacing-sm);
+  overflow-y: auto;
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
+}
+
+.settings-nav-group {
+  display: block;
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color-light);
+}
+
+.settings-nav-title {
+  padding: var(--spacing-xs) var(--spacing-md);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.settings-nav-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 10px var(--spacing-md);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.settings-nav-item.active {
+  background: var(--primary-gradient);
+  box-shadow: var(--shadow-md);
+  color: #fff;
+}
+
+.settings-nav-icon {
+  width: 20px;
+  flex: 0 0 20px;
+  text-align: center;
+}
+
+.settings-content {
+  min-width: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.content-panel {
+  max-width: none;
+  animation: settings-panel-in .22s ease-out;
+}
+
+.panel-card {
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: none;
+  backdrop-filter: blur(var(--glass-blur, 20px));
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
+}
+
+@media (max-width: 900px) {
+  .settings-view {
+    width: min(100% - 24px, 1200px);
+  }
+
+  .settings-layout {
+    display: block;
+  }
+
+  .settings-nav {
+    position: static;
+    display: flex;
+    width: 100%;
+    max-height: none;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-xl);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  .settings-nav-group {
+    display: contents;
+  }
+
+  .settings-nav-title {
+    display: none;
+  }
+
+  .settings-nav-item {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 10px 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-view {
+    width: 100%;
+    padding-top: 12px;
+  }
+
+  .page-header {
+    padding: 0 16px;
+  }
+
+  .page-title {
+    font-size: 28px;
+  }
+
+  .settings-nav {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .settings-content {
+    padding: 0 12px;
   }
 }
 </style>
