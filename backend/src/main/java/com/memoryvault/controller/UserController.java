@@ -58,6 +58,14 @@ public class UserController {
         return ResponseEntity.ok(userService.deleteAvatar(authentication.getName()));
     }
 
+    @PutMapping("/me/theme")
+    public ResponseEntity<UserDTO> updateCurrentTheme(
+            Authentication authentication,
+            @RequestBody Map<String, String> request) {
+        return ResponseEntity.ok(
+                userService.updateCurrentTheme(authentication.getName(), request.get("theme")));
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UserDTO> createUser(@RequestBody Map<String, String> request) {

@@ -44,6 +44,9 @@ public class User {
     @Column(columnDefinition = "TEXT")
     private String profileNotes;
 
+    @Column(length = 20)
+    private String theme;
+
     private Boolean enabled = true;
 
     private LocalDateTime lastLoginAt;

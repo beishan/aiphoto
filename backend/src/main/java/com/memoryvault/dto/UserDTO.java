@@ -16,6 +16,7 @@ public class UserDTO {
     private LocalDate birthDate;
     private String photoPreferences;
     private String notes;
+    private String theme;
     private Boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime lastLoginAt;

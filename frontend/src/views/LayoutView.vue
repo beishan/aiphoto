@@ -208,6 +208,7 @@ const dockStyle = computed(() => ({
   '--dock-blur': dockConfig.value.blurStrength + 'px',
   '--dock-icon-size': dockConfig.value.iconSize + 'px',
   '--dock-tile-size': dockConfig.value.iconSize + 22 + 'px',
+  '--dock-base-gap': Math.max(10, Math.round(dockConfig.value.iconSize * 0.42)) + 'px',
   '--dock-anim-speed': dockConfig.value.animationSpeed + 's',
 }))
 
@@ -215,11 +216,15 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
 
 function getDockItemStyle(index: number) {
   const scale = getTabScale(index)
-  const lift = (scale - 1) * (dockConfig.value.iconSize + 22) * 0.72
+  const tileSize = dockConfig.value.iconSize + 22
+  const lift = (scale - 1) * tileSize * 0.72
+  const spread = (scale - 1) * tileSize / 2
   return {
     '--dock-item-scale': String(scale),
     '--dock-item-lift': `${lift}px`,
+    '--dock-item-spread': `${spread}px`,
     '--dock-item-transition': animSpeed.value,
+    zIndex: String(Math.round(scale * 100)),
   }
 }
 </script>
@@ -405,7 +410,7 @@ function getDockItemStyle(index: number) {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 6px;
+  gap: var(--dock-base-gap, 10px);
   padding: 7px 10px 9px;
   border-radius: calc(var(--dock-tile-size) * .44);
   max-width: calc(100% - 20px);
@@ -475,11 +480,12 @@ function getDockItemStyle(index: number) {
   height: var(--dock-tile-size);
   padding: 0;
   flex-shrink: 0;
+  margin-inline: var(--dock-item-spread, 0px);
   color: var(--text-tertiary);
   -webkit-tap-highlight-color: transparent;
   transform: translateY(calc(-1 * var(--dock-item-lift, 0px))) scale(var(--dock-item-scale, 1));
   transform-origin: bottom center;
-  transition: transform var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), color .15s ease;
+  transition: transform var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), margin var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), color .15s ease;
   will-change: transform;
 }
 
@@ -552,7 +558,7 @@ function getDockItemStyle(index: number) {
   filter: blur(4px);
 }
 
-.dock-icon-tile.custom{border-color:transparent;background:transparent;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.minimal{border-color:var(--separator);background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:linear-gradient(145deg,#eef2f6,#9eabb7 58%,#53616f)}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
+.dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:100%;height:100%;filter:none}.dock-icon-tile.minimal{border-color:var(--separator);background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:linear-gradient(145deg,#eef2f6,#9eabb7 58%,#53616f)}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
 
 .dock-icon {
   position: relative;
@@ -571,6 +577,14 @@ function getDockItemStyle(index: number) {
     0 8px 20px rgba(15, 47, 83, .3),
     inset 0 1px 1px rgba(255, 255, 255, .86),
     inset 0 -1px 2px rgba(0, 35, 91, .3);
+}
+
+.dock-item:hover .dock-icon-tile.custom,
+.dock-item.active .dock-icon-tile.custom {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  filter: none;
 }
 
 .dock-label {
@@ -687,6 +701,7 @@ function getDockItemStyle(index: number) {
   }
 
   .dock-item {
+    margin-inline: 0;
     transform: none;
   }
 

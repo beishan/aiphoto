@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { inject, ref, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { authApi } from '@/api/authApi'
+import { userApi } from '@/api/userApi'
+import type { AppTheme } from '@/utils/themeAppearance'
 
 const router = useRouter()
 const message = useMessage()
+const theme = inject<Ref<AppTheme>>('theme')!
+const setTheme = inject<(value: AppTheme) => void>('setTheme')!
+const validThemes: AppTheme[] = ['dark', 'light', 'macos26']
 
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
@@ -26,6 +31,14 @@ async function handleSubmit() {
     } else {
       const { data } = await authApi.login(form.value.username, form.value.password)
       localStorage.setItem('token', data.token)
+      if (validThemes.includes(data.user.theme as AppTheme)) {
+        setTheme(data.user.theme as AppTheme)
+      } else {
+        try {
+          const response = await userApi.updateTheme(theme.value)
+          data.user = response.data
+        } catch { /* 本地主题仍然有效，稍后可再次同步 */ }
+      }
       sessionStorage.setItem('user', JSON.stringify(data.user))
       message.success('登录成功')
       router.push('/')

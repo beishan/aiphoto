@@ -90,6 +90,7 @@ export interface User {
   birthDate: string | null
   photoPreferences: string | null
   notes: string | null
+  theme: 'dark' | 'light' | 'macos26' | null
   enabled: boolean
   createdAt: string
   lastLoginAt: string | null

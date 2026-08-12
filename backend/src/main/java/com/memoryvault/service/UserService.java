@@ -151,6 +151,16 @@ public class UserService implements UserDetailsService {
         return toDTO(saved);
     }
 
+    @Transactional
+    public UserDTO updateCurrentTheme(String username, String theme) {
+        if (!Set.of("dark", "light", "macos26").contains(theme)) {
+            throw new IllegalArgumentException("不支持的主题风格");
+        }
+        User user = findByUsername(username);
+        user.setTheme(theme);
+        return toDTO(userRepository.save(user));
+    }
+
     private User findByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
@@ -305,6 +315,7 @@ public class UserService implements UserDetailsService {
         dto.setBirthDate(user.getBirthDate());
         dto.setPhotoPreferences(user.getPhotoPreferences());
         dto.setNotes(user.getProfileNotes());
+        dto.setTheme(user.getTheme());
         dto.setEnabled(user.getEnabled());
         dto.setCreatedAt(user.getCreatedAt());
         dto.setLastLoginAt(user.getLastLoginAt());

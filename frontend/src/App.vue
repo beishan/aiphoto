@@ -7,10 +7,19 @@ type Theme = AppTheme
 
 const storedTheme = localStorage.getItem('theme')
 const validThemes: Theme[] = ['dark', 'light', 'macos26']
-const initialTheme: Theme = storedTheme === 'liquid-glass'
+const sessionTheme = (() => {
+  try {
+    const value = JSON.parse(sessionStorage.getItem('user') || 'null')?.theme
+    return validThemes.includes(value) ? value as Theme : null
+  } catch { return null }
+})()
+const initialTheme: Theme = sessionTheme || (storedTheme === 'liquid-glass'
   ? 'macos26'
-  : validThemes.includes(storedTheme as Theme) ? storedTheme as Theme : 'dark'
+  : validThemes.includes(storedTheme as Theme) ? storedTheme as Theme : 'dark')
 const theme = ref<Theme>(initialTheme)
+
+document.documentElement.dataset.theme = initialTheme
+applyThemeAppearance(initialTheme)
 
 onMounted(() => {
   document.documentElement.dataset.theme = theme.value

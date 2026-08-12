@@ -30,6 +30,10 @@ export const userApi = {
     return http.delete<User>('/users/me/avatar')
   },
 
+  updateTheme(theme: 'dark' | 'light' | 'macos26') {
+    return http.put<User>('/users/me/theme', { theme })
+  },
+
   create(data: { username: string; password: string; role?: string; nickname?: string }) {
     return http.post<User>('/users', data)
   },
