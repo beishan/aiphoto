@@ -31,22 +31,18 @@ const navItems = [
   { key: 'system', label: '系统信息', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z' },
 ]
 
+const navGroups = [
+  { label: '外观与偏好', keys: ['general'] },
+  { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
+  { label: '智能服务', keys: ['models', 'tasks'] },
+  { label: '管理', keys: ['users', 'storage'] },
+  { label: '系统', keys: ['system'] },
+].map(group => ({
+  label: group.label,
+  items: group.keys.map(key => navItems.find(item => item.key === key)!),
+}))
+
 const activeSection = ref('general')
-
-const activeNavItem = computed(() => navItems.find(item => item.key === activeSection.value) || navItems[0])
-
-const sectionDescriptions: Record<string, string> = {
-  general: '调整界面外观、Dock 动效与文件命名方式',
-  users: '管理家庭成员的账号、角色与访问状态',
-  folders: '配置 NAS 媒体目录并查看扫描状态',
-  models: '管理本地 AI 模型、在线下载与运行状态',
-  tags: '整理标签、颜色和照片关联信息',
-  photos: '调整人脸聚合与语义搜索的识别精度',
-  timeline: '了解照片进入成长时间线的规则',
-  tasks: '查看后台 AI 任务的进度和运行结果',
-  storage: '检查媒体、缩略图、模型和磁盘占用',
-  system: '查看服务版本、资源与连接健康状态',
-}
 
 // ===== General Settings =====
 const namingRule = ref('original')
@@ -660,41 +656,32 @@ async function loadSystemInfo() {
           </div>
         </div>
         <nav class="settings-nav" aria-label="设置分类">
-          <button
-            v-for="item in navItems"
-            :key="item.key"
-            class="nav-item"
-            :class="{ active: activeSection === item.key }"
-            @click="activeSection = item.key"
-          >
-            <span class="nav-icon-wrap">
-              <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <path :d="item.icon" />
+          <div v-for="group in navGroups" :key="group.label" class="settings-nav-group">
+            <div class="settings-nav-group-title">{{ group.label }}</div>
+            <button
+              v-for="item in group.items"
+              :key="item.key"
+              class="nav-item"
+              :class="{ active: activeSection === item.key }"
+              :aria-current="activeSection === item.key ? 'page' : undefined"
+              @click="activeSection = item.key"
+            >
+              <span class="nav-icon-wrap">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path :d="item.icon" />
+                </svg>
+              </span>
+              <span class="nav-label">{{ item.label }}</span>
+              <svg class="nav-chevron" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M9.29 6.71a1 1 0 000 1.42L13.17 12l-3.88 3.88a1 1 0 101.42 1.42l4.59-4.59a1 1 0 000-1.42L10.71 6.7a1 1 0 00-1.42.01z" />
               </svg>
-            </span>
-            <span class="nav-label">{{ item.label }}</span>
-            <svg class="nav-chevron" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-              <path d="M9.29 6.71a1 1 0 000 1.42L13.17 12l-3.88 3.88a1 1 0 101.42 1.42l4.59-4.59a1 1 0 000-1.42L10.71 6.7a1 1 0 00-1.42.01z" />
-            </svg>
-          </button>
+            </button>
+          </div>
         </nav>
       </aside>
 
       <!-- Right content -->
       <div class="settings-content">
-        <header class="section-hero">
-          <div class="section-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-              <path :d="activeNavItem.icon" />
-            </svg>
-          </div>
-          <div>
-            <span class="section-kicker">设置中心</span>
-            <h2>{{ activeNavItem.label }}</h2>
-            <p>{{ sectionDescriptions[activeSection] }}</p>
-          </div>
-        </header>
-
         <!-- ====== 常规设置 ====== -->
         <div v-if="activeSection === 'general'" class="content-panel">
 
@@ -2411,7 +2398,7 @@ async function loadSystemInfo() {
 .ai-status-badge.offline { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 760px) {
   .settings-body { flex-direction: column; gap: 0; }
 
   .settings-nav {
@@ -2467,8 +2454,10 @@ async function loadSystemInfo() {
   position: sticky;
   top: 0;
   width: 244px;
+  max-height: calc(100vh - 92px);
   flex: 0 0 244px;
   padding: 16px;
+  overflow-y: auto;
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
@@ -2504,8 +2493,7 @@ async function loadSystemInfo() {
   transform: translateX(-2px);
 }
 
-.settings-eyebrow,
-.section-kicker {
+.settings-eyebrow {
   display: block;
   margin-bottom: 3px;
   color: var(--accent);
@@ -2523,12 +2511,33 @@ async function loadSystemInfo() {
 .settings-nav {
   width: 100%;
   padding: 0;
-  gap: 3px;
+  gap: 0;
   overflow: visible;
 }
 
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid color-mix(in srgb, var(--separator) 76%, transparent);
+}
+
+.settings-nav-group-title {
+  padding: 3px 9px 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 1.4;
+}
+
 .nav-item {
-  min-height: 45px;
+  min-height: 42px;
   gap: 10px;
   padding: 6px 8px;
   border: 1px solid transparent;
@@ -2583,45 +2592,6 @@ async function loadSystemInfo() {
   min-width: 0;
   padding: 0;
   overflow: visible;
-}
-
-.section-hero {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 112px;
-  padding: 22px 26px;
-  margin-bottom: 16px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-border));
-  border-radius: 20px;
-  background:
-    linear-gradient(110deg, color-mix(in srgb, var(--accent) 14%, var(--bg-secondary)), var(--bg-secondary) 60%);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .1);
-}
-
-.section-icon {
-  display: grid;
-  width: 52px;
-  height: 52px;
-  flex: 0 0 52px;
-  place-items: center;
-  border-radius: 16px;
-  color: #fff;
-  background: linear-gradient(145deg, var(--accent), var(--accent-hover));
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.section-hero h2 {
-  font-size: clamp(21px, 2.4vw, 28px);
-  line-height: 1.15;
-  margin: 0 0 5px;
-}
-
-.section-hero p {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
 }
 
 .content-panel {
@@ -3008,6 +2978,7 @@ async function loadSystemInfo() {
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
+    overflow: visible;
   }
 
   .settings-brand {
@@ -3022,6 +2993,14 @@ async function loadSystemInfo() {
     overflow-x: auto;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
+  }
+
+  .settings-nav-group {
+    display: contents;
+  }
+
+  .settings-nav-group-title {
+    display: none;
   }
 
   .nav-item {
@@ -3047,28 +3026,6 @@ async function loadSystemInfo() {
   .settings-content {
     width: 100%;
     padding: 0 16px;
-  }
-
-  .section-hero {
-    min-height: 94px;
-    padding: 17px 18px;
-    margin-bottom: 12px;
-    border-radius: 16px;
-  }
-
-  .section-icon {
-    width: 44px;
-    height: 44px;
-    flex-basis: 44px;
-    border-radius: 13px;
-  }
-
-  .section-hero h2 {
-    font-size: 21px;
-  }
-
-  .section-hero p {
-    font-size: 12px;
   }
 
   .panel-card {
@@ -3212,14 +3169,6 @@ async function loadSystemInfo() {
   .settings-content,
   .settings-nav {
     padding-inline: 12px;
-  }
-
-  .section-hero {
-    align-items: flex-start;
-  }
-
-  .section-kicker {
-    display: none;
   }
 
   .tag-row {
