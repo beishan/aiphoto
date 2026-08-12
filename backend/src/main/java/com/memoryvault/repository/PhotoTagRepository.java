@@ -14,7 +14,7 @@ public interface PhotoTagRepository extends JpaRepository<PhotoTag, PhotoTagId> 
     void deleteByPhotoId(Long photoId);
     void deleteByTagId(Long tagId);
 
-    @Query("SELECT pt.photoId FROM PhotoTag pt WHERE pt.tagId = :tagId ORDER BY pt.photoId DESC")
+    @Query(value = "SELECT pt.photo_id FROM photo_tags pt JOIN photos p ON p.id = pt.photo_id WHERE pt.tag_id = :tagId AND p.deleted_at IS NULL ORDER BY pt.photo_id DESC", nativeQuery = true)
     List<Long> findPhotoIdsByTagId(@Param("tagId") Long tagId);
 
     @Query("SELECT pt FROM PhotoTag pt WHERE pt.photoId IN :photoIds")

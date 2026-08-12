@@ -64,7 +64,7 @@ async function deletePhoto(groupIndex: number, photoIndex: number) {
       currentGroups.value.splice(groupIndex, 1)
     }
     photoStore.photos = photoStore.photos.filter(p => p.id !== photo.id)
-    message.success('已删除')
+    message.success('已移入回收站')
   } catch (e) {
     message.error('删除失败')
   }

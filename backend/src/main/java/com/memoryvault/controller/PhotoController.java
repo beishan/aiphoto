@@ -112,6 +112,34 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("success", success, "fail", fail));
     }
 
+    @GetMapping("/trash")
+    public ResponseEntity<Page<PhotoDTO>> listTrash(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(photoService.listTrash(PageRequest.of(page, size)));
+    }
+
+    @GetMapping("/trash/count")
+    public ResponseEntity<Map<String, Long>> countTrash() {
+        return ResponseEntity.ok(Map.of("count", photoService.countTrash()));
+    }
+
+    @PostMapping("/trash/{id}/restore")
+    public ResponseEntity<PhotoDTO> restorePhoto(@PathVariable Long id) {
+        return ResponseEntity.ok(photoService.restorePhoto(id));
+    }
+
+    @DeleteMapping("/trash/{id}")
+    public ResponseEntity<Void> permanentDeletePhoto(@PathVariable Long id) {
+        photoService.permanentDeletePhoto(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/trash")
+    public ResponseEntity<Map<String, Integer>> clearTrash() {
+        return ResponseEntity.ok(Map.of("deleted", photoService.clearTrash()));
+    }
+
     @PostMapping("/batch-favorite")
     public ResponseEntity<Map<String, Object>> batchFavorite(@RequestBody Map<String, Object> request) {
         @SuppressWarnings("unchecked")

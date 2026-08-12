@@ -7,14 +7,21 @@ import { taskApi, type AiTask } from '@/api/taskApi'
 import { userApi } from '@/api/userApi'
 import { tagApi } from '@/api/tagApi'
 import { folderApi } from '@/api/folderApi'
-import { useMessage } from 'naive-ui'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 
 const router = useRouter()
 const settingStore = useSettingStore()
-const message = useMessage()
+const message = ElMessage
+
+async function confirmAction(content: string, title = '确认操作') {
+  try {
+    await ElMessageBox.confirm(content, title, { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' })
+    return true
+  } catch { return false }
+}
 
 // ===== Settings menu structure =====
 const navItems = [
@@ -112,7 +119,7 @@ async function createUser() {
 }
 
 async function deleteUser(id: number, username: string) {
-  if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) return
+  if (!await confirmAction(`确定要删除用户“${username}”吗？此操作不可恢复。`, '删除用户')) return
   try {
     await userApi.delete(id)
     message.success('用户已删除')
@@ -123,8 +130,11 @@ async function deleteUser(id: number, username: string) {
 }
 
 async function resetPassword(id: number) {
-  const password = prompt('请输入新密码')
-  if (!password) return
+  let password = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入新密码', '重置密码', { inputType: 'password', inputPattern: /.+/, inputErrorMessage: '密码不能为空', confirmButtonText: '重置', cancelButtonText: '取消' })
+    password = result.value
+  } catch { return }
   try {
     await userApi.resetPassword(id, password)
     message.success('密码已重置')
@@ -173,7 +183,7 @@ async function createTag() {
 }
 
 async function deleteTag(id: number, name: string, count: number) {
-  if (!confirm(`确定要删除标签 "${name}" 吗？\n关联照片数：${count}\n删除后仅解除关联，不删除照片。`)) return
+  if (!await confirmAction(`确定要删除标签“${name}”吗？关联照片数：${count}。删除后仅解除关联，不删除照片。`, '删除标签')) return
   try {
     await tagApi.delete(id)
     message.success('标签已删除')
@@ -285,7 +295,7 @@ async function scanAll() {
 }
 
 async function deleteFolder(id: number, name: string) {
-  if (!confirm(`确定要删除扫描文件夹 "${name}" 吗？`)) return
+  if (!await confirmAction(`确定要删除扫描文件夹“${name}”吗？`, '删除扫描文件夹')) return
   try {
     await folderApi.delete(id)
     message.success('文件夹已删除')
@@ -426,7 +436,7 @@ async function resumeDownload(taskId: string) {
 }
 
 async function cancelDownload(taskId: string) {
-  if (!confirm('确定要取消此下载吗？')) return
+  if (!await confirmAction('确定要取消此下载吗？', '取消下载')) return
   try { await settingApi.cancelDownload(taskId); await refreshDownloads() }
   catch { message.error('操作失败') }
 }
@@ -683,7 +693,7 @@ async function loadSystemInfo() {
         <!-- ====== 用户管理 ====== -->
         <div v-if="activeSection === 'users'" class="content-panel">
           <div class="panel-header-row">
-            <button class="btn-primary" @click="showUserDialog = true">+ 新增用户</button>
+            <el-button type="primary" @click="showUserDialog = true">+ 新增用户</el-button>
           </div>
           <div class="panel-card">
             <div class="user-table">
@@ -718,8 +728,8 @@ async function loadSystemInfo() {
         <div v-if="activeSection === 'folders'" class="content-panel">
           <div class="panel-header-row">
             <div style="display: flex; gap: 8px;">
-              <button class="btn-primary" @click="showFolderDialog = true">+ 添加目录</button>
-              <button class="btn-secondary" @click="scanAll">扫描全部</button>
+              <el-button type="primary" @click="showFolderDialog = true">+ 添加目录</el-button>
+              <el-button @click="scanAll">扫描全部</el-button>
             </div>
           </div>
           <div v-for="f in folders" :key="f.id" class="panel-card folder-card">
@@ -782,11 +792,9 @@ async function loadSystemInfo() {
               <!-- Local path config for AI-service-supported models -->
               <template v-if="typeToAiName[item.key]">
                 <div v-for="model in models.filter(m => m.name === typeToAiName[item.key])" :key="model.name" class="model-local-config">
-                  <label class="model-toggle">
-                    <input v-model="model.enabled" type="checkbox" /> 启用
-                  </label>
+                  <label class="model-toggle"><el-switch v-model="model.enabled" /> 启用</label>
                   <div class="model-path-row">
-                    <input v-model.trim="model.path" class="model-path-input" placeholder="模型文件路径" />
+                    <el-input v-model.trim="model.path" class="model-path-input" placeholder="模型文件路径" clearable />
                   </div>
                   <div class="model-meta-row">
                     <span v-if="model.loaded" class="model-meta-tag ok">已加载</span>
@@ -795,14 +803,14 @@ async function loadSystemInfo() {
                     <span v-if="model.error" class="model-meta-tag err">{{ model.error }}</span>
                   </div>
                   <div class="model-actions">
-                    <button class="btn-primary" :disabled="modelLoading" @click="saveModel(model)">保存并加载</button>
-                    <button class="btn-secondary" :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</button>
+                    <el-button type="primary" :loading="modelLoading" @click="saveModel(model)">保存并加载</el-button>
+                    <el-button :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</el-button>
                   </div>
                 </div>
               </template>
               <div v-else class="model-not-supported-hint">
                 <span class="info-label">此模型类型尚未集成到 AI 服务</span>
-                <button class="btn-secondary" @click="modelViewMode = 'online'">前往在线下载</button>
+                <el-button @click="modelViewMode = 'online'">前往在线下载</el-button>
               </div>
             </div>
           </div>
@@ -843,8 +851,8 @@ async function loadSystemInfo() {
                 </div>
                 <!-- Download button -->
                 <div v-else class="online-model-actions">
-                  <button v-if="!isModelDownloaded(om.id)" class="btn-primary" @click="startDownload(om)">下载</button>
-                  <button v-else class="btn-secondary" disabled>已下载</button>
+                  <el-button v-if="!isModelDownloaded(om.id)" type="primary" @click="startDownload(om)">下载</el-button>
+                  <el-button v-else disabled>已下载</el-button>
                 </div>
               </div>
             </div>
@@ -885,10 +893,10 @@ async function loadSystemInfo() {
         <!-- ====== 标签管理 ====== -->
         <div v-if="activeSection === 'tags'" class="content-panel">
           <div class="panel-header-row">
-            <button class="btn-primary" @click="showTagDialog = true">+ 新建标签</button>
+            <el-button type="primary" @click="showTagDialog = true">+ 新建标签</el-button>
           </div>
           <div class="panel-card">
-            <input v-model="tagSearchQuery" class="dialog-input tag-search-input" placeholder="搜索标签..." />
+            <el-input v-model="tagSearchQuery" class="tag-search-input" placeholder="搜索标签..." clearable />
             <div v-for="t in tags.filter(tg => !tagSearchQuery || tg.name.toLowerCase().includes(tagSearchQuery.toLowerCase()))" :key="t.id" class="tag-row">
               <div class="tag-color-dot" :style="{ background: t.color || '#0a84ff' }"></div>
               <span class="tag-name">{{ t.name }}</span>
@@ -919,9 +927,9 @@ async function loadSystemInfo() {
                 <span class="label-text">文件命名规则</span>
                 <span class="label-desc">上传照片时按此规则重命名文件</span>
               </div>
-              <select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
-                <option v-for="opt in namingOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
+              <el-select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
+                <el-option v-for="opt in namingOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
             </div>
           </div>
           <div class="panel-card">
@@ -941,7 +949,7 @@ async function loadSystemInfo() {
               <span class="threshold-badge">{{ (faceThreshold / 100).toFixed(2) }}</span>
             </div>
             <div class="slider-row">
-              <input type="range" min="20" max="80" step="5" v-model.number="faceThreshold" class="threshold-slider" @change="handleThresholdChange" />
+              <el-slider v-model="faceThreshold" :min="20" :max="80" :step="5" @change="handleThresholdChange" />
             </div>
           </div>
           <div class="panel-card">
@@ -953,7 +961,7 @@ async function loadSystemInfo() {
               <span class="threshold-badge">{{ (searchThreshold / 100).toFixed(2) }}</span>
             </div>
             <div class="slider-row">
-              <input type="range" min="20" max="80" step="5" v-model.number="searchThreshold" class="threshold-slider" @change="handleSearchThresholdChange" />
+              <el-slider v-model="searchThreshold" :min="20" :max="80" :step="5" @change="handleSearchThresholdChange" />
             </div>
           </div>
         </div>
@@ -971,7 +979,7 @@ async function loadSystemInfo() {
         <!-- ====== 任务与日志 ====== -->
         <div v-if="activeSection === 'tasks'" class="content-panel">
           <div class="panel-header-row">
-            <button class="btn-secondary" @click="loadTasks()">刷新</button>
+            <el-button @click="loadTasks()">刷新</el-button>
           </div>
           <!-- Filter tabs -->
           <div class="task-filter-bar">
@@ -1004,7 +1012,7 @@ async function loadSystemInfo() {
         <!-- ====== 存储管理 ====== -->
         <div v-if="activeSection === 'storage'" class="content-panel">
           <div class="panel-header-row">
-            <button class="btn-secondary" @click="loadStorageInfo()">刷新</button>
+            <el-button @click="loadStorageInfo()">刷新</el-button>
           </div>
           <!-- Storage breakdown -->
           <div class="panel-card">
@@ -1073,7 +1081,7 @@ async function loadSystemInfo() {
         <!-- ====== 系统信息 ====== -->
         <div v-if="activeSection === 'system'" class="content-panel">
           <div class="panel-header-row">
-            <button class="btn-secondary" @click="loadSystemInfo()">刷新</button>
+            <el-button @click="loadSystemInfo()">刷新</el-button>
           </div>
           <!-- App info -->
           <div class="panel-card">
@@ -1141,95 +1149,45 @@ async function loadSystemInfo() {
     </div>
 
     <!-- User dialog -->
-    <div v-if="showUserDialog" class="dialog-overlay" @click.self="showUserDialog = false">
-      <div class="dialog-card">
-        <h3>新增用户</h3>
-        <div class="dialog-body">
-          <input v-model="newUser.username" class="dialog-input" placeholder="用户名" />
-          <input v-model="newUser.password" type="password" class="dialog-input" placeholder="密码" />
-          <input v-model="newUser.nickname" class="dialog-input" placeholder="昵称（可选）" />
-          <select v-model="newUser.role" class="dialog-input">
-            <option value="USER">普通用户</option>
-            <option value="ADMIN">管理员</option>
-          </select>
-        </div>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="showUserDialog = false">取消</button>
-          <button class="btn-primary" @click="createUser">创建</button>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="showUserDialog" title="新增用户" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="用户名"><el-input v-model="newUser.username" placeholder="用户名" /></el-form-item>
+        <el-form-item label="密码"><el-input v-model="newUser.password" type="password" show-password placeholder="密码" /></el-form-item>
+        <el-form-item label="昵称"><el-input v-model="newUser.nickname" placeholder="昵称（可选）" /></el-form-item>
+        <el-form-item label="角色"><el-select v-model="newUser.role" style="width:100%"><el-option label="普通用户" value="USER" /><el-option label="管理员" value="ADMIN" /></el-select></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showUserDialog = false">取消</el-button><el-button type="primary" @click="createUser">创建</el-button></template>
+    </el-dialog>
 
     <!-- Tag dialog -->
-    <div v-if="showTagDialog" class="dialog-overlay" @click.self="showTagDialog = false">
-      <div class="dialog-card">
-        <h3>新建标签</h3>
-        <div class="dialog-body">
-          <input v-model="newTag.name" class="dialog-input" placeholder="标签名称" />
-          <textarea v-model="newTag.description" class="dialog-input" placeholder="描述（可选）" rows="2"></textarea>
-          <div class="color-picker-row">
-            <span class="color-label">颜色：</span>
-            <button
-              v-for="c in presetColors"
-              :key="c"
-              class="color-swatch"
-              :class="{ active: newTag.color === c }"
-              :style="{ background: c }"
-              @click="newTag.color = c"
-            ></button>
-          </div>
-        </div>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="showTagDialog = false">取消</button>
-          <button class="btn-primary" @click="createTag">创建</button>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="showTagDialog" title="新建标签" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="标签名称"><el-input v-model="newTag.name" placeholder="标签名称" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="newTag.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="newTag.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: newTag.color === c }" :style="{ background: c }" @click="newTag.color = c"></button></div></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showTagDialog = false">取消</el-button><el-button type="primary" @click="createTag">创建</el-button></template>
+    </el-dialog>
 
     <!-- Folder dialog -->
-    <div v-if="showFolderDialog" class="dialog-overlay" @click.self="showFolderDialog = false">
-      <div class="dialog-card">
-        <h3>添加扫描目录</h3>
-        <div class="dialog-body">
-          <input v-model="newFolder.name" class="dialog-input" placeholder="文件夹名称" />
-          <input v-model="newFolder.path" class="dialog-input" placeholder="NAS 目录完整路径（如 /mnt/photos）" />
-          <select v-model="newFolder.storageMode" class="dialog-input">
-            <option value="COPY">复制到本地存储</option>
-            <option value="LINK">仅链接（不复制）</option>
-          </select>
-        </div>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="showFolderDialog = false">取消</button>
-          <button class="btn-primary" @click="createFolder">添加</button>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="showFolderDialog" title="添加扫描目录" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="文件夹名称"><el-input v-model="newFolder.name" placeholder="文件夹名称" /></el-form-item>
+        <el-form-item label="NAS 目录"><el-input v-model="newFolder.path" placeholder="NAS 目录完整路径（如 /mnt/photos）" /></el-form-item>
+        <el-form-item label="存储模式"><el-select v-model="newFolder.storageMode" style="width:100%"><el-option label="复制到本地存储" value="COPY" /><el-option label="仅链接（不复制）" value="LINK" /></el-select></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showFolderDialog = false">取消</el-button><el-button type="primary" @click="createFolder">添加</el-button></template>
+    </el-dialog>
 
     <!-- Edit tag dialog -->
-    <div v-if="showEditTagDialog" class="dialog-overlay" @click.self="showEditTagDialog = false">
-      <div class="dialog-card">
-        <h3>编辑标签</h3>
-        <div class="dialog-body">
-          <input v-model="editTagData.name" class="dialog-input" placeholder="标签名称" />
-          <textarea v-model="editTagData.description" class="dialog-input" placeholder="描述（可选）" rows="2"></textarea>
-          <div class="color-picker-row">
-            <span class="color-label">颜色：</span>
-            <button
-              v-for="c in presetColors"
-              :key="c"
-              class="color-swatch"
-              :class="{ active: editTagData.color === c }"
-              :style="{ background: c }"
-              @click="editTagData.color = c"
-            ></button>
-          </div>
-        </div>
-        <div class="dialog-actions">
-          <button class="btn-secondary" @click="showEditTagDialog = false">取消</button>
-          <button class="btn-primary" @click="saveEditedTag">保存</button>
-        </div>
-      </div>
-    </div>
+    <el-dialog v-model="showEditTagDialog" title="编辑标签" width="420px">
+      <el-form label-position="top">
+        <el-form-item label="标签名称"><el-input v-model="editTagData.name" placeholder="标签名称" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="editTagData.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="editTagData.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: editTagData.color === c }" :style="{ background: c }" @click="editTagData.color = c"></button></div></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="showEditTagDialog = false">取消</el-button><el-button type="primary" @click="saveEditedTag">保存</el-button></template>
+    </el-dialog>
   </div>
 </template>
 

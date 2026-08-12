@@ -73,7 +73,7 @@ async function toggleFavorite() {
 
 async function deletePhoto() {
   if (!currentPhoto.value) return
-  if (!confirm('确定要删除这张照片吗？')) return
+  if (!confirm('确定将这张照片移入回收站吗？')) return
   const photo = currentPhoto.value
   try {
     await photoApi.delete(photo.id)

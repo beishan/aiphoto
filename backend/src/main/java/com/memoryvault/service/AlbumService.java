@@ -73,7 +73,7 @@ public class AlbumService {
     public List<PhotoDTO> getAlbumPhotos(Long albumId) {
         Album album = albumRepository.findById(albumId)
                 .orElseThrow(() -> new RuntimeException("Album not found"));
-        return album.getPhotos().stream().map(this::toPhotoDTO).toList();
+        return album.getPhotos().stream().filter(photo -> photo.getDeletedAt() == null).map(this::toPhotoDTO).toList();
     }
 
     @Transactional
@@ -124,8 +124,8 @@ public class AlbumService {
         dto.setType(album.getType().name());
         dto.setShared(album.getShared());
         dto.setBirthDate(album.getBirthDate());
-        dto.setPhotoCount(album.getPhotos().size());
-        if (album.getCoverPhoto() != null) {
+        dto.setPhotoCount((int) album.getPhotos().stream().filter(photo -> photo.getDeletedAt() == null).count());
+        if (album.getCoverPhoto() != null && album.getCoverPhoto().getDeletedAt() == null) {
             dto.setCoverPhotoId(album.getCoverPhoto().getId());
             try {
                 dto.setCoverPhotoUrl(storageService.getPhotoUrl(album.getCoverPhoto().getFilePath()));

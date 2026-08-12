@@ -16,6 +16,7 @@ export interface DockConfig {
   iconSize: number
   maxScale: number
   animationSpeed: number
+  iconStyle: 'minimal' | 'macos26' | 'custom'
 }
 
 export const DEFAULT_ACCENTS: Record<AppTheme, string> = {
@@ -36,6 +37,7 @@ export const DEFAULT_DOCK: DockConfig = {
   iconSize: 22,
   maxScale: 1.5,
   animationSpeed: 0.25,
+  iconStyle: 'macos26',
 }
 
 const ACCENT_KEY = 'themeAccentColors'
@@ -137,6 +139,12 @@ export function applyAccent(color: string) {
   root.style.setProperty('--accent-hover', mix(color, '#FFFFFF', 0.2))
   root.style.setProperty('--accent-soft', rgba(color, 12))
   root.style.setProperty('--accent-border', rgba(color, 32))
+  root.style.setProperty('--el-color-primary', color)
+  root.style.setProperty('--el-color-primary-light-3', mix(color, '#FFFFFF', 0.3))
+  root.style.setProperty('--el-color-primary-light-5', mix(color, '#FFFFFF', 0.5))
+  root.style.setProperty('--el-color-primary-light-7', mix(color, '#FFFFFF', 0.7))
+  root.style.setProperty('--el-color-primary-light-9', mix(color, '#FFFFFF', 0.9))
+  root.style.setProperty('--el-color-primary-dark-2', mix(color, '#000000', 0.2))
 }
 
 export function backgroundStyle(config: BackgroundConfig) {
@@ -160,6 +168,14 @@ export function applyBackground(config: BackgroundConfig) {
   root.style.setProperty('--text-primary', surfaceDark ? '#FFFFFF' : '#172235')
   root.style.setProperty('--text-secondary', surfaceDark ? 'rgba(255,255,255,.64)' : 'rgba(23,34,53,.7)')
   root.style.setProperty('--text-tertiary', surfaceDark ? 'rgba(255,255,255,.4)' : 'rgba(23,34,53,.46)')
+  root.style.setProperty('--el-bg-color', rgba(config.surfaceColor, config.surfaceOpacity))
+  root.style.setProperty('--el-bg-color-overlay', rgba(config.surfaceColor, Math.min(100, config.surfaceOpacity + 8)))
+  root.style.setProperty('--el-fill-color-blank', rgba(config.surfaceColor, config.surfaceOpacity))
+  root.style.setProperty('--el-fill-color-light', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.1 : 0.04))
+  root.style.setProperty('--el-border-color', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.2 : 0.12))
+  root.style.setProperty('--el-border-color-light', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.14 : 0.08))
+  root.style.setProperty('--el-text-color-primary', surfaceDark ? '#FFFFFF' : '#172235')
+  root.style.setProperty('--el-text-color-regular', surfaceDark ? 'rgba(255,255,255,.68)' : 'rgba(23,34,53,.7)')
 }
 
 export function applyThemeAppearance(theme: AppTheme) {
@@ -178,22 +194,4 @@ export function loadDockConfig(): DockConfig {
 export function setDockConfig(config: DockConfig) {
   localStorage.setItem('dockConfig', JSON.stringify(config))
   window.dispatchEvent(new CustomEvent<DockConfig>('dock-config-updated', { detail: config }))
-}
-
-export function saveCurrentAppearance(
-  theme: AppTheme,
-  accent: string,
-  background: BackgroundConfig,
-  dock: DockConfig,
-) {
-  try {
-    localStorage.setItem('theme', theme)
-    setAccent(theme, accent)
-    setBackground(theme, background)
-    setDockConfig(dock)
-    localStorage.setItem('themeAppearanceSavedAt', new Date().toISOString())
-    return true
-  } catch {
-    return false
-  }
 }

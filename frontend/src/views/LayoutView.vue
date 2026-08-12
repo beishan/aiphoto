@@ -4,12 +4,17 @@ import { useRouter, useRoute } from 'vue-router'
 import TaskFloat from '@/components/TaskFloat.vue'
 import type { User } from '@/types'
 import { loadDockConfig, type DockConfig } from '@/utils/themeAppearance'
+import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
+import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
+import { useDockIconStore } from '@/stores/dockIconStore'
+import { photoApi } from '@/api/photoApi'
 
 const router = useRouter()
 const route = useRoute()
 
 const theme = inject<Ref<string>>('theme')!
 const toggleTheme = inject<() => void>('toggleTheme')!
+const dockIconStore = useDockIconStore()
 
 // ===== Dock Configuration =====
 const dockConfig = ref(loadDockConfig())
@@ -23,14 +28,14 @@ function onDockConfigUpdated(event: Event) {
   dockConfig.value = { ...dockConfig.value, ...(event as CustomEvent<DockConfig>).detail }
 }
 
-const tabs = [
-  { path: '/', name: 'Gallery', label: '照片', icon: 'photo', activeIcon: 'photo.fill' },
-  { path: '/timeline', name: 'Timeline', label: '时间线', icon: 'timeline', activeIcon: 'timeline.fill' },
-  { path: '/tags', name: 'Tags', label: '标签', icon: 'tag', activeIcon: 'tag.fill' },
-  { path: '/albums', name: 'Albums', label: '相册', icon: 'rectangle.stack', activeIcon: 'rectangle.stack.fill' },
-  { path: '/baby', name: 'Baby', label: '宝宝', icon: 'baby', activeIcon: 'baby.fill' },
-  { path: '/search', name: 'Search', label: '搜索', icon: 'magnifyingglass', activeIcon: 'magnifyingglass' },
-  { path: '/settings', name: 'Settings', label: '设置', icon: 'settings', activeIcon: 'settings.fill' },
+const tabs: Array<{ path: string; name: string; label: string; dockIcon: DockIconName }> = [
+  { path: '/', name: 'Gallery', label: '照片', dockIcon: 'photo' },
+  { path: '/timeline', name: 'Timeline', label: '时间线', dockIcon: 'timeline' },
+  { path: '/tags', name: 'Tags', label: '标签', dockIcon: 'tags' },
+  { path: '/albums', name: 'Albums', label: '相册', dockIcon: 'albums' },
+  { path: '/baby', name: 'Baby', label: '宝宝', dockIcon: 'baby' },
+  { path: '/search', name: 'Search', label: '搜索', dockIcon: 'search' },
+  { path: '/settings', name: 'Settings', label: '设置', dockIcon: 'settings' },
 ]
 
 // Tab-level routes (sub-pages should hide the tab bar)
@@ -102,6 +107,20 @@ function getTabScale(index: number): number {
 // ===== User avatar menu =====
 const currentUser = ref<User | null>(null)
 const showUserMenu = ref(false)
+const showTrashMenu = ref(false)
+const trashCount = ref(0)
+const trashIcon = computed<DockIconName>(() => trashCount.value > 0 ? 'trashFull' : 'trashEmpty')
+
+async function refreshTrashCount() {
+  try { trashCount.value = (await photoApi.trashCount()).data.count }
+  catch { trashCount.value = 0 }
+}
+
+function toggleTrashMenu() {
+  showTrashMenu.value = !showTrashMenu.value
+  showUserMenu.value = false
+  if (showTrashMenu.value) void refreshTrashCount()
+}
 
 onMounted(async () => {
   const token = localStorage.getItem('token')
@@ -116,6 +135,7 @@ onMounted(async () => {
 
 function toggleUserMenu() {
   showUserMenu.value = !showUserMenu.value
+  showTrashMenu.value = false
 }
 
 function closeUserMenu() {
@@ -134,6 +154,7 @@ function onDocClick(e: MouseEvent) {
   if (!target.closest('.user-avatar-btn') && !target.closest('.user-popup-menu')) {
     closeUserMenu()
   }
+  if (!target.closest('.dock-trash-entry')) showTrashMenu.value = false
 }
 
 function onProfileUpdated(event: Event) {
@@ -144,11 +165,15 @@ onMounted(() => {
   document.addEventListener('click', onDocClick)
   window.addEventListener('user-profile-updated', onProfileUpdated)
   window.addEventListener('dock-config-updated', onDockConfigUpdated)
+  window.addEventListener('trash-changed', refreshTrashCount)
+  void dockIconStore.hydrate().catch(() => undefined)
+  void refreshTrashCount()
 })
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
   window.removeEventListener('user-profile-updated', onProfileUpdated)
   window.removeEventListener('dock-config-updated', onDockConfigUpdated)
+  window.removeEventListener('trash-changed', refreshTrashCount)
 })
 
 const themeTitle = computed(() => {
@@ -245,18 +270,33 @@ function getDockItemStyle(index: number) {
         :style="getDockItemStyle(index)"
         @click="navigateTo(tab.path)"
       >
-        <span class="dock-icon-tile">
+        <span class="dock-icon-tile" :class="{ custom: dockConfig.iconStyle === 'custom', minimal: dockConfig.iconStyle === 'minimal' }">
           <span class="dock-icon-glass"></span>
-          <svg class="dock-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path :d="activeTab === tab.path ? sfIcons[tab.activeIcon] : sfIcons[tab.icon]" />
-          </svg>
+          <DockIcon class="dock-icon" :name="tab.dockIcon" :variant="dockConfig.iconStyle" :custom-src="dockIconStore.iconUrls[tab.dockIcon]" />
         </span>
         <span class="dock-label" role="tooltip">{{ tab.label }}</span>
         <span v-if="activeTab === tab.path" class="dock-indicator-dot"></span>
       </button>
 
+      <div class="dock-trash-entry" :class="{ open: showTrashMenu }">
+        <button class="dock-item dock-trash-btn" :style="getDockItemStyle(tabs.length)" aria-label="回收站" @click.stop="toggleTrashMenu">
+          <span class="dock-icon-tile trash-tile" :class="{ custom: dockConfig.iconStyle === 'custom', minimal: dockConfig.iconStyle === 'minimal' }">
+            <span class="dock-icon-glass"></span>
+            <DockIcon class="dock-icon" :name="trashIcon" :variant="dockConfig.iconStyle" :custom-src="dockIconStore.iconUrls[trashIcon]" />
+          </span>
+          <span v-if="trashCount" class="trash-count">{{ trashCount > 99 ? '99+' : trashCount }}</span>
+          <span class="dock-label" role="tooltip">回收站</span>
+        </button>
+        <Transition name="popup">
+          <section v-if="showTrashMenu" class="trash-popup glass" @click.stop @pointermove.stop>
+            <header><div><strong>系统回收站</strong><small>恢复照片，或永久删除媒体文件</small></div><el-button circle text aria-label="关闭" @click="showTrashMenu = false">✕</el-button></header>
+            <RecycleBinPanel compact @changed="refreshTrashCount" />
+          </section>
+        </Transition>
+      </div>
+
       <!-- User avatar button -->
-      <div class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length)" @click.stop="toggleUserMenu">
+      <div class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
         <div class="avatar-circle">
           <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
           <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
@@ -512,6 +552,8 @@ function getDockItemStyle(index: number) {
   filter: blur(4px);
 }
 
+.dock-icon-tile.custom{border-color:transparent;background:transparent;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.minimal{border-color:var(--separator);background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:linear-gradient(145deg,#eef2f6,#9eabb7 58%,#53616f)}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
+
 .dock-icon {
   position: relative;
   z-index: 1;
@@ -659,6 +701,7 @@ function getDockItemStyle(index: number) {
   .dock-label {
     display: none;
   }
+  .trash-popup{position:fixed;right:12px;bottom:calc(64px + var(--safe-bottom));left:12px;width:auto}.trash-popup::after{display:none}
 }
 
 @media (prefers-reduced-motion: reduce) {

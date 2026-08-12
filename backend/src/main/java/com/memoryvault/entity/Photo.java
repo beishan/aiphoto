@@ -77,6 +77,9 @@ public class Photo {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
+    /** Soft-delete timestamp. Media files remain intact until permanent deletion. */
+    private LocalDateTime deletedAt;
+
     public enum MediaType {
         PHOTO, VIDEO, GIF, RAW
     }

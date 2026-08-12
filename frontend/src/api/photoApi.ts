@@ -40,12 +40,42 @@ export const photoApi = {
     return http.put<Photo>(`/photos/${id}`, data)
   },
 
-  delete(id: number) {
-    return http.delete(`/photos/${id}`)
+  async delete(id: number) {
+    const response = await http.delete(`/photos/${id}`)
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
   },
 
-  batchDelete(ids: number[]) {
-    return http.delete<{ success: number; fail: number }>('/photos/batch', { data: ids })
+  async batchDelete(ids: number[]) {
+    const response = await http.delete<{ success: number; fail: number }>('/photos/batch', { data: ids })
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
+  trash(page = 0, size = 20) {
+    return http.get<PageResponse<Photo>>('/photos/trash', { params: { page, size } })
+  },
+
+  trashCount() {
+    return http.get<{ count: number }>('/photos/trash/count')
+  },
+
+  async restore(id: number) {
+    const response = await http.post<Photo>(`/photos/trash/${id}/restore`)
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
+  async permanentDelete(id: number) {
+    const response = await http.delete(`/photos/trash/${id}`)
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
+  async clearTrash() {
+    const response = await http.delete<{ deleted: number }>('/photos/trash')
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
   },
 
   batchFavorite(ids: number[], favorite: boolean) {

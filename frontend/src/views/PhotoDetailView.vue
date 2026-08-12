@@ -144,14 +144,14 @@ async function removeTag(tagId: number) {
 function confirmDelete() {
   if (!photo.value) return
   dialog.warning({
-    title: '删除照片',
-    content: '确定要删除这张照片吗？此操作不可恢复。',
-    positiveText: '删除',
+    title: '移入回收站',
+    content: '确定将这张照片移入回收站吗？之后可以从 Dock 回收站恢复。',
+    positiveText: '移入回收站',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
         await photoApi.delete(photo.value!.id)
-        message.success('已删除')
+        message.success('已移入回收站')
         router.back()
       } catch { message.error('删除失败') }
     },

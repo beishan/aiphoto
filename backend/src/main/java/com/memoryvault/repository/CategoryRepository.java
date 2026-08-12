@@ -18,7 +18,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     List<Category> findByIsSystemFalse();
 
-    @Query("SELECT p FROM Category c JOIN c.photos p WHERE c.id = :categoryId ORDER BY p.exifDate DESC")
+    @Query("SELECT p FROM Category c JOIN c.photos p WHERE c.id = :categoryId AND p.deletedAt IS NULL ORDER BY p.exifDate DESC")
     Page<Photo> findCategoryPhotos(@Param("categoryId") Long categoryId, Pageable pageable);
 
     @Modifying
@@ -27,7 +27,8 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
         INSERT INTO photo_categories (category_id, photo_id, source, added_at)
         SELECT :categoryId, p.id, 'auto', NOW()
         FROM photos p
-        WHERE p.embedding IS NOT NULL
+        WHERE p.deleted_at IS NULL
+          AND p.embedding IS NOT NULL
           AND p.embedding <=> :vector::vector < :threshold
         ON CONFLICT (category_id, photo_id) DO NOTHING
         """, nativeQuery = true)

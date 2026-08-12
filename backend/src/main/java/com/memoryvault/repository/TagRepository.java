@@ -14,6 +14,6 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
     List<Tag> findByNameContainingIgnoreCase(String name);
     List<Tag> findAllByOrderBySortOrderAscCreatedAtDesc();
 
-    @Query("SELECT COUNT(pt) FROM PhotoTag pt WHERE pt.tagId = :tagId")
+    @Query(value = "SELECT COUNT(*) FROM photo_tags pt JOIN photos p ON p.id = pt.photo_id WHERE pt.tag_id = :tagId AND p.deleted_at IS NULL", nativeQuery = true)
     long countPhotosByTagId(@Param("tagId") Long tagId);
 }

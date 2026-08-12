@@ -27,4 +27,5 @@ public class PhotoDTO {
     private List<String> tags;
     private Long sourceFolderId;
     private LocalDateTime createdAt;
+    private LocalDateTime deletedAt;
 }

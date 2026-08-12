@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch, type Ref } from 'vue'
-import { useMessage } from 'naive-ui'
+import { computed, inject, onMounted, ref, watch, type Ref } from 'vue'
+import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus'
+import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
+import { useDockIconStore } from '@/stores/dockIconStore'
 import {
   DEFAULT_BACKGROUNDS,
   DEFAULT_DOCK,
@@ -11,7 +13,6 @@ import {
   normalizeHex,
   resetAccent,
   resetBackground,
-  saveCurrentAppearance,
   setAccent,
   setBackground,
   setDockConfig,
@@ -24,19 +25,34 @@ type TabId = 'style' | 'color' | 'background' | 'dock'
 
 const theme = inject<Ref<AppTheme>>('theme')!
 const setTheme = inject<(value: AppTheme) => void>('setTheme')!
-const message = useMessage()
+const dockIconStore = useDockIconStore()
 const storedTab = localStorage.getItem('themeSettingsActiveTab') as TabId | null
 const activeTab = ref<TabId>(['style', 'color', 'background', 'dock'].includes(storedTab || '') ? storedTab! : 'style')
 const accent = ref(getAccent(theme.value))
 const background = ref<BackgroundConfig>(getBackground(theme.value))
 const dock = ref<DockConfig>(loadDockConfig())
-const hasUnsavedChanges = ref(false)
 
 const tabs: Array<{ id: TabId; label: string; icon: string }> = [
   { id: 'style', label: '主题样式', icon: '◐' },
   { id: 'color', label: '主题色', icon: '✦' },
   { id: 'background', label: '背景与表面', icon: '▱' },
   { id: 'dock', label: 'Dock 设置', icon: '⌘' },
+]
+const backgroundModeOptions = [
+  { label: '纯色', value: 'solid' },
+  { label: '渐变', value: 'gradient' },
+]
+const dockIconStyleOptions = [
+  { label: '现代简洁', value: 'minimal' },
+  { label: 'macOS 26', value: 'macos26' },
+  { label: '自定义', value: 'custom' },
+]
+const customIconItems: Array<{ name: DockIconName; label: string }> = [
+  { name: 'photo', label: '照片' }, { name: 'timeline', label: '时间线' },
+  { name: 'tags', label: '标签' }, { name: 'albums', label: '相册' },
+  { name: 'baby', label: '宝宝' }, { name: 'search', label: '搜索' },
+  { name: 'settings', label: '设置' }, { name: 'trashEmpty', label: '回收站（空）' },
+  { name: 'trashFull', label: '回收站（非空）' },
 ]
 
 const themes: Array<{ id: AppTheme; name: string; description: string; badge: string }> = [
@@ -106,7 +122,6 @@ watch(activeTab, value => localStorage.setItem('themeSettingsActiveTab', value))
 
 function selectTheme(value: AppTheme) {
   setTheme(value)
-  hasUnsavedChanges.value = true
 }
 
 function hexToRgba(hex: string, opacity: number) {
@@ -120,75 +135,88 @@ function updateAccent(value: string) {
   if (!normalized) return
   accent.value = normalized
   setAccent(theme.value, normalized)
-  hasUnsavedChanges.value = true
+}
+
+function updateAccentFromPicker(value: string | null) {
+  if (value) updateAccent(value)
+}
+
+function updateBackgroundColor(key: 'pageColor' | 'secondaryColor' | 'navColor' | 'surfaceColor', value: string | null) {
+  if (value) updateBackground(key, value)
+}
+
+function updateBackgroundMode(value: string | number | boolean) {
+  updateBackground('mode', value === 'gradient' ? 'gradient' : 'solid')
+}
+
+function sliderValue(value: number | number[]) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function updateDockIconStyle(value: string | number | boolean) {
+  updateDock('iconStyle', (['minimal', 'custom'].includes(String(value)) ? value : 'macos26') as DockIconStyle)
+}
+
+async function uploadDockIcon(name: DockIconName, options: UploadRequestOptions) {
+  try {
+    await dockIconStore.upload(name, options.file)
+    ElMessage.success('Dock 图标已更新')
+    options.onSuccess({})
+  } catch (error) {
+    const text = error instanceof Error ? error.message : '图标上传失败'
+    ElMessage.error(text)
+  }
+}
+
+async function removeDockIcon(name: DockIconName) {
+  try { await ElMessageBox.confirm('确定移除这个自定义图标吗？', '移除图标', { type: 'warning' }) }
+  catch { return }
+  await dockIconStore.remove(name)
+  ElMessage.success('已恢复默认图标')
 }
 
 function restoreAccent() {
   resetAccent(theme.value)
   accent.value = getAccent(theme.value)
-  hasUnsavedChanges.value = true
 }
 
 function updateBackground<K extends keyof BackgroundConfig>(key: K, value: BackgroundConfig[K]) {
   background.value = { ...background.value, [key]: value }
   setBackground(theme.value, background.value)
-  hasUnsavedChanges.value = true
 }
 
 function applyBackgroundPreset(value: BackgroundConfig) {
   background.value = { ...value }
   setBackground(theme.value, background.value)
-  hasUnsavedChanges.value = true
 }
 
 function restoreBackground() {
   resetBackground(theme.value)
   background.value = getBackground(theme.value)
-  hasUnsavedChanges.value = true
 }
 
 function updateDock<K extends keyof DockConfig>(key: K, value: DockConfig[K]) {
   dock.value = { ...dock.value, [key]: value }
   setDockConfig(dock.value)
-  hasUnsavedChanges.value = true
 }
 
 function restoreDock() {
   dock.value = { ...DEFAULT_DOCK }
   setDockConfig(dock.value)
-  hasUnsavedChanges.value = true
 }
 
-function saveAllSettings() {
-  if (!saveCurrentAppearance(theme.value, accent.value, background.value, dock.value)) {
-    message.error('配置保存失败，请检查浏览器存储权限')
-    return
-  }
-  hasUnsavedChanges.value = false
-  message.success('主题与 Dock 配置已保存')
-}
+onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
 </script>
 
 <template>
   <div class="theme-settings">
     <div class="theme-nav-row">
-      <div class="theme-tabs" role="tablist" aria-label="主题风格设置">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          class="theme-tab"
-          :class="{ active: activeTab === tab.id }"
-          role="tab"
-          :aria-selected="activeTab === tab.id"
-          @click="activeTab = tab.id"
-        >
-          <span class="tab-icon">{{ tab.icon }}</span>{{ tab.label }}
-        </button>
-      </div>
-      <button class="save-settings-button" :class="{ dirty: hasUnsavedChanges }" @click="saveAllSettings">
-        <span>{{ hasUnsavedChanges ? '●' : '✓' }}</span>
-        {{ hasUnsavedChanges ? '保存当前配置' : '配置已保存' }}
-      </button>
+      <el-tabs v-model="activeTab" class="theme-tabs" stretch aria-label="主题风格设置">
+        <el-tab-pane v-for="tab in tabs" :key="tab.id" :name="tab.id">
+          <template #label><span class="element-tab-label"><span>{{ tab.icon }}</span>{{ tab.label }}</span></template>
+        </el-tab-pane>
+      </el-tabs>
+      <span class="auto-save-status"><span>✓</span>修改后自动保存</span>
     </div>
 
     <section v-if="activeTab === 'style'" class="settings-section">
@@ -213,18 +241,18 @@ function saveAllSettings() {
     <section v-else-if="activeTab === 'color'" class="settings-section">
       <div class="section-intro">
         <div><h2>主题色</h2><p>调整按钮、选中状态与关键操作的强调色。</p></div>
-        <button class="reset-button" @click="restoreAccent">恢复当前默认</button>
+        <el-button type="primary" link @click="restoreAccent">恢复当前默认</el-button>
       </div>
       <div class="color-layout">
         <div class="live-preview accent-preview" :style="{ '--preview-accent': accent }">
           <span class="preview-label">实时预览</span>
-          <div class="accent-window"><span class="accent-window-title">MemoryVault</span><button>主要操作</button><div class="accent-lines"><i></i><i></i><i></i></div></div>
+          <div class="accent-window"><span class="accent-window-title">MemoryVault</span><el-button type="primary" size="small">主要操作</el-button><div class="accent-lines"><i></i><i></i><i></i></div></div>
         </div>
         <div class="color-controls">
           <div class="control-title"><strong>自定义颜色</strong><span>{{ currentThemeName }}</span></div>
           <div class="color-input-row">
-            <input class="native-color" type="color" :value="accent" aria-label="选择主题色" @input="updateAccent(($event.target as HTMLInputElement).value)" />
-            <input class="hex-input" :value="accent" maxlength="7" aria-label="主题色 HEX 值" @change="updateAccent(($event.target as HTMLInputElement).value)" />
+            <el-color-picker :model-value="accent" aria-label="选择主题色" @active-change="updateAccentFromPicker" @change="updateAccentFromPicker" />
+            <el-input :model-value="accent" maxlength="7" aria-label="主题色 HEX 值" @change="updateAccent" />
           </div>
           <div class="preset-heading"><strong>推荐色彩</strong><small>为当前主题调校</small></div>
           <div class="accent-presets">
@@ -239,7 +267,7 @@ function saveAllSettings() {
     <section v-else-if="activeTab === 'background'" class="settings-section">
       <div class="section-intro">
         <div><h2>背景与表面</h2><p>分别控制页面背景、顶部导航和卡片的通透感。</p></div>
-        <button class="reset-button" @click="restoreBackground">恢复当前默认</button>
+        <el-button type="primary" link @click="restoreBackground">恢复当前默认</el-button>
       </div>
       <div class="background-layout">
         <div class="live-preview surface-preview" :style="{ background: previewBackground }">
@@ -247,15 +275,15 @@ function saveAllSettings() {
           <span class="preview-label">实时预览</span>
         </div>
         <div class="surface-controls">
-          <div class="mode-row"><strong>页面背景</strong><span class="segmented"><button :class="{ active: background.mode === 'solid' }" @click="updateBackground('mode', 'solid')">纯色</button><button :class="{ active: background.mode === 'gradient' }" @click="updateBackground('mode', 'gradient')">渐变</button></span></div>
+          <div class="mode-row"><strong>页面背景</strong><el-segmented :model-value="background.mode" :options="backgroundModeOptions" size="small" @change="updateBackgroundMode" /></div>
           <div class="surface-color-grid">
-            <label>主背景<input type="color" :value="background.pageColor" @input="updateBackground('pageColor', ($event.target as HTMLInputElement).value)" /><span>{{ background.pageColor }}</span></label>
-            <label v-if="background.mode === 'gradient'">渐变尾色<input type="color" :value="background.secondaryColor" @input="updateBackground('secondaryColor', ($event.target as HTMLInputElement).value)" /><span>{{ background.secondaryColor }}</span></label>
-            <label>导航背景<input type="color" :value="background.navColor" @input="updateBackground('navColor', ($event.target as HTMLInputElement).value)" /><span>{{ background.navColor }}</span></label>
-            <label>卡片表面<input type="color" :value="background.surfaceColor" @input="updateBackground('surfaceColor', ($event.target as HTMLInputElement).value)" /><span>{{ background.surfaceColor }}</span></label>
+            <label>主背景<span class="element-color-row"><el-color-picker :model-value="background.pageColor" @active-change="(value: string | null) => updateBackgroundColor('pageColor', value)" @change="(value: string | null) => updateBackgroundColor('pageColor', value)" /><el-input :model-value="background.pageColor" size="small" @change="(value: string) => updateBackgroundColor('pageColor', value)" /></span></label>
+            <label v-if="background.mode === 'gradient'">渐变尾色<span class="element-color-row"><el-color-picker :model-value="background.secondaryColor" @active-change="(value: string | null) => updateBackgroundColor('secondaryColor', value)" @change="(value: string | null) => updateBackgroundColor('secondaryColor', value)" /><el-input :model-value="background.secondaryColor" size="small" @change="(value: string) => updateBackgroundColor('secondaryColor', value)" /></span></label>
+            <label>导航背景<span class="element-color-row"><el-color-picker :model-value="background.navColor" @active-change="(value: string | null) => updateBackgroundColor('navColor', value)" @change="(value: string | null) => updateBackgroundColor('navColor', value)" /><el-input :model-value="background.navColor" size="small" @change="(value: string) => updateBackgroundColor('navColor', value)" /></span></label>
+            <label>卡片表面<span class="element-color-row"><el-color-picker :model-value="background.surfaceColor" @active-change="(value: string | null) => updateBackgroundColor('surfaceColor', value)" @change="(value: string | null) => updateBackgroundColor('surfaceColor', value)" /><el-input :model-value="background.surfaceColor" size="small" @change="(value: string) => updateBackgroundColor('surfaceColor', value)" /></span></label>
           </div>
-          <label class="range-control"><span><b>导航透明度</b><output>{{ background.navOpacity }}%</output></span><input type="range" min="20" max="100" :value="background.navOpacity" @input="updateBackground('navOpacity', Number(($event.target as HTMLInputElement).value))" /></label>
-          <label class="range-control"><span><b>卡片透明度</b><output>{{ background.surfaceOpacity }}%</output></span><input type="range" min="35" max="100" :value="background.surfaceOpacity" @input="updateBackground('surfaceOpacity', Number(($event.target as HTMLInputElement).value))" /></label>
+          <label class="range-control"><span><b>导航透明度</b><output>{{ background.navOpacity }}%</output></span><el-slider :model-value="background.navOpacity" :min="20" :max="100" :show-tooltip="false" @input="(value: number | number[]) => updateBackground('navOpacity', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>卡片透明度</b><output>{{ background.surfaceOpacity }}%</output></span><el-slider :model-value="background.surfaceOpacity" :min="35" :max="100" :show-tooltip="false" @input="(value: number | number[]) => updateBackground('surfaceOpacity', sliderValue(value))" /></label>
         </div>
       </div>
       <div class="preset-heading background-heading"><strong>推荐方案</strong><small>一键应用整套背景组合</small></div>
@@ -270,16 +298,30 @@ function saveAllSettings() {
     <section v-else class="settings-section">
       <div class="section-intro">
         <div><h2>Dock 设置</h2><p>调整底部菜单的尺寸、玻璃质感与悬浮反馈，效果实时应用。</p></div>
-        <button class="reset-button" @click="restoreDock">恢复默认</button>
+        <el-button type="primary" link @click="restoreDock">恢复默认</el-button>
       </div>
       <div class="dock-layout">
-        <div class="dock-stage"><i class="orb one"></i><i class="orb two"></i><div class="dock-preview" :style="dockPreviewStyle"><span class="dock-preview-item photo">▧</span><span class="dock-preview-item timeline">◷</span><span class="dock-preview-item magnified albums">▱</span><span class="dock-preview-item people">♙</span><span class="dock-preview-item settings">⚙</span></div><span class="preview-label">实时预览</span></div>
+        <div class="dock-stage"><i class="orb one"></i><i class="orb two"></i><div class="dock-preview" :style="dockPreviewStyle"><span v-for="(item,index) in customIconItems.slice(0,7)" :key="item.name" class="dock-preview-item" :class="[item.name,{ magnified:index===2,custom:dock.iconStyle==='custom' }]"><DockIcon :name="item.name" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls[item.name]" /></span><span class="dock-preview-item trash"><DockIcon name="trashFull" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls.trashFull" /></span></div><span class="preview-label">实时预览</span></div>
         <div class="dock-controls">
-          <label class="range-control"><span><b>Dock 透明度</b><output>{{ Math.round(dock.opacity * 100) }}%</output></span><small>控制玻璃托盘底色的浓淡。</small><input type="range" min="0.3" max="1" step="0.05" :value="dock.opacity" @input="updateDock('opacity', Number(($event.target as HTMLInputElement).value))" /></label>
-          <label class="range-control"><span><b>玻璃模糊</b><output>{{ dock.blurStrength }} px</output></span><small>调整背景折射的柔和程度。</small><input type="range" min="5" max="40" :value="dock.blurStrength" @input="updateDock('blurStrength', Number(($event.target as HTMLInputElement).value))" /></label>
-          <label class="range-control"><span><b>图标大小</b><output>{{ dock.iconSize }} px</output></span><small>调整图标和玻璃托盘的整体尺寸。</small><input type="range" min="16" max="32" :value="dock.iconSize" @input="updateDock('iconSize', Number(($event.target as HTMLInputElement).value))" /></label>
-          <label class="range-control"><span><b>悬浮放大</b><output>{{ dock.maxScale.toFixed(2) }}×</output></span><small>设置指针靠近图标时的最大比例。</small><input type="range" min="1.1" max="2" step="0.05" :value="dock.maxScale" @input="updateDock('maxScale', Number(($event.target as HTMLInputElement).value))" /></label>
-          <label class="range-control"><span><b>动画速度</b><output>{{ dock.animationSpeed.toFixed(2) }} s</output></span><small>控制 Dock 图标跟随与复位速度。</small><input type="range" min="0.1" max="0.5" step="0.05" :value="dock.animationSpeed" @input="updateDock('animationSpeed', Number(($event.target as HTMLInputElement).value))" /></label>
+          <div class="dock-icon-style"><div><b>图标风格</b><small>选择系统图标、macOS 26 图标或上传自己的图标。</small></div><el-segmented :model-value="dock.iconStyle" :options="dockIconStyleOptions" @change="updateDockIconStyle" /></div>
+          <label class="range-control"><span><b>Dock 透明度</b><output>{{ Math.round(dock.opacity * 100) }}%</output></span><small>控制玻璃托盘底色的浓淡。</small><el-slider :model-value="dock.opacity" :min="0.3" :max="1" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('opacity', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>玻璃模糊</b><output>{{ dock.blurStrength }} px</output></span><small>调整背景折射的柔和程度。</small><el-slider :model-value="dock.blurStrength" :min="5" :max="40" :show-tooltip="false" @input="(value: number | number[]) => updateDock('blurStrength', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>图标大小</b><output>{{ dock.iconSize }} px</output></span><small>调整图标和玻璃托盘的整体尺寸。</small><el-slider :model-value="dock.iconSize" :min="16" :max="32" :show-tooltip="false" @input="(value: number | number[]) => updateDock('iconSize', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>悬浮放大</b><output>{{ dock.maxScale.toFixed(2) }}×</output></span><small>设置指针靠近图标时的最大比例。</small><el-slider :model-value="dock.maxScale" :min="1.1" :max="2" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('maxScale', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>动画速度</b><output>{{ dock.animationSpeed.toFixed(2) }} s</output></span><small>控制 Dock 图标跟随与复位速度。</small><el-slider :model-value="dock.animationSpeed" :min="0.1" :max="0.5" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('animationSpeed', sliderValue(value))" /></label>
+        </div>
+      </div>
+      <div v-if="dock.iconStyle === 'custom'" class="custom-icon-settings">
+        <div class="preset-heading background-heading"><strong>自定义 Dock 图标</strong><small>支持 JPG、PNG、WebP，单张不超过 5MB</small></div>
+        <div class="custom-icon-grid">
+          <article v-for="item in customIconItems" :key="item.name" class="custom-icon-card">
+            <div class="custom-icon-image"><img v-if="dockIconStore.iconUrls[item.name]" :src="dockIconStore.iconUrls[item.name]" :alt="item.label" /><DockIcon v-else :name="item.name" variant="minimal" /></div>
+            <strong>{{ item.label }}</strong>
+            <div class="custom-icon-actions">
+              <el-upload action="#" accept="image/jpeg,image/png,image/webp" :show-file-list="false" :http-request="(options: UploadRequestOptions) => uploadDockIcon(item.name, options)"><el-button size="small" :loading="dockIconStore.uploading[item.name]">上传</el-button></el-upload>
+              <el-button v-if="dockIconStore.iconUrls[item.name]" type="danger" link size="small" @click="removeDockIcon(item.name)">移除</el-button>
+            </div>
+          </article>
         </div>
       </div>
     </section>
@@ -288,8 +330,8 @@ function saveAllSettings() {
 
 <style scoped>
 .theme-settings { width: 100%; }
-.theme-nav-row { display:flex;align-items:stretch;gap:10px;margin-bottom:16px; }.theme-tabs { display: grid; flex:1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 6px; border: 1px solid var(--glass-border); border-radius: 16px; background: var(--bg-secondary); box-shadow: 0 8px 26px rgba(0,0,0,.06); }
-.save-settings-button { display:flex;min-width:132px;align-items:center;justify-content:center;gap:6px;padding:0 15px;border:1px solid var(--glass-border);border-radius:16px;background:var(--bg-secondary);color:var(--success);font-size:12px;font-weight:700;box-shadow:0 8px 26px rgba(0,0,0,.06);transition:.18s ease; }.save-settings-button.dirty { border-color:var(--accent-border);background:var(--accent);color:#fff;box-shadow:0 9px 24px var(--accent-soft); }.save-settings-button:hover { transform:translateY(-1px); }
+.theme-nav-row { display:flex;align-items:stretch;gap:10px;margin-bottom:16px; }.theme-tabs { flex:1;min-width:0;padding:6px 10px 0;border:1px solid var(--glass-border);border-radius:16px;background:var(--bg-secondary);box-shadow:0 8px 26px rgba(0,0,0,.06); }
+.auto-save-status { display:flex;min-width:132px;align-items:center;justify-content:center;gap:6px;padding:0 14px;border:1px solid var(--glass-border);border-radius:16px;background:var(--bg-secondary);color:var(--text-secondary);font-size:11px;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.06);white-space:nowrap; }.auto-save-status span { display:grid;width:18px;height:18px;place-items:center;border-radius:50%;background:rgba(48,209,88,.14);color:var(--success);font-size:11px;font-weight:800; }
 .theme-tab { display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; border-radius: 11px; color: var(--text-secondary); font-size: 13px; font-weight: 600; transition: .18s ease; }
 .theme-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }.theme-tab.active { color: var(--accent); background: var(--bg-card); box-shadow: 0 5px 18px rgba(0,0,0,.1), inset 0 0 0 1px var(--accent-border, rgba(0,122,255,.25)); }.tab-icon { font-size: 16px; }
 .settings-section { padding: 22px; border: 1px solid var(--glass-border); border-radius: 18px; background: var(--bg-secondary); box-shadow: 0 16px 38px rgba(0,0,0,.07); }
@@ -298,5 +340,9 @@ function saveAllSettings() {
 .color-layout,.background-layout,.dock-layout { display:grid;grid-template-columns:minmax(260px,.9fr) minmax(320px,1.1fr);gap:22px; }.live-preview,.dock-stage { position:relative;min-height:340px;display:grid;place-items:center;overflow:hidden;border:1px solid var(--glass-border);border-radius:20px;background:var(--page-background,var(--bg-primary)); }.live-preview::before,.dock-stage::before { position:absolute;width:190px;height:190px;border-radius:50%;background:var(--accent-soft);content:'';filter:blur(3px);transform:translate(45%,-55%); }.preview-label { position:absolute;right:12px;bottom:12px;padding:5px 9px;border:1px solid rgba(255,255,255,.5);border-radius:999px;background:rgba(255,255,255,.56);color:#253247;font-size:10px;font-weight:700;backdrop-filter:blur(12px); }.accent-window { position:relative;width:76%;padding:24px;border:1px solid var(--glass-border);border-radius:16px;background:var(--bg-card);box-shadow:0 18px 42px rgba(0,0,0,.15); }.accent-window-title { display:block;margin-bottom:24px;color:var(--text-primary);font-size:17px;font-weight:700; }.accent-window button { padding:8px 12px;border-radius:8px;background:var(--preview-accent);color:white;font-size:11px;font-weight:700; }.accent-lines { display:grid;gap:7px;margin-top:24px; }.accent-lines i { height:7px;border-radius:9px;background:var(--bg-tertiary); }.accent-lines i:first-child { width:72%;background:var(--preview-accent); }.accent-lines i:last-child { width:48%; }.color-controls,.surface-controls,.dock-controls { display:grid;align-content:start;gap:18px; }.control-title,.preset-heading,.mode-row { display:flex;align-items:center;justify-content:space-between;gap:12px; }.control-title strong,.preset-heading strong,.mode-row strong { color:var(--text-primary);font-size:13px; }.control-title span,.preset-heading small { color:var(--text-tertiary);font-size:11px; }.color-input-row { display:grid;grid-template-columns:50px 1fr;gap:9px; }.native-color,.surface-color-grid input { width:100%;height:40px;padding:3px;border:1px solid var(--separator);border-radius:10px;background:var(--bg-primary); }.hex-input { min-width:0;padding:0 12px;border:1px solid var(--separator);border-radius:10px;background:var(--bg-primary);color:var(--text-primary);font-family:var(--font-mono);font-size:13px; }.accent-presets { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px; }.accent-presets button { display:grid;grid-template-columns:30px 1fr;align-items:center;gap:7px;padding:7px;border:1px solid var(--separator);border-radius:10px;color:var(--text-secondary);text-align:left; }.accent-presets button.active { border-color:var(--accent);background:var(--accent-soft); }.accent-presets button>span { display:grid;width:30px;height:30px;place-items:center;border-radius:8px;color:#fff; }.accent-presets small { font-size:10px; }
 .surface-window { position:relative;width:78%;overflow:hidden;border:1px solid rgba(255,255,255,.5);border-radius:16px;box-shadow:0 20px 44px rgba(36,52,80,.2);backdrop-filter:blur(16px); }.surface-nav { display:flex;height:44px;align-items:center;gap:8px;padding:0 13px;color:#172235;backdrop-filter:blur(16px); }.surface-nav b { margin-right:auto;font-size:10px; }.surface-nav i { width:20px;height:4px;border-radius:9px;background:rgba(23,34,53,.35); }.surface-body { min-height:190px;padding:24px;color:#172235; }.surface-body>span { display:grid;gap:8px; }.surface-body>span b { font-size:14px; }.surface-body>span i { width:55%;height:5px;border-radius:9px;background:rgba(23,34,53,.25); }.surface-body>div { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:26px; }.surface-body>div i { height:52px;border-radius:8px;background:rgba(255,255,255,.62);box-shadow:0 7px 14px rgba(0,0,0,.08); }.segmented { display:flex;padding:3px;border:1px solid var(--separator);border-radius:9px;background:var(--bg-tertiary); }.segmented button { padding:5px 11px;border-radius:6px;color:var(--text-secondary);font-size:11px; }.segmented button.active { background:var(--bg-card);color:var(--accent);box-shadow:0 3px 8px rgba(0,0,0,.1); }.surface-color-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }.surface-color-grid label { display:grid;grid-template-columns:34px 1fr;align-items:center;gap:7px;color:var(--text-secondary);font-size:11px; }.surface-color-grid label>input { grid-row:2;width:34px;height:32px; }.surface-color-grid label>span { grid-row:2;color:var(--text-primary);font-family:var(--font-mono);font-size:11px; }.range-control { display:grid;gap:7px;padding-top:12px;border-top:1px solid var(--separator); }.range-control>span { display:flex;justify-content:space-between;gap:12px; }.range-control b { color:var(--text-primary);font-size:12px; }.range-control output { color:var(--accent);font-size:11px;font-weight:700; }.range-control small { color:var(--text-tertiary);font-size:10px; }.range-control input { width:100%;accent-color:var(--accent); }.background-heading { margin-top:22px;padding-top:18px;border-top:1px solid var(--separator); }.background-presets { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:11px; }.background-presets button { min-width:0;padding:7px;border:1px solid var(--separator);border-radius:11px;background:var(--bg-card);text-align:left; }.background-presets button.active { border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft); }.background-swatch { position:relative;display:block;height:40px;overflow:hidden;border-radius:7px; }.background-swatch i { position:absolute;right:7px;bottom:6px;width:45%;height:18px;border-radius:4px;background:var(--preset-card);box-shadow:0 3px 8px rgba(0,0,0,.13); }.background-presets button>span:last-child { display:grid;gap:2px;margin-top:6px; }.background-presets b { overflow:hidden;color:var(--text-primary);font-size:10px;text-overflow:ellipsis;white-space:nowrap; }.background-presets small { color:var(--text-tertiary);font-size:9px; }
 .dock-stage { min-height:430px;background:linear-gradient(145deg,#c8ebfb,#eadcf8 54%,#d8f1e9); }.orb { position:absolute;border-radius:50%;filter:blur(4px); }.orb.one { width:190px;height:190px;left:-25px;top:-20px;background:rgba(50,173,230,.46); }.orb.two { width:230px;height:230px;right:-45px;bottom:-45px;background:rgba(175,82,222,.32); }.dock-preview { z-index:1;display:flex;align-items:flex-end;gap:7px;padding:9px 11px;border:1px solid rgba(255,255,255,.75);border-radius:18px;background:rgba(255,255,255,var(--preview-opacity));box-shadow:0 18px 38px rgba(46,58,90,.22),inset 0 1px 0 white;backdrop-filter:blur(var(--preview-blur)) saturate(180%); }.dock-preview-item { display:grid;width:var(--preview-size);height:var(--preview-size);place-items:center;border-radius:10px;color:#fff;font-size:calc(var(--preview-size) * .5);font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.2);box-shadow:0 5px 12px rgba(0,0,0,.2); }.dock-preview-item.magnified { transform:scale(var(--preview-scale)) translateY(-7px); }.photo{background:linear-gradient(145deg,#50c7ff,#1677ff)}.timeline{background:linear-gradient(145deg,#ffcc00,#ff6b00)}.albums{background:linear-gradient(145deg,#bf7aff,#6d3ee8)}.people{background:linear-gradient(145deg,#50e3a4,#0a9b75)}.settings{background:linear-gradient(145deg,#aab4c4,#596579)}
-@media (max-width:760px){.theme-nav-row{flex-direction:column}.theme-tabs{grid-template-columns:repeat(2,1fr)}.save-settings-button{min-height:44px}.style-grid{grid-template-columns:1fr}.color-layout,.background-layout,.dock-layout{grid-template-columns:1fr}.live-preview,.dock-stage{min-height:300px}.background-presets{grid-template-columns:repeat(2,1fr)}}
+.theme-tabs :deep(.el-tabs__header){margin:0}.theme-tabs :deep(.el-tabs__nav-wrap::after){display:none}.theme-tabs :deep(.el-tabs__active-bar){height:3px;border-radius:4px;background:var(--accent)}.theme-tabs :deep(.el-tabs__item){height:44px;color:var(--text-secondary);font-size:13px;font-weight:650}.theme-tabs :deep(.el-tabs__item.is-active){color:var(--accent)}.theme-tabs :deep(.el-tabs__content){display:none}.element-tab-label{display:flex;align-items:center;justify-content:center;gap:7px}.element-tab-label>span{font-size:16px}
+.color-input-row{grid-template-columns:40px minmax(0,1fr)}.color-input-row :deep(.el-color-picker__trigger){width:40px;height:40px;border-radius:10px}.color-input-row :deep(.el-input__wrapper){min-height:40px;border-radius:10px}.color-input-row :deep(.el-input__inner){font-family:var(--font-mono)}
+.surface-color-grid label{display:grid;grid-template-columns:1fr;align-items:initial}.surface-color-grid label>.element-color-row{display:grid;grid-row:auto;grid-template-columns:34px minmax(0,1fr);gap:7px;color:var(--text-primary);font-family:var(--font-mono)}.element-color-row :deep(.el-color-picker__trigger){width:34px;height:32px;border-radius:9px}.element-color-row :deep(.el-input__wrapper){border-radius:9px}.element-color-row :deep(.el-input__inner){font-family:var(--font-mono);font-size:11px}.range-control :deep(.el-slider){height:24px}.range-control :deep(.el-slider__bar){background:var(--accent)}.range-control :deep(.el-slider__button){border-color:var(--accent)}
+.dock-preview-item :deep(.dock-glyph){width:58%;height:58%}.dock-preview-item.custom :deep(.dock-glyph){width:100%;height:100%}.dock-preview-item.tags{background:linear-gradient(145deg,#ff8dc7,#eb3d84 56%,#9e1c61)}.dock-preview-item.baby{background:linear-gradient(145deg,#67dfbd,#18a881 56%,#08715d)}.dock-preview-item.search{background:linear-gradient(145deg,#ab9cff,#655ee8 56%,#3b36a8)}.dock-preview-item.trash{background:linear-gradient(145deg,#edf1f4,#9aa8b4 56%,#53626f)}.dock-icon-style{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--separator)}.dock-icon-style>div{display:grid;gap:4px}.dock-icon-style b{color:var(--text-primary);font-size:12px}.dock-icon-style small{color:var(--text-tertiary);font-size:10px}.custom-icon-settings{margin-top:22px}.custom-icon-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.custom-icon-card{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:9px;padding:10px;border:1px solid var(--separator);border-radius:12px;background:var(--bg-card)}.custom-icon-card>strong{overflow:hidden;color:var(--text-primary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.custom-icon-image{display:grid;width:52px;height:52px;grid-row:span 2;place-items:center;overflow:hidden;border-radius:12px;background:var(--bg-tertiary);color:var(--text-primary)}.custom-icon-image img{width:100%;height:100%;object-fit:contain}.custom-icon-image :deep(.dock-glyph){width:55%;height:55%}.custom-icon-actions{display:flex;align-items:center;gap:4px}
+@media (max-width:760px){.theme-nav-row{flex-direction:column}.theme-tabs{grid-template-columns:repeat(2,1fr)}.auto-save-status{min-height:40px}.style-grid{grid-template-columns:1fr}.color-layout,.background-layout,.dock-layout{grid-template-columns:1fr}.live-preview,.dock-stage{min-height:300px}.background-presets{grid-template-columns:repeat(2,1fr)}}
 </style>

@@ -4,7 +4,6 @@ import com.memoryvault.entity.Photo;
 import com.memoryvault.repository.AlbumRepository;
 import com.memoryvault.repository.CategoryRepository;
 import com.memoryvault.repository.PhotoRepository;
-import com.memoryvault.storage.LocalStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +17,6 @@ import java.util.*;
 public class DedupService {
 
     private final PhotoRepository photoRepository;
-    private final LocalStorageService storageService;
     private final AlbumRepository albumRepository;
     private final CategoryRepository categoryRepository;
 
@@ -93,17 +91,11 @@ public class DedupService {
     public void deletePhoto(Long photoId) {
         Photo photo = photoRepository.findById(photoId)
                 .orElseThrow(() -> new RuntimeException("Photo not found"));
-        // Clear cover_photo_id references from albums and categories
         albumRepository.clearCoverPhotoRefs(photoId);
         categoryRepository.clearCoverPhotoRefs(photoId);
-        try {
-            storageService.deleteObject(photo.getFilePath());
-            String thumbExt = photo.getOriginalFilename() != null
-                    && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
-            storageService.deleteObject(photo.getFileHashMd5() + "/thumb." + thumbExt);
-        } catch (Exception e) {
-            log.warn("Failed to delete storage objects for photo {}: {}", photoId, e.getMessage());
-        }
-        photoRepository.deleteById(photoId);
+        photo.setDeletedAt(java.time.LocalDateTime.now());
+        photo.setFavorite(false);
+        photo.setInTimeline(false);
+        photoRepository.save(photo);
     }
 }

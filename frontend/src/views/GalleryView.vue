@@ -77,8 +77,8 @@ async function batchDelete() {
 
   dialog.warning({
     title: '批量删除',
-    content: `确定要删除选中的 ${selectedIds.value.size} 张照片吗？此操作不可恢复。`,
-    positiveText: '删除',
+    content: `确定将选中的 ${selectedIds.value.size} 张照片移入回收站吗？可在 Dock 回收站中恢复。`,
+    positiveText: '移入回收站',
     negativeText: '取消',
     onPositiveClick: async () => {
       const ids = Array.from(selectedIds.value)
@@ -93,7 +93,7 @@ async function batchDelete() {
         selectMode.value = false
 
         if (data.fail === 0) {
-          message.success(`已删除 ${data.success} 张照片`)
+          message.success(`已将 ${data.success} 张照片移入回收站`)
         } else {
           message.warning(`删除完成：成功 ${data.success} 张，失败 ${data.fail} 张`)
         }

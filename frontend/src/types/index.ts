@@ -19,6 +19,7 @@ export interface Photo {
   tags: string[]
   sourceFolderId: number | null
   createdAt: string
+  deletedAt: string | null
 }
 
 export interface Tag {

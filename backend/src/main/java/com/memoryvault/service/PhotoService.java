@@ -224,6 +224,34 @@ public class PhotoService {
     public void deletePhoto(Long id) {
         Photo photo = photoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Photo not found"));
+        albumRepository.clearCoverPhotoRefs(id);
+        categoryRepository.clearCoverPhotoRefs(id);
+        photo.setDeletedAt(LocalDateTime.now());
+        photo.setFavorite(false);
+        photo.setInTimeline(false);
+        photoRepository.save(photo);
+    }
+
+    public Page<PhotoDTO> listTrash(Pageable pageable) {
+        return photoRepository.findTrash(pageable).map(this::toDTO);
+    }
+
+    public long countTrash() {
+        return photoRepository.countByDeletedAtIsNotNull();
+    }
+
+    @Transactional
+    public PhotoDTO restorePhoto(Long id) {
+        Photo photo = photoRepository.findTrashById(id)
+                .orElseThrow(() -> new RuntimeException("Photo not found in trash"));
+        photo.setDeletedAt(null);
+        return toDTO(photoRepository.save(photo));
+    }
+
+    @Transactional
+    public void permanentDeletePhoto(Long id) {
+        Photo photo = photoRepository.findTrashById(id)
+                .orElseThrow(() -> new RuntimeException("Photo not found in trash"));
         // Clear cover_photo_id references from albums and categories
         albumRepository.clearCoverPhotoRefs(id);
         categoryRepository.clearCoverPhotoRefs(id);
@@ -248,11 +276,20 @@ public class PhotoService {
             String thumbExt = isVideoFile(photo.getOriginalFilename()) ? "jpg" :
                               (photo.getOriginalFilename() != null
                               && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg");
-            storageService.deleteObject(photo.getFileHashMd5() + "/thumb." + thumbExt);
+            storageService.deleteObject("thumbs", photo.getFileHashMd5() + "/thumb." + thumbExt);
         } catch (Exception e) {
             log.warn("Failed to delete storage objects for photo {}: {}", id, e.getMessage());
         }
-        photoRepository.deleteById(id);
+        photoRepository.delete(photo);
+    }
+
+    @Transactional
+    public int clearTrash() {
+        List<Photo> photos = photoRepository.findTrash(Pageable.unpaged()).getContent();
+        for (Photo photo : photos) {
+            permanentDeletePhoto(photo.getId());
+        }
+        return photos.size();
     }
 
     public Page<PhotoDTO> getFavorites(Pageable pageable) {
@@ -482,6 +519,7 @@ public class PhotoService {
         dto.setInTimeline(photo.getInTimeline());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
+        dto.setDeletedAt(photo.getDeletedAt());
         dto.setSourceFolderId(photo.getSourceFolderId());
 
         try {

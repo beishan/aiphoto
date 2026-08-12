@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useMessage } from 'naive-ui'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { userApi } from '@/api/userApi'
 import type { User } from '@/types'
+import AvatarCropDialog from '@/components/AvatarCropDialog.vue'
 
-const message = useMessage()
 const user = ref<User | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const uploading = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
+const selectedAvatar = ref<File | null>(null)
+const cropDialogVisible = ref(false)
 
 const form = reactive({
   nickname: '',
@@ -22,11 +24,7 @@ const form = reactive({
 const userInitial = computed(() => user.value?.username?.charAt(0).toUpperCase() || 'U')
 const yesterday = new Date()
 yesterday.setDate(yesterday.getDate() - 1)
-const maxBirthDate = [
-  yesterday.getFullYear(),
-  String(yesterday.getMonth() + 1).padStart(2, '0'),
-  String(yesterday.getDate()).padStart(2, '0'),
-].join('-')
+const disabledBirthDate = (date: Date) => date.getTime() > yesterday.getTime()
 
 function applyUser(nextUser: User) {
   user.value = nextUser
@@ -49,7 +47,7 @@ async function loadProfile() {
     applyUser(data)
     syncSession(data)
   } catch (e: any) {
-    message.error(e.response?.data?.message || '个人资料加载失败')
+    ElMessage.error(e.response?.data?.message || '个人资料加载失败')
   } finally {
     loading.value = false
   }
@@ -67,51 +65,64 @@ async function saveProfile() {
     })
     applyUser(data)
     syncSession(data)
-    message.success('个人设置已保存')
+    ElMessage.success('个人设置已保存')
   } catch (e: any) {
-    message.error(e.response?.data?.message || '个人设置保存失败')
+    ElMessage.error(e.response?.data?.message || '个人设置保存失败')
   } finally {
     saving.value = false
   }
 }
 
-async function handleAvatarSelected(event: Event) {
+function handleAvatarSelected(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
   if (file.size > 5 * 1024 * 1024) {
-    message.warning('头像图片不能超过 5MB')
+    ElMessage.warning('头像图片不能超过 5MB')
     return
   }
   if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-    message.warning('仅支持 JPG、PNG、WebP 或 GIF 图片')
+    ElMessage.warning('仅支持 JPG、PNG、WebP 或 GIF 图片')
     return
   }
 
+  selectedAvatar.value = file
+  cropDialogVisible.value = true
+}
+
+function cancelAvatarCrop() {
+  selectedAvatar.value = null
+}
+
+async function uploadCroppedAvatar(file: File) {
   uploading.value = true
   try {
     const { data } = await userApi.uploadAvatar(file)
     applyUser(data)
     syncSession(data)
-    message.success('头像已更新')
+    cropDialogVisible.value = false
+    selectedAvatar.value = null
+    ElMessage.success('头像已更新')
   } catch (e: any) {
-    message.error(e.response?.data?.message || '头像上传失败')
+    ElMessage.error(e.response?.data?.message || '头像上传失败')
   } finally {
     uploading.value = false
   }
 }
 
 async function removeAvatar() {
-  if (!confirm('确定移除当前头像吗？')) return
+  try {
+    await ElMessageBox.confirm('确定移除当前头像吗？', '移除头像', { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' })
+  } catch { return }
   uploading.value = true
   try {
     const { data } = await userApi.deleteAvatar()
     applyUser(data)
     syncSession(data)
-    message.success('头像已移除')
+    ElMessage.success('头像已移除')
   } catch (e: any) {
-    message.error(e.response?.data?.message || '头像移除失败')
+    ElMessage.error(e.response?.data?.message || '头像移除失败')
   } finally {
     uploading.value = false
   }
@@ -123,8 +134,7 @@ onMounted(loadProfile)
 <template>
   <div class="panel-card profile-card">
     <div v-if="loading" class="profile-loading">
-      <span class="profile-spinner"></span>
-      <span>正在加载个人资料…</span>
+      <el-skeleton :rows="6" animated />
     </div>
 
     <template v-else-if="user">
@@ -144,76 +154,76 @@ onMounted(loadProfile)
               hidden
               @change="handleAvatarSelected"
             />
-            <button class="btn-primary" :disabled="uploading" @click="avatarInput?.click()">
-              {{ uploading ? '处理中…' : '选择头像' }}
-            </button>
-            <button v-if="user.avatar" class="btn-secondary danger-button" :disabled="uploading" @click="removeAvatar">
-              移除头像
-            </button>
+            <el-button type="primary" :loading="uploading" @click="avatarInput?.click()">选择头像</el-button>
+            <el-button v-if="user.avatar" type="danger" plain :disabled="uploading" @click="removeAvatar">移除头像</el-button>
           </div>
         </div>
       </section>
+
+      <AvatarCropDialog
+        v-model="cropDialogVisible"
+        :file="selectedAvatar"
+        :uploading="uploading"
+        @confirm="uploadCroppedAvatar"
+        @cancel="cancelAvatarCrop"
+      />
 
       <section class="profile-form">
         <div class="profile-grid">
           <label class="profile-field readonly-field">
             <span>用户名</span>
-            <input :value="user.username" class="dialog-input" disabled />
+            <el-input :model-value="user.username" disabled />
             <small>用户名只能由管理员维护。</small>
           </label>
 
           <label class="profile-field readonly-field">
             <span>账户角色</span>
-            <input :value="user.role === 'ADMIN' ? '管理员' : '普通用户'" class="dialog-input" disabled />
+            <el-input :model-value="user.role === 'ADMIN' ? '管理员' : '普通用户'" disabled />
             <small>角色权限由管理员统一分配。</small>
           </label>
 
           <label class="profile-field">
             <span>昵称</span>
-            <input v-model="form.nickname" class="dialog-input" maxlength="50" placeholder="你希望显示的名字" />
-            <small class="field-counter">{{ form.nickname.length }}/50</small>
+            <el-input v-model="form.nickname" maxlength="50" show-word-limit placeholder="你希望显示的名字" />
           </label>
 
           <label class="profile-field">
             <span>出生日期</span>
-            <input v-model="form.birthDate" class="dialog-input" type="date" :max="maxBirthDate" />
+            <el-date-picker v-model="form.birthDate" type="date" value-format="YYYY-MM-DD" format="YYYY-MM-DD" :disabled-date="disabledBirthDate" placeholder="选择出生日期" />
           </label>
         </div>
 
         <label class="profile-field">
           <span>心情或个性签名</span>
-          <input v-model="form.mood" class="dialog-input" maxlength="100" placeholder="写下此刻的心情" />
-          <small class="field-counter">{{ form.mood.length }}/100</small>
+          <el-input v-model="form.mood" maxlength="100" show-word-limit placeholder="写下此刻的心情" />
         </label>
 
         <label class="profile-field">
           <span>照片偏好</span>
-          <textarea
+          <el-input
             v-model="form.photoPreferences"
-            class="dialog-input profile-textarea"
+            type="textarea"
             maxlength="1000"
-            rows="4"
+            :rows="4"
+            show-word-limit
             placeholder="例如：家庭合影、旅行、人像；希望重点整理的人物或主题"
-          ></textarea>
-          <small class="field-counter">{{ form.photoPreferences.length }}/1000</small>
+          />
         </label>
 
         <label class="profile-field">
           <span>备注</span>
-          <textarea
+          <el-input
             v-model="form.notes"
-            class="dialog-input profile-textarea"
+            type="textarea"
             maxlength="1000"
-            rows="4"
+            :rows="4"
+            show-word-limit
             placeholder="记录与个人相册相关的其他信息"
-          ></textarea>
-          <small class="field-counter">{{ form.notes.length }}/1000</small>
+          />
         </label>
 
         <div class="profile-actions">
-          <button class="btn-primary" :disabled="saving" @click="saveProfile">
-            {{ saving ? '保存中…' : '保存个人设置' }}
-          </button>
+          <el-button type="primary" :loading="saving" @click="saveProfile">保存个人设置</el-button>
         </div>
       </section>
     </template>
@@ -402,6 +412,7 @@ onMounted(loadProfile)
   justify-content: flex-end;
   padding-top: 4px;
 }
+.profile-field :deep(.el-input__wrapper),.profile-field :deep(.el-textarea__inner){border-radius:10px}.profile-field :deep(.el-date-editor.el-input){width:100%}.profile-actions :deep(.el-button){min-width:128px}
 
 @media (max-width: 680px) {
   .avatar-section {
