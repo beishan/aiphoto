@@ -84,7 +84,8 @@ function navigateTo(path: string) {
 const mouseX = ref(-1)
 const tabBarRef = ref<HTMLElement | null>(null)
 
-function onMouseMove(e: MouseEvent) {
+function onMouseMove(e: PointerEvent) {
+  if (e.pointerType === 'touch') return
   if (!tabBarRef.value) return
   const rect = tabBarRef.value.getBoundingClientRect()
   mouseX.value = e.clientX - rect.left
@@ -96,7 +97,7 @@ function onMouseLeave() {
 
 function getTabScale(index: number): number {
   if (mouseX.value < 0) return 1
-  const items = tabBarRef.value?.querySelectorAll<HTMLElement>('.tab-item')
+  const items = tabBarRef.value?.querySelectorAll<HTMLElement>('.dock-item')
   if (!items || !items[index]) return 1
   const itemRect = items[index].getBoundingClientRect()
   const barRect = tabBarRef.value!.getBoundingClientRect()
@@ -152,7 +153,7 @@ const themeTitle = computed(() => {
   const map: Record<string, string> = {
     'dark': '切换亮色主题',
     'light': '切换 Liquid Glass 主题',
-    'liquid-glass': '切换暗色主题',
+    'macos26': '切换暗色主题',
   }
   return map[theme.value] || '切换主题'
 })
@@ -179,10 +180,21 @@ const dockStyle = computed(() => ({
   '--dock-opacity': dockConfig.value.opacity,
   '--dock-blur': dockConfig.value.blurStrength + 'px',
   '--dock-icon-size': dockConfig.value.iconSize + 'px',
+  '--dock-tile-size': dockConfig.value.iconSize + 22 + 'px',
   '--dock-anim-speed': dockConfig.value.animationSpeed + 's',
 }))
 
 const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
+
+function getDockItemStyle(index: number) {
+  const scale = getTabScale(index)
+  const lift = (scale - 1) * (dockConfig.value.iconSize + 22) * 0.72
+  return {
+    '--dock-item-scale': String(scale),
+    '--dock-item-lift': `${lift}px`,
+    '--dock-item-transition': animSpeed.value,
+  }
+}
 </script>
 
 <template>
@@ -220,7 +232,7 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
       v-if="isTabRoute"
       ref="tabBarRef"
       class="dock"
-      @mousemove="onMouseMove"
+      @pointermove="onMouseMove"
       @mouseleave="onMouseLeave"
     >
       <button
@@ -228,25 +240,26 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
         :key="tab.path"
         class="dock-item"
         :class="{ active: activeTab === tab.path }"
-        :style="{
-          transform: `scale(${getTabScale(index)})`,
-          transition: `transform ${animSpeed} cubic-bezier(0.32, 0.72, 0, 1)`
-        }"
+        :style="getDockItemStyle(index)"
         @click="navigateTo(tab.path)"
       >
-        <svg class="dock-icon" :style="{ width: dockConfig.iconSize + 'px', height: dockConfig.iconSize + 'px' }" viewBox="0 0 24 24" fill="currentColor">
-          <path :d="activeTab === tab.path ? sfIcons[tab.activeIcon] : sfIcons[tab.icon]" />
-        </svg>
-        <span class="dock-label">{{ tab.label }}</span>
+        <span class="dock-icon-tile">
+          <span class="dock-icon-glass"></span>
+          <svg class="dock-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="activeTab === tab.path ? sfIcons[tab.activeIcon] : sfIcons[tab.icon]" />
+          </svg>
+        </span>
+        <span class="dock-label" role="tooltip">{{ tab.label }}</span>
         <span v-if="activeTab === tab.path" class="dock-indicator-dot"></span>
       </button>
 
       <!-- User avatar button -->
-      <div class="dock-item user-avatar-btn" @click.stop="toggleUserMenu">
-        <div class="avatar-circle" :style="{ width: dockConfig.iconSize + 'px', height: dockConfig.iconSize + 'px' }">
+      <div class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length)" @click.stop="toggleUserMenu">
+        <div class="avatar-circle">
           <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
           <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
         </div>
+        <span class="dock-label" role="tooltip">账户</span>
       </div>
     </nav>
 
@@ -299,7 +312,8 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
   justify-content: space-between;
   height: var(--top-bar-height);
   padding: 0 16px;
-  border-bottom: 0.5px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.04);
 }
 
 .top-bar-left {
@@ -342,63 +356,89 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
 /* ===== macOS-style Frosted Glass Dock ===== */
 .dock {
   position: fixed;
-  bottom: calc(12px + var(--safe-bottom));
+  bottom: calc(18px + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 4px;
-  padding: 8px 12px 6px;
-  border-radius: 22px;
-  max-width: calc(100% - 24px);
-
-  /* Frosted glass effect */
+  gap: 6px;
+  padding: 7px 10px 9px;
+  border-radius: calc(var(--dock-tile-size) * .44);
+  max-width: calc(100% - 20px);
+  isolation: isolate;
   background: rgba(var(--dock-bg-rgb, 28, 28, 30), var(--dock-opacity, 0.72));
-  backdrop-filter: saturate(180%) blur(var(--dock-blur, 20px));
-  -webkit-backdrop-filter: saturate(180%) blur(var(--dock-blur, 20px));
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(var(--dock-blur, 20px)) saturate(190%) contrast(102%);
+  -webkit-backdrop-filter: blur(var(--dock-blur, 20px)) saturate(190%) contrast(102%);
+  border: 1px solid rgba(255, 255, 255, 0.38);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.28),
-    0 2px 8px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 22px 52px rgba(0, 0, 0, 0.22),
+    0 5px 14px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.dock::before {
+  content: '';
+  position: absolute;
+  inset: 1px 8% auto;
+  z-index: -1;
+  height: 45%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .48), transparent);
+  pointer-events: none;
+}
+
+.dock::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  z-index: -2;
+  border-radius: calc(var(--dock-tile-size) * .34);
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, .14);
+  pointer-events: none;
 }
 
 /* Light theme dock */
 :global([data-theme="light"]) .dock {
   --dock-bg-rgb: 255, 255, 255;
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-color: rgba(255, 255, 255, .8);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    0 22px 52px rgba(45, 61, 94, .16),
+    0 5px 14px rgba(45, 61, 94, .1),
+    inset 0 1px 0 rgba(255, 255, 255, .96),
+    inset 0 -1px 0 rgba(91, 111, 148, .1);
 }
 
-/* Liquid glass theme dock */
-:global([data-theme="liquid-glass"]) .dock {
-  --dock-bg-rgb: 30, 30, 60;
-  border: 0.5px solid rgba(120, 140, 255, 0.2);
+/* MACOS26 Liquid Glass dock */
+:global([data-theme="macos26"]) .dock {
+  --dock-bg-rgb: 242, 248, 255;
+  border-color: rgba(255, 255, 255, .82);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 24px 58px rgba(45, 61, 94, .24),
+    0 6px 16px rgba(45, 61, 94, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .98),
+    inset 0 -1px 0 rgba(91, 111, 148, .14);
+  backdrop-filter: blur(var(--dock-blur, 28px)) saturate(210%) contrast(106%);
+  -webkit-backdrop-filter: blur(var(--dock-blur, 28px)) saturate(210%) contrast(106%);
 }
 
 .dock-item {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  padding: 6px 10px 4px;
+  justify-content: center;
+  width: var(--dock-tile-size);
+  height: var(--dock-tile-size);
+  padding: 0;
   flex-shrink: 0;
   color: var(--text-tertiary);
   -webkit-tap-highlight-color: transparent;
-  position: relative;
+  transform: translateY(calc(-1 * var(--dock-item-lift, 0px))) scale(var(--dock-item-scale, 1));
   transform-origin: bottom center;
-  transition: transform var(--dock-anim-speed, 0.25s) cubic-bezier(0.32, 0.72, 0, 1),
-              color 0.15s ease;
+  transition: transform var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), color .15s ease;
+  will-change: transform;
 }
 
 .dock-item:active {
@@ -410,44 +450,162 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
   color: var(--accent);
 }
 
+.dock-icon-tile {
+  position: relative;
+  display: grid;
+  width: calc(var(--dock-tile-size) - 4px);
+  height: calc(var(--dock-tile-size) - 4px);
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .76);
+  border-radius: 27%;
+  background: linear-gradient(145deg, #75d7ff, #1689e8 58%, #0755ae);
+  box-shadow:
+    0 5px 12px rgba(15, 47, 83, .24),
+    inset 0 1px 1px rgba(255, 255, 255, .74),
+    inset 0 -1px 2px rgba(0, 35, 91, .3);
+  isolation: isolate;
+  transition: filter .18s ease, box-shadow .18s ease;
+}
+
+.dock-item:nth-child(2) .dock-icon-tile {
+  background: linear-gradient(145deg, #ffaf75, #ff713d 56%, #d43b22);
+}
+
+.dock-item:nth-child(3) .dock-icon-tile {
+  background: linear-gradient(145deg, #ff8dc7, #eb3d84 56%, #9e1c61);
+}
+
+.dock-item:nth-child(4) .dock-icon-tile {
+  background: linear-gradient(145deg, #67dfbd, #18a881 56%, #08715d);
+}
+
+.dock-item:nth-child(5) .dock-icon-tile {
+  background: linear-gradient(145deg, #ffc968, #ed902b 58%, #a84b19);
+}
+
+.dock-item:nth-child(6) .dock-icon-tile {
+  background: linear-gradient(145deg, #ab9cff, #655ee8 56%, #3b36a8);
+}
+
+.dock-item:nth-child(7) .dock-icon-tile {
+  background: linear-gradient(145deg, #c8d0da, #748294 56%, #3c4959);
+}
+
+.dock-icon-glass {
+  position: absolute;
+  inset: 1px 2px 48%;
+  border-radius: 42% 42% 52% 52%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
+  mix-blend-mode: screen;
+}
+
+.dock-icon-tile::after {
+  content: '';
+  position: absolute;
+  inset: auto 12% 5%;
+  height: 22%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .18);
+  filter: blur(4px);
+}
+
 .dock-icon {
+  position: relative;
+  z-index: 1;
   display: block;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+  width: var(--dock-icon-size);
+  height: var(--dock-icon-size);
+  color: rgba(255, 255, 255, .96);
+  filter: drop-shadow(0 1.5px 1px rgba(14, 42, 68, .35));
+}
+
+.dock-item:hover .dock-icon-tile,
+.dock-item.active .dock-icon-tile {
+  filter: saturate(112%) brightness(1.04);
+  box-shadow:
+    0 8px 20px rgba(15, 47, 83, .3),
+    inset 0 1px 1px rgba(255, 255, 255, .86),
+    inset 0 -1px 2px rgba(0, 35, 91, .3);
 }
 
 .dock-label {
-  font-size: 9px;
-  font-weight: 500;
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 50%;
+  z-index: 5;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, .68);
+  border-radius: 9px;
+  background: rgba(27, 36, 51, .84);
+  box-shadow: 0 8px 22px rgba(15, 32, 52, .2);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 550;
   white-space: nowrap;
-  letter-spacing: 0;
   line-height: 1;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%);
+  transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.dock-label::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  border: 5px solid transparent;
+  border-top-color: rgba(27, 36, 51, .84);
+  transform: translateX(-50%);
+}
+
+.dock-item:hover .dock-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-3px);
 }
 
 .dock-indicator-dot {
   position: absolute;
-  bottom: 2px;
-  width: 3px;
-  height: 3px;
+  bottom: -6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 /* ===== User avatar button ===== */
 .user-avatar-btn {
-  padding: 6px 6px 4px;
+  margin-left: 12px;
   cursor: pointer;
 }
 
+.user-avatar-btn::before {
+  content: '';
+  position: absolute;
+  top: 14%;
+  right: calc(100% + 8px);
+  width: 1px;
+  height: 72%;
+  background: color-mix(in srgb, var(--text-tertiary) 28%, transparent);
+  box-shadow: 1px 0 rgba(255, 255, 255, .5);
+}
+
 .avatar-circle {
-  width: var(--dock-icon-size, 22px);
-  height: var(--dock-icon-size, 22px);
+  width: calc(var(--dock-tile-size) - 6px);
+  height: calc(var(--dock-tile-size) - 6px);
   border-radius: 50%;
-  background: var(--accent);
+  background: linear-gradient(145deg, #5ac8fa, #007aff 58%, #5e5ce6);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 7px 16px rgba(38, 72, 112, .25), inset 0 1px 0 rgba(255, 255, 255, .72);
 }
 
 .avatar-img {
@@ -458,21 +616,54 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
 
 .avatar-text {
   color: white;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: calc(var(--dock-tile-size) * .34);
+  font-weight: 700;
 }
 
 /* ===== Popup menu ===== */
 .user-popup-menu {
   position: fixed;
-  bottom: calc(12px + var(--safe-bottom) + 80px);
+  bottom: calc(18px + var(--safe-bottom) + var(--dock-tile-size) + 28px);
   right: 12px;
   width: 220px;
-  border-radius: 14px;
+  border-radius: 18px;
   padding: 8px;
   z-index: 200;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  border: 0.5px solid var(--glass-border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .26), inset 0 1px 0 rgba(255, 255, 255, .72);
+  border: 1px solid var(--glass-border);
+}
+
+@media (max-width: 600px) {
+  .dock {
+    bottom: calc(10px + var(--safe-bottom));
+    gap: 3px;
+    padding: 6px 7px 8px;
+    --dock-tile-size: 36px !important;
+    --dock-icon-size: 18px !important;
+  }
+
+  .dock-item {
+    transform: none;
+  }
+
+  .user-avatar-btn {
+    margin-left: 7px;
+  }
+
+  .user-avatar-btn::before {
+    right: calc(100% + 5px);
+  }
+
+  .dock-label {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-item {
+    transform: none !important;
+    transition: none;
+  }
 }
 
 .popup-header {

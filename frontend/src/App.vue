@@ -2,9 +2,10 @@
 import { ref, computed, watch, onMounted, provide } from 'vue'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme } from 'naive-ui'
 
-type Theme = 'dark' | 'light' | 'liquid-glass'
+type Theme = 'dark' | 'light' | 'macos26'
 
-const theme = ref<Theme>((localStorage.getItem('theme') as Theme) || 'dark')
+const storedTheme = localStorage.getItem('theme')
+const theme = ref<Theme>(storedTheme === 'liquid-glass' ? 'macos26' : (storedTheme as Theme) || 'dark')
 
 onMounted(() => {
   document.documentElement.dataset.theme = theme.value
@@ -20,7 +21,7 @@ function setTheme(t: Theme) {
 }
 
 function toggleTheme() {
-  const themes: Theme[] = ['dark', 'light', 'liquid-glass']
+  const themes: Theme[] = ['dark', 'light', 'macos26']
   const idx = themes.indexOf(theme.value)
   theme.value = themes[(idx + 1) % themes.length]
 }
@@ -37,7 +38,7 @@ const themeOverrides = {
   },
 }
 
-const naiveTheme = computed(() => (theme.value === 'dark' || theme.value === 'liquid-glass') ? darkTheme : undefined)
+const naiveTheme = computed(() => theme.value === 'dark' ? darkTheme : undefined)
 </script>
 
 <template>

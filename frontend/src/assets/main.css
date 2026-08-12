@@ -63,28 +63,28 @@
   --glass-border: rgba(0, 0, 0, 0.08);
 }
 
-/* Liquid Glass theme */
-[data-theme="liquid-glass"] {
-  --bg-primary: #0a0a1a;
-  --bg-secondary: rgba(20, 20, 40, 0.6);
-  --bg-tertiary: rgba(40, 40, 70, 0.5);
-  --bg-card: rgba(25, 25, 50, 0.55);
-  --accent: #00d4ff;
-  --accent-hover: #40e0ff;
-  --success: #00e676;
-  --warning: #ffab00;
-  --danger: #ff1744;
-  --text-primary: #e8eaff;
-  --text-secondary: #8a8cb0;
-  --text-tertiary: #555770;
-  --border: rgba(100, 120, 255, 0.15);
-  --separator: rgba(100, 120, 255, 0.12);
-  --glass-bg: rgba(30, 30, 60, 0.45);
-  --glass-border: rgba(120, 140, 255, 0.2);
+/* MACOS26 - Liquid Glass system theme */
+[data-theme="macos26"] {
+  color-scheme: light;
+  --bg-primary: #dceafa;
+  --bg-secondary: rgba(255, 255, 255, 0.58);
+  --bg-tertiary: rgba(255, 255, 255, 0.38);
+  --bg-card: rgba(255, 255, 255, 0.52);
+  --accent: #007aff;
+  --accent-hover: #168cff;
+  --success: #248a3d;
+  --warning: #c76d00;
+  --danger: #d92d28;
+  --text-primary: #172235;
+  --text-secondary: rgba(23, 34, 53, 0.7);
+  --text-tertiary: rgba(23, 34, 53, 0.46);
+  --border: rgba(255, 255, 255, 0.72);
+  --separator: rgba(91, 111, 148, 0.18);
+  --glass-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.36));
+  --glass-border: rgba(255, 255, 255, 0.74);
   --glass-blur: 28px;
-  --glass-saturation: 200%;
-  /* Enhanced floating tab bar for liquid glass */
-  --tab-bar-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-saturation: 185%;
+  --tab-bar-shadow: 0 24px 58px rgba(45, 61, 94, 0.24), 0 6px 16px rgba(45, 61, 94, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.98);
 }
 
 * {
@@ -188,17 +188,138 @@ button {
   display: none;
 }
 
-/* === Liquid Glass Theme Overrides === */
-[data-theme="liquid-glass"] body {
-  background: linear-gradient(135deg, #0a0a2e 0%, #0d1b3e 50%, #0a0a1a 100%);
+/* === MACOS26 Liquid Glass Theme Overrides === */
+[data-theme="macos26"] body {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(104, 207, 255, 0.62), transparent 32%),
+    radial-gradient(circle at 88% 12%, rgba(206, 151, 255, 0.52), transparent 35%),
+    radial-gradient(circle at 55% 88%, rgba(113, 238, 210, 0.42), transparent 40%),
+    linear-gradient(145deg, #d6eafa 0%, #eee4fa 46%, #d9eff0 100%);
+  background-attachment: fixed;
 }
 
-/* Show tab indicator only in liquid-glass theme */
-[data-theme="liquid-glass"] .tab-indicator {
+/* Show tab indicator only in MACOS26 theme */
+[data-theme="macos26"] .tab-indicator {
   display: block;
   background: rgba(255, 255, 255, 0.1);
   transition: left 0.35s cubic-bezier(0.32, 0.72, 0, 1),
               width 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-theme="macos26"] body::before,
+[data-theme="macos26"] body::after {
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  content: '';
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+[data-theme="macos26"] body::before {
+  top: 8vh;
+  left: 8vw;
+  width: 34vw;
+  height: 34vw;
+  background: radial-gradient(circle, rgba(92, 200, 250, 0.42), transparent 68%);
+}
+
+[data-theme="macos26"] body::after {
+  right: 3vw;
+  bottom: 8vh;
+  width: 42vw;
+  height: 42vw;
+  background: radial-gradient(circle, rgba(191, 117, 255, 0.3), transparent 70%);
+}
+
+[data-theme="macos26"] .app-shell {
+  background:
+    radial-gradient(circle at 8% 14%, rgba(94, 203, 255, 0.42), transparent 30%),
+    radial-gradient(circle at 91% 10%, rgba(206, 147, 255, 0.34), transparent 34%),
+    radial-gradient(circle at 62% 92%, rgba(86, 226, 201, 0.28), transparent 36%),
+    transparent;
+  background-attachment: fixed;
+}
+
+[data-theme="macos26"] .glass,
+[data-theme="macos26"] .panel-card,
+[data-theme="macos26"] .dialog-card,
+[data-theme="macos26"] .modal-sheet,
+[data-theme="macos26"] .picker-panel,
+[data-theme="macos26"] .filter-section,
+[data-theme="macos26"] .info-section {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.34));
+  box-shadow:
+    0 22px 48px rgba(48, 66, 100, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(88, 112, 148, 0.12);
+  backdrop-filter: blur(28px) saturate(185%) contrast(104%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%) contrast(104%);
+}
+
+[data-theme="macos26"] .top-bar {
+  border-color: rgba(255, 255, 255, 0.72);
+  background: rgba(249, 252, 255, 0.56);
+  box-shadow: 0 10px 28px rgba(48, 66, 100, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="macos26"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="macos26"] textarea,
+[data-theme="macos26"] select {
+  border-color: rgba(255, 255, 255, 0.74);
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 5px 16px rgba(48, 66, 100, 0.08);
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+[data-theme="macos26"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+[data-theme="macos26"] textarea:focus,
+[data-theme="macos26"] select:focus {
+  border-color: rgba(0, 122, 255, 0.62);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.13), inset 0 1px 0 #fff;
+}
+
+[data-theme="macos26"] .btn-primary,
+[data-theme="macos26"] .submit-btn,
+[data-theme="macos26"] .create-btn {
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  background: linear-gradient(145deg, #37a8ff 0%, #007aff 52%, #5e5ce6 100%);
+  box-shadow: 0 10px 24px rgba(0, 122, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+
+[data-theme="macos26"] .btn-secondary,
+[data-theme="macos26"] .toolbar-btn,
+[data-theme="macos26"] .action-btn,
+[data-theme="macos26"] .toggle-btn {
+  border-color: rgba(255, 255, 255, 0.68);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(237, 246, 255, 0.4));
+  box-shadow: 0 7px 18px rgba(48, 66, 100, 0.11), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="macos26"] ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+[data-theme="macos26"] ::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(70, 91, 124, 0.28);
+  background-clip: padding-box;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="macos26"] .glass,
+  [data-theme="macos26"] .panel-card,
+  [data-theme="macos26"] .dialog-card,
+  [data-theme="macos26"] .modal-sheet {
+    background: rgba(247, 250, 255, 0.94) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }
 
 /* Liquid Glass slide-fade transition for content */

@@ -85,7 +85,7 @@ onMounted(async () => {
 const themeOptions = [
   { value: 'dark', label: '经典暗色', icon: '🌙', desc: '纯黑背景，护眼省电' },
   { value: 'light', label: '明亮模式', icon: '☀️', desc: '白色背景，清晰醒目' },
-  { value: 'liquid-glass', label: '液态玻璃', icon: '💎', desc: '毛玻璃效果，炫彩流光' },
+  { value: 'macos26', label: 'MACOS26', icon: '💎', desc: '液态玻璃，柔和彩色光晕' },
 ]
 
 const namingOptions = [
