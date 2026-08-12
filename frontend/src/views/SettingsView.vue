@@ -33,6 +33,21 @@ const navItems = [
 
 const activeSection = ref('general')
 
+const activeNavItem = computed(() => navItems.find(item => item.key === activeSection.value) || navItems[0])
+
+const sectionDescriptions: Record<string, string> = {
+  general: '调整界面外观、Dock 动效与文件命名方式',
+  users: '管理家庭成员的账号、角色与访问状态',
+  folders: '配置 NAS 媒体目录并查看扫描状态',
+  models: '管理本地 AI 模型、在线下载与运行状态',
+  tags: '整理标签、颜色和照片关联信息',
+  photos: '调整人脸聚合与语义搜索的识别精度',
+  timeline: '了解照片进入成长时间线的规则',
+  tasks: '查看后台 AI 任务的进度和运行结果',
+  storage: '检查媒体、缩略图、模型和磁盘占用',
+  system: '查看服务版本、资源与连接健康状态',
+}
+
 // ===== General Settings =====
 const namingRule = ref('original')
 const faceThreshold = ref(50)
@@ -631,39 +646,57 @@ async function loadSystemInfo() {
 
 <template>
   <div class="settings-page">
-    <!-- Page header -->
-    <div class="settings-header">
-      <button class="back-btn" @click="router.push('/')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-        </svg>
-      </button>
-      <h1 class="settings-title">设置</h1>
-    </div>
-
-    <!-- Body: left nav + right content (no divider line) -->
     <div class="settings-body">
-      <!-- Left navigation -->
-      <nav class="settings-nav">
-        <button
-          v-for="item in navItems"
-          :key="item.key"
-          class="nav-item"
-          :class="{ active: activeSection === item.key }"
-          @click="activeSection = item.key"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-            <path :d="item.icon" />
-          </svg>
-          <span class="nav-label">{{ item.label }}</span>
-        </button>
-      </nav>
+      <aside class="settings-sidebar">
+        <div class="settings-brand">
+          <button class="back-btn" aria-label="返回照片" @click="router.push('/')">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+            </svg>
+          </button>
+          <div>
+            <span class="settings-eyebrow">MEMORYVAULT</span>
+            <h1 class="settings-title">设置中心</h1>
+          </div>
+        </div>
+        <nav class="settings-nav" aria-label="设置分类">
+          <button
+            v-for="item in navItems"
+            :key="item.key"
+            class="nav-item"
+            :class="{ active: activeSection === item.key }"
+            @click="activeSection = item.key"
+          >
+            <span class="nav-icon-wrap">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path :d="item.icon" />
+              </svg>
+            </span>
+            <span class="nav-label">{{ item.label }}</span>
+            <svg class="nav-chevron" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+              <path d="M9.29 6.71a1 1 0 000 1.42L13.17 12l-3.88 3.88a1 1 0 101.42 1.42l4.59-4.59a1 1 0 000-1.42L10.71 6.7a1 1 0 00-1.42.01z" />
+            </svg>
+          </button>
+        </nav>
+      </aside>
 
       <!-- Right content -->
       <div class="settings-content">
+        <header class="section-hero">
+          <div class="section-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+              <path :d="activeNavItem.icon" />
+            </svg>
+          </div>
+          <div>
+            <span class="section-kicker">设置中心</span>
+            <h2>{{ activeNavItem.label }}</h2>
+            <p>{{ sectionDescriptions[activeSection] }}</p>
+          </div>
+        </header>
+
         <!-- ====== 常规设置 ====== -->
         <div v-if="activeSection === 'general'" class="content-panel">
-          <h2 class="panel-title">常规设置</h2>
 
           <!-- Theme -->
           <div class="panel-card">
@@ -743,7 +776,6 @@ async function loadSystemInfo() {
         <!-- ====== 用户管理 ====== -->
         <div v-if="activeSection === 'users'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">用户管理</h2>
             <button class="btn-primary" @click="showUserDialog = true">+ 新增用户</button>
           </div>
           <div class="panel-card">
@@ -778,7 +810,6 @@ async function loadSystemInfo() {
         <!-- ====== 扫描文件夹 ====== -->
         <div v-if="activeSection === 'folders'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">扫描文件夹</h2>
             <div style="display: flex; gap: 8px;">
               <button class="btn-primary" @click="showFolderDialog = true">+ 添加目录</button>
               <button class="btn-secondary" @click="scanAll">扫描全部</button>
@@ -814,7 +845,6 @@ async function loadSystemInfo() {
 
         <!-- ====== 模型管理 ====== -->
         <div v-if="activeSection === 'models'" class="content-panel">
-          <h2 class="panel-title">模型管理</h2>
           <div class="panel-card model-root-card">
             <div class="model-root-info">
               <span class="label-text">模型根目录</span>
@@ -948,7 +978,6 @@ async function loadSystemInfo() {
         <!-- ====== 标签管理 ====== -->
         <div v-if="activeSection === 'tags'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">标签管理</h2>
             <button class="btn-primary" @click="showTagDialog = true">+ 新建标签</button>
           </div>
           <div class="panel-card">
@@ -977,7 +1006,6 @@ async function loadSystemInfo() {
 
         <!-- ====== 照片与视频 ====== -->
         <div v-if="activeSection === 'photos'" class="content-panel">
-          <h2 class="panel-title">照片与视频</h2>
           <div class="panel-card">
             <div class="setting-row">
               <div class="setting-info">
@@ -1014,7 +1042,6 @@ async function loadSystemInfo() {
 
         <!-- ====== 时间线设置 ====== -->
         <div v-if="activeSection === 'timeline'" class="content-panel">
-          <h2 class="panel-title">时间线设置</h2>
           <div class="panel-card">
             <div class="setting-info">
               <span class="label-text">时间线说明</span>
@@ -1026,7 +1053,6 @@ async function loadSystemInfo() {
         <!-- ====== 任务与日志 ====== -->
         <div v-if="activeSection === 'tasks'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">任务与日志</h2>
             <button class="btn-secondary" @click="loadTasks()">刷新</button>
           </div>
           <!-- Filter tabs -->
@@ -1060,7 +1086,6 @@ async function loadSystemInfo() {
         <!-- ====== 存储管理 ====== -->
         <div v-if="activeSection === 'storage'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">存储管理</h2>
             <button class="btn-secondary" @click="loadStorageInfo()">刷新</button>
           </div>
           <!-- Storage breakdown -->
@@ -1130,7 +1155,6 @@ async function loadSystemInfo() {
         <!-- ====== 系统信息 ====== -->
         <div v-if="activeSection === 'system'" class="content-panel">
           <div class="panel-header-row">
-            <h2 class="panel-title">系统信息</h2>
             <button class="btn-secondary" @click="loadSystemInfo()">刷新</button>
           </div>
           <!-- App info -->
@@ -2416,6 +2440,793 @@ async function loadSystemInfo() {
   .table-row span:nth-child(4),
   .table-row span:nth-child(5),
   .table-row span:nth-child(6) {
+    display: none;
+  }
+}
+
+/* ===== Settings workspace refresh ===== */
+.settings-page {
+  height: 100%;
+  min-height: 0;
+  padding: 20px clamp(16px, 3vw, 40px) calc(var(--tab-content-padding) + 20px);
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 16% 4%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 24rem),
+    var(--bg-primary);
+}
+
+.settings-body {
+  width: min(1360px, 100%);
+  min-height: min(820px, calc(100vh - 120px));
+  margin: 0 auto;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.settings-sidebar {
+  position: sticky;
+  top: 0;
+  width: 244px;
+  flex: 0 0 244px;
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+
+.settings-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 2px 2px 16px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.back-btn {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transition: transform .18s ease, background .18s ease, color .18s ease;
+}
+
+.back-btn:hover {
+  color: var(--accent);
+  transform: translateX(-2px);
+}
+
+.settings-eyebrow,
+.section-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .13em;
+}
+
+.settings-title {
+  font-size: 19px;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+}
+
+.settings-nav {
+  width: 100%;
+  padding: 0;
+  gap: 3px;
+  overflow: visible;
+}
+
+.nav-item {
+  min-height: 45px;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.nav-icon-wrap {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: inherit;
+}
+
+.nav-chevron {
+  margin-left: auto;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.nav-item:hover {
+  border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+}
+
+.nav-item.active {
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.nav-item.active .nav-icon-wrap {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.nav-item.active .nav-chevron {
+  opacity: .8;
+  transform: translateX(0);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.section-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 112px;
+  padding: 22px 26px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--glass-border));
+  border-radius: 20px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--accent) 14%, var(--bg-secondary)), var(--bg-secondary) 60%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .1);
+}
+
+.section-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  place-items: center;
+  border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--accent), var(--accent-hover));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.section-hero h2 {
+  font-size: clamp(21px, 2.4vw, 28px);
+  line-height: 1.15;
+  margin: 0 0 5px;
+}
+
+.section-hero p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.content-panel {
+  max-width: none;
+  animation: settings-panel-in .22s ease-out;
+}
+
+@keyframes settings-panel-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel-header-row {
+  min-height: 38px;
+  justify-content: flex-end;
+  margin: -2px 0 12px;
+}
+
+.panel-title {
+  font-size: 17px;
+}
+
+.panel-card {
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .07);
+}
+
+.label-text {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.label-desc {
+  max-width: 620px;
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.btn-primary,
+.btn-secondary {
+  min-height: 38px;
+  padding: 8px 15px;
+  border-radius: 10px;
+  font-weight: 650;
+  transition: transform .16s ease, filter .16s ease, opacity .16s ease;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.07);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.theme-grid {
+  gap: 10px;
+}
+
+.theme-card {
+  position: relative;
+  min-height: 132px;
+  padding: 18px 14px;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background: var(--bg-primary);
+}
+
+.theme-card::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--separator);
+}
+
+.theme-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-primary));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.theme-card.active::after {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.dock-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 22px;
+}
+
+.dock-config-item {
+  display: grid;
+  grid-template-columns: 88px minmax(80px, 1fr) 50px;
+  min-height: 38px;
+}
+
+.dock-config-item label {
+  width: auto;
+}
+
+.config-slider,
+.threshold-slider {
+  accent-color: var(--accent);
+}
+
+.config-slider::-webkit-slider-thumb,
+.threshold-slider::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.setting-select,
+.dialog-input,
+.model-path-input {
+  min-height: 40px;
+  border-color: var(--separator);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  outline: none;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.setting-select:focus,
+.dialog-input:focus,
+.model-path-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.user-table {
+  min-width: 900px;
+}
+
+.content-panel > .panel-card:has(.user-table) {
+  overflow-x: auto;
+}
+
+.table-header,
+.table-row {
+  grid-template-columns: 1.05fr 1fr .8fr .7fr 1.15fr 1.15fr 1.55fr;
+  min-height: 48px;
+  padding: 10px 6px;
+}
+
+.table-row:hover {
+  background: color-mix(in srgb, var(--bg-tertiary) 45%, transparent);
+}
+
+.cell-username {
+  font-weight: 650;
+}
+
+.action-link {
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  font-weight: 600;
+  transition: background .15s ease;
+}
+
+.action-link:hover {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.action-link.danger:hover {
+  background: color-mix(in srgb, var(--danger) 11%, transparent);
+}
+
+.folder-header,
+.model-type-header,
+.download-task-header,
+.task-log-header {
+  gap: 14px;
+}
+
+.folder-actions,
+.download-task-actions,
+.download-progress-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.folder-info-grid {
+  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(100px, .6fr));
+  gap: 10px 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--separator);
+}
+
+.folder-info-grid > div:first-child {
+  grid-row: span 2;
+}
+
+.model-root-info {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.model-root-path {
+  max-width: 75%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-tab-bar,
+.task-filter-bar {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  padding: 5px;
+  border: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.model-tab,
+.task-filter-btn {
+  min-height: 38px;
+  border-radius: 9px;
+}
+
+.online-models-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 14px;
+}
+
+.online-model-card {
+  min-height: 220px;
+}
+
+.online-model-actions {
+  margin-top: auto;
+}
+
+.tag-row {
+  display: grid;
+  grid-template-columns: 14px minmax(100px, 1fr) minmax(100px, 1.4fr) auto auto auto auto;
+  gap: 10px;
+  min-height: 54px;
+}
+
+.tag-name {
+  min-width: 0;
+}
+
+.tag-color-picker {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 190px;
+}
+
+.info-item {
+  min-height: 34px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.info-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.storage-breakdown {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.storage-item {
+  min-height: 78px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 5px;
+}
+
+.storage-value {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.disk-usage-bar,
+.download-progress-bar {
+  height: 8px;
+}
+
+.dialog-overlay {
+  padding: 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.dialog-card {
+  width: min(460px, 100%);
+  padding: 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .42);
+}
+
+.dialog-card h3 {
+  font-size: 20px;
+}
+
+.empty-text {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--separator);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .settings-page {
+    padding-inline: 16px;
+  }
+
+  .settings-body {
+    gap: 16px;
+  }
+
+  .settings-sidebar {
+    width: 210px;
+    flex-basis: 210px;
+    padding: 13px;
+  }
+
+  .settings-eyebrow {
+    display: none;
+  }
+
+  .dock-config-grid,
+  .storage-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tag-row {
+    grid-template-columns: 14px minmax(100px, 1fr) auto auto auto;
+  }
+
+  .tag-desc-text,
+  .tag-color-picker {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-page {
+    height: 100%;
+    padding: 10px 0 calc(var(--tab-content-padding) + 8px);
+  }
+
+  .settings-body {
+    flex-direction: column;
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .settings-sidebar {
+    position: static;
+    width: 100%;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .settings-brand {
+    display: none;
+  }
+
+  .settings-nav {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+    padding: 4px 16px 8px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .nav-item {
+    width: auto;
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 5px 11px 5px 6px;
+    scroll-snap-align: start;
+    border-color: var(--glass-border);
+    background: var(--bg-secondary);
+  }
+
+  .nav-icon-wrap {
+    width: 29px;
+    height: 29px;
+    flex-basis: 29px;
+  }
+
+  .nav-chevron {
+    display: none;
+  }
+
+  .settings-content {
+    width: 100%;
+    padding: 0 16px;
+  }
+
+  .section-hero {
+    min-height: 94px;
+    padding: 17px 18px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+  }
+
+  .section-icon {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 13px;
+  }
+
+  .section-hero h2 {
+    font-size: 21px;
+  }
+
+  .section-hero p {
+    font-size: 12px;
+  }
+
+  .panel-card {
+    padding: 17px;
+    border-radius: 14px;
+  }
+
+  .panel-header-row {
+    min-height: 0;
+  }
+
+  .setting-row,
+  .folder-header,
+  .model-type-header,
+  .download-task-header {
+    align-items: flex-start;
+  }
+
+  .theme-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-card {
+    min-height: 82px;
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    grid-template-rows: auto auto;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .theme-icon-lg {
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .theme-desc {
+    text-align: left;
+  }
+
+  .dock-config-grid,
+  .storage-breakdown {
+    grid-template-columns: 1fr;
+  }
+
+  .dock-config-item {
+    grid-template-columns: 76px minmax(70px, 1fr) 46px;
+    gap: 8px;
+  }
+
+  .setting-row {
+    flex-wrap: wrap;
+  }
+
+  .setting-select {
+    width: 100%;
+  }
+
+  .content-panel > .panel-card:has(.user-table) {
+    padding: 10px;
+    margin-inline: -2px;
+  }
+
+  .table-header,
+  .table-row {
+    grid-template-columns: 1.05fr 1fr .8fr .7fr 1.15fr 1.15fr 1.55fr;
+  }
+
+  .table-header span:nth-child(n),
+  .table-row span:nth-child(n) {
+    display: initial;
+  }
+
+  .cell-actions {
+    display: flex !important;
+  }
+
+  .folder-header {
+    flex-direction: column;
+  }
+
+  .folder-actions {
+    justify-content: flex-start;
+  }
+
+  .folder-info-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .folder-info-grid > div:first-child {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .model-root-info {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .model-root-path {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .model-tab,
+  .task-filter-btn {
+    padding-inline: 7px;
+    font-size: 12px;
+  }
+
+  .online-model-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-row {
+    grid-template-columns: 14px minmax(80px, 1fr) auto auto auto;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .disk-usage-meta {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .storage-path-item,
+  .info-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dialog-card {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .settings-content,
+  .settings-nav {
+    padding-inline: 12px;
+  }
+
+  .section-hero {
+    align-items: flex-start;
+  }
+
+  .section-kicker {
+    display: none;
+  }
+
+  .tag-row {
+    grid-template-columns: 14px minmax(80px, 1fr) auto auto;
+  }
+
+  .tag-photo-count {
     display: none;
   }
 }
