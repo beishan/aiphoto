@@ -85,6 +85,10 @@ export interface User {
   role: string
   avatar: string | null
   nickname: string | null
+  mood: string | null
+  birthDate: string | null
+  photoPreferences: string | null
+  notes: string | null
   enabled: boolean
   createdAt: string
   lastLoginAt: string | null

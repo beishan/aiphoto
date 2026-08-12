@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, type Ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSettingStore } from '@/stores/settingStore'
 import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
@@ -9,17 +9,17 @@ import { tagApi } from '@/api/tagApi'
 import { folderApi } from '@/api/folderApi'
 import { useMessage } from 'naive-ui'
 import type { User, Tag, ScanFolder } from '@/types'
+import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
+import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 
 const router = useRouter()
 const settingStore = useSettingStore()
 const message = useMessage()
 
-const theme = inject<Ref<string>>('theme')!
-const setTheme = inject<(t: string) => void>('setTheme')!
-
 // ===== Settings menu structure =====
 const navItems = [
-  { key: 'general', label: '常规设置', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z' },
+  { key: 'profile', label: '个人设置', icon: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' },
+  { key: 'general', label: '主题风格', icon: 'M12 3a9 9 0 100 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.37-.6-.37-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 005-5c0-4.42-4.03-8-9-8zM6.5 12A1.5 1.5 0 118 10.5 1.5 1.5 0 016.5 12zm2-4A1.5 1.5 0 1110 6.5 1.5 1.5 0 018.5 8zm4-1A1.5 1.5 0 1114 5.5 1.5 1.5 0 0112.5 7zm4 2a1.5 1.5 0 110-3 1.5 1.5 0 010 3z' },
   { key: 'users', label: '用户管理', icon: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z' },
   { key: 'folders', label: '扫描文件夹', icon: 'M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z' },
   { key: 'models', label: '模型管理', icon: 'M4 6c0-1.1 3.58-2 8-2s8 .9 8 2-3.58 2-8 2-8-.9-8-2zm0 4v4c0 1.1 3.58 2 8 2s8-.9 8-2v-4c-1.72 1.21-5.03 1.75-8 1.75S5.72 11.21 4 10zm0 8v-2c1.72 1.21 5.03 1.75 8 1.75s6.28-.54 8-1.75v2c0 1.1-3.58 2-8 2s-8-.9-8-2z' },
@@ -31,32 +31,30 @@ const navItems = [
   { key: 'system', label: '系统信息', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z' },
 ]
 
-const navGroups = [
+const sessionUser = (() => {
+  try { return JSON.parse(sessionStorage.getItem('user') || 'null') as User | null }
+  catch { return null }
+})()
+const isCurrentUserAdmin = sessionUser?.role === 'ADMIN'
+
+const navGroups = computed(() => [
+  { label: '个人', keys: ['profile'] },
   { label: '外观与偏好', keys: ['general'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: ['models', 'tasks'] },
-  { label: '管理', keys: ['users', 'storage'] },
+  { label: '管理', keys: isCurrentUserAdmin ? ['users', 'storage'] : ['storage'] },
   { label: '系统', keys: ['system'] },
 ].map(group => ({
   label: group.label,
   items: group.keys.map(key => navItems.find(item => item.key === key)!),
-}))
+})))
 
-const activeSection = ref('general')
+const activeSection = ref('profile')
 
 // ===== General Settings =====
 const namingRule = ref('original')
 const faceThreshold = ref(50)
 const searchThreshold = ref(80)
-
-// Dock config
-const dockConfig = ref({
-  opacity: 0.72,
-  blurStrength: 20,
-  iconSize: 22,
-  maxScale: 1.5,
-  animationSpeed: 0.25,
-})
 
 onMounted(async () => {
   // Load settings
@@ -67,22 +65,17 @@ onMounted(async () => {
   faceThreshold.value = Number(settingStore.getSetting('ai_face_cluster_threshold', '50'))
   searchThreshold.value = Number(settingStore.getSetting('ai_search_similarity_threshold', '80'))
 
-  // Load dock config
-  const stored = localStorage.getItem('dockConfig')
-  if (stored) {
-    try { dockConfig.value = { ...dockConfig.value, ...JSON.parse(stored) } } catch { /* ignore */ }
-  }
-
   // Load users, tags, folders
-  await Promise.all([loadUsers(), loadTags(), loadFolders(), loadModels(), loadTasks(), loadStorageInfo(), loadSystemInfo()])
+  await Promise.all([
+    ...(isCurrentUserAdmin ? [loadUsers()] : []),
+    loadTags(),
+    loadFolders(),
+    loadModels(),
+    loadTasks(),
+    loadStorageInfo(),
+    loadSystemInfo(),
+  ])
 })
-
-// ===== Theme =====
-const themeOptions = [
-  { value: 'dark', label: '经典暗色', icon: '🌙', desc: '纯黑背景，护眼省电' },
-  { value: 'light', label: '明亮模式', icon: '☀️', desc: '白色背景，清晰醒目' },
-  { value: 'macos26', label: 'MACOS26', icon: '💎', desc: '液态玻璃，柔和彩色光晕' },
-]
 
 const namingOptions = [
   { value: 'original', label: '保留原名', example: 'IMG_20240101.jpg' },
@@ -557,11 +550,6 @@ async function handleSearchThresholdChange() {
   await settingStore.updateSettings({ ai_search_similarity_threshold: String(searchThreshold.value) })
 }
 
-function saveDockConfig() {
-  localStorage.setItem('dockConfig', JSON.stringify(dockConfig.value))
-  message.success('Dock 设置已保存，刷新页面生效')
-}
-
 function formatSizeLocal(size: number | null) {
   if (size == null) return '-'
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
@@ -682,82 +670,14 @@ async function loadSystemInfo() {
 
       <!-- Right content -->
       <div class="settings-content">
-        <!-- ====== 常规设置 ====== -->
+        <!-- ====== 个人设置 ====== -->
+        <div v-if="activeSection === 'profile'" class="content-panel">
+          <PersonalSettingsPanel />
+        </div>
+
+        <!-- ====== 主题风格 ====== -->
         <div v-if="activeSection === 'general'" class="content-panel">
-
-          <!-- Theme -->
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">外观主题</span>
-                <span class="label-desc">选择应用的视觉风格</span>
-              </div>
-            </div>
-            <div class="theme-grid">
-              <button
-                v-for="opt in themeOptions"
-                :key="opt.value"
-                class="theme-card"
-                :class="{ active: theme === opt.value }"
-                @click="setTheme(opt.value)"
-              >
-                <span class="theme-icon-lg">{{ opt.icon }}</span>
-                <span class="theme-name-lg">{{ opt.label }}</span>
-                <span class="theme-desc">{{ opt.desc }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Dock config -->
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">底部 Dock 设置</span>
-                <span class="label-desc">自定义底部菜单栏的视觉效果和动画</span>
-              </div>
-              <button class="btn-primary" @click="saveDockConfig">保存</button>
-            </div>
-            <div class="dock-config-grid">
-              <div class="dock-config-item">
-                <label>透明度</label>
-                <input type="range" min="0.3" max="1" step="0.05" v-model.number="dockConfig.opacity" class="config-slider" />
-                <span class="config-value">{{ (dockConfig.opacity * 100).toFixed(0) }}%</span>
-              </div>
-              <div class="dock-config-item">
-                <label>模糊强度</label>
-                <input type="range" min="5" max="40" step="1" v-model.number="dockConfig.blurStrength" class="config-slider" />
-                <span class="config-value">{{ dockConfig.blurStrength }}px</span>
-              </div>
-              <div class="dock-config-item">
-                <label>图标大小</label>
-                <input type="range" min="16" max="32" step="1" v-model.number="dockConfig.iconSize" class="config-slider" />
-                <span class="config-value">{{ dockConfig.iconSize }}px</span>
-              </div>
-              <div class="dock-config-item">
-                <label>最大放大比例</label>
-                <input type="range" min="1.1" max="2" step="0.05" v-model.number="dockConfig.maxScale" class="config-slider" />
-                <span class="config-value">{{ dockConfig.maxScale.toFixed(2) }}x</span>
-              </div>
-              <div class="dock-config-item">
-                <label>动画速度</label>
-                <input type="range" min="0.1" max="0.5" step="0.05" v-model.number="dockConfig.animationSpeed" class="config-slider" />
-                <span class="config-value">{{ dockConfig.animationSpeed.toFixed(2) }}s</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Naming rule -->
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">文件命名规则</span>
-                <span class="label-desc">上传照片时按此规则重命名文件</span>
-              </div>
-              <select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
-                <option v-for="opt in namingOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </div>
-          </div>
+          <ThemeSettingsPanel />
         </div>
 
         <!-- ====== 用户管理 ====== -->
@@ -993,6 +913,17 @@ async function loadSystemInfo() {
 
         <!-- ====== 照片与视频 ====== -->
         <div v-if="activeSection === 'photos'" class="content-panel">
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">文件命名规则</span>
+                <span class="label-desc">上传照片时按此规则重命名文件</span>
+              </div>
+              <select v-model="namingRule" class="setting-select" @change="handleNamingRuleChange">
+                <option v-for="opt in namingOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+          </div>
           <div class="panel-card">
             <div class="setting-row">
               <div class="setting-info">

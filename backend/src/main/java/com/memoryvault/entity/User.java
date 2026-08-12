@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -31,6 +32,17 @@ public class User {
 
     @Column(length = 100)
     private String nickname;
+
+    @Column(length = 100)
+    private String mood;
+
+    private LocalDate birthDate;
+
+    @Column(columnDefinition = "TEXT")
+    private String photoPreferences;
+
+    @Column(columnDefinition = "TEXT")
+    private String profileNotes;
 
     private Boolean enabled = true;
 

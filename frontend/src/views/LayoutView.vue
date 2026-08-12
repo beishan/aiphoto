@@ -3,6 +3,7 @@ import { computed, inject, ref, watch, nextTick, onMounted, onUnmounted, type Re
 import { useRouter, useRoute } from 'vue-router'
 import TaskFloat from '@/components/TaskFloat.vue'
 import type { User } from '@/types'
+import { loadDockConfig, type DockConfig } from '@/utils/themeAppearance'
 
 const router = useRouter()
 const route = useRoute()
@@ -11,26 +12,15 @@ const theme = inject<Ref<string>>('theme')!
 const toggleTheme = inject<() => void>('toggleTheme')!
 
 // ===== Dock Configuration =====
-const dockConfig = ref({
-  opacity: 0.72,
-  blurStrength: 20,
-  iconSize: 22,
-  maxScale: 1.5,
-  animationSpeed: 0.25,
-})
+const dockConfig = ref(loadDockConfig())
 
 // Load dock config from localStorage
 onMounted(() => {
-  const stored = localStorage.getItem('dockConfig')
-  if (stored) {
-    try {
-      dockConfig.value = { ...dockConfig.value, ...JSON.parse(stored) }
-    } catch { /* ignore */ }
-  }
+  dockConfig.value = loadDockConfig()
 })
 
-function saveDockConfig() {
-  localStorage.setItem('dockConfig', JSON.stringify(dockConfig.value))
+function onDockConfigUpdated(event: Event) {
+  dockConfig.value = { ...dockConfig.value, ...(event as CustomEvent<DockConfig>).detail }
 }
 
 const tabs = [
@@ -146,8 +136,20 @@ function onDocClick(e: MouseEvent) {
   }
 }
 
-onMounted(() => document.addEventListener('click', onDocClick))
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+function onProfileUpdated(event: Event) {
+  currentUser.value = (event as CustomEvent<User>).detail
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('user-profile-updated', onProfileUpdated)
+  window.addEventListener('dock-config-updated', onDockConfigUpdated)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('user-profile-updated', onProfileUpdated)
+  window.removeEventListener('dock-config-updated', onDockConfigUpdated)
+})
 
 const themeTitle = computed(() => {
   const map: Record<string, string> = {

@@ -18,11 +18,11 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-// Response interceptor - handle 401/403
+// Response interceptor - an expired session is indicated by 401; 403 is an authorization error.
 http.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    if (error.response?.status === 401) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
