@@ -74,21 +74,21 @@ function openViewer(photos: Photo[], index: number) {
     <!-- Search & controls -->
     <div class="controls-bar">
       <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" class="search-icon">
-          <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
-        </svg>
-        <input
+        <el-input
           v-model="searchQuery"
           class="search-input"
           placeholder="搜索标签..."
+          clearable
           @keyup.enter="onSearch"
-        />
+        >
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
       </div>
-      <select v-model="sortBy" class="sort-select" @change="onSortChange">
-        <option value="date">最近创建</option>
-        <option value="name">按名称</option>
-        <option value="count">按照片数</option>
-      </select>
+      <el-select v-model="sortBy" class="sort-select" @change="onSortChange">
+        <el-option value="date" label="最近创建" />
+        <el-option value="name" label="按名称" />
+        <el-option value="count" label="按照片数" />
+      </el-select>
       <div class="view-toggle">
         <button class="view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -214,13 +214,6 @@ function openViewer(photos: Photo[], index: number) {
 
 .search-box {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  border: 0.5px solid var(--glass-border);
 }
 
 .search-icon {
@@ -229,21 +222,11 @@ function openViewer(photos: Photo[], index: number) {
 }
 
 .search-input {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  outline: none;
+  width: 100%;
 }
 
 .sort-select {
-  padding: 8px 10px;
-  border: 0.5px solid var(--glass-border);
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 13px;
+  width: 140px;
 }
 
 .view-toggle {

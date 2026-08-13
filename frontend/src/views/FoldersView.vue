@@ -322,7 +322,7 @@ function closeAddDialog() {
 
             <div class="form-group">
               <label>名称</label>
-              <input v-model="newName" type="text" placeholder="例如：家庭照片" class="ios-input" />
+              <el-input v-model="newName" placeholder="例如：家庭照片" class="ios-input" clearable />
             </div>
 
             <div class="form-group">
@@ -353,7 +353,7 @@ function closeAddDialog() {
 
               <!-- Input mode -->
               <div v-if="inputMode === 'input'" class="path-input-area">
-                <input v-model="newPath" type="text" placeholder="/nas/photos/family" class="ios-input" />
+                <el-input v-model="newPath" placeholder="/nas/photos/family" class="ios-input" clearable />
               </div>
 
               <!-- Browse mode -->
@@ -745,22 +745,9 @@ function closeAddDialog() {
 
 .ios-input {
   width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 16px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
 }
 
-.ios-input:focus {
-  border-color: var(--accent);
-}
+.ios-input :deep(.el-input__wrapper) { min-height: 44px; border-radius: var(--radius-md); }
 
 .form-hint {
   display: block;

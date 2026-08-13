@@ -70,10 +70,10 @@ watch(sortBy, updateSort)
         <h1 class="tag-title">{{ tag?.name || '标签' }}</h1>
         <span class="tag-count">{{ photos.length }} 张照片</span>
       </div>
-      <select v-model="sortBy" class="sort-select">
-        <option value="date">按时间</option>
-        <option value="rating">按评分</option>
-      </select>
+      <el-select v-model="sortBy" class="sort-select">
+        <el-option value="date" label="按时间" />
+        <el-option value="rating" label="按评分" />
+      </el-select>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -161,12 +161,7 @@ watch(sortBy, updateSort)
 }
 
 .sort-select {
-  padding: 6px 10px;
-  border: 0.5px solid var(--glass-border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 13px;
+  width: 130px;
 }
 
 .photo-grid-compact {

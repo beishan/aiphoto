@@ -298,9 +298,10 @@ function openViewer(index: number) {
   viewerVisible.value = true
 }
 
-function handleUploaded() {
-  // Refresh page after upload
-  location.reload()
+async function handleUploaded() {
+  showUploader.value = false
+  page.value = 0
+  await photoStore.fetchPhotos(0, pageSize)
 }
 
 function handleScroll(e: Event) {

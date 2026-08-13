@@ -10,6 +10,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
+import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 
 const settingStore = useSettingStore()
 const message = ElMessage
@@ -25,6 +26,7 @@ async function confirmAction(content: string, title = '确认操作') {
 const navItems = [
   { key: 'profile', label: '个人设置', icon: '👤' },
   { key: 'general', label: '主题风格', icon: '🎨' },
+  { key: 'favicon', label: '网站图标', icon: '🌐' },
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
@@ -44,7 +46,7 @@ const isCurrentUserAdmin = sessionUser?.role === 'ADMIN'
 
 const navGroups = computed(() => [
   { label: '个人', keys: ['profile'] },
-  { label: '外观与偏好', keys: ['general'] },
+  { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon'] : ['general'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: ['models', 'tasks'] },
   { label: '管理', keys: isCurrentUserAdmin ? ['users', 'storage'] : ['storage'] },
@@ -676,37 +678,43 @@ async function loadSystemInfo() {
           <ThemeSettingsPanel />
         </div>
 
+        <div v-if="activeSection === 'favicon'" class="content-panel">
+          <SiteFaviconSettingsPanel />
+        </div>
+
         <!-- ====== 用户管理 ====== -->
         <div v-if="activeSection === 'users'" class="content-panel">
           <div class="panel-header-row">
             <el-button type="primary" @click="showUserDialog = true">+ 新增用户</el-button>
           </div>
           <div class="panel-card">
-            <div class="user-table">
-              <div class="table-header">
-                <span>用户名</span>
-                <span>昵称</span>
-                <span>角色</span>
-                <span>状态</span>
-                <span>创建时间</span>
-                <span>最后登录</span>
-                <span>操作</span>
-              </div>
-              <div v-for="u in users" :key="u.id" class="table-row">
-                <span class="cell-username">{{ u.username }}</span>
-                <span>{{ u.nickname || '-' }}</span>
-                <span><span class="role-badge" :class="u.role.toLowerCase()">{{ u.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></span>
-                <span><span class="status-badge" :class="u.enabled ? 'enabled' : 'disabled'">{{ u.enabled ? '启用' : '禁用' }}</span></span>
-                <span class="cell-date">{{ formatDate(u.createdAt) }}</span>
-                <span class="cell-date">{{ formatDate(u.lastLoginAt) }}</span>
-                <span class="cell-actions">
-                  <button class="action-link" @click="resetPassword(u.id)">重置密码</button>
-                  <button class="action-link" @click="toggleEnabled(u.id)">{{ u.enabled ? '禁用' : '启用' }}</button>
-                  <button class="action-link danger" @click="deleteUser(u.id, u.username)">删除</button>
-                </span>
-              </div>
-              <div v-if="users.length === 0" class="empty-text">暂无用户</div>
-            </div>
+            <el-table :data="users" class="user-table" empty-text="暂无用户" stripe>
+              <el-table-column prop="username" label="用户名" min-width="130">
+                <template #default="{ row }"><span class="cell-username">{{ row.username }}</span></template>
+              </el-table-column>
+              <el-table-column prop="nickname" label="昵称" min-width="120">
+                <template #default="{ row }">{{ row.nickname || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="角色" width="100">
+                <template #default="{ row }"><el-tag :type="row.role === 'ADMIN' ? 'primary' : 'info'" effect="light">{{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'danger'" effect="light">{{ row.enabled ? '启用' : '禁用' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="创建时间" min-width="150">
+                <template #default="{ row }"><span class="cell-date">{{ formatDate(row.createdAt) }}</span></template>
+              </el-table-column>
+              <el-table-column label="最后登录" min-width="150">
+                <template #default="{ row }"><span class="cell-date">{{ formatDate(row.lastLoginAt) }}</span></template>
+              </el-table-column>
+              <el-table-column label="操作" fixed="right" min-width="220">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="resetPassword(row.id)">重置密码</el-button>
+                  <el-button link type="primary" @click="toggleEnabled(row.id)">{{ row.enabled ? '禁用' : '启用' }}</el-button>
+                  <el-button link type="danger" @click="deleteUser(row.id, row.username)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
         </div>
 
@@ -2609,6 +2617,8 @@ async function loadSystemInfo() {
 }
 
 .user-table {
+  display: block;
+  width: 100%;
   min-width: 900px;
 }
 

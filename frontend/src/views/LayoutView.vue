@@ -75,6 +75,11 @@ function navigateTo(path: string) {
   router.push(path)
 }
 
+function closeDockPopups() {
+  closeUserMenu()
+  showTrashMenu.value = false
+}
+
 // ===== Mouse tracking for Dock magnification =====
 const mouseX = ref(-1)
 const tabBarRef = ref<HTMLElement | null>(null)
@@ -109,6 +114,7 @@ const currentUser = ref<User | null>(null)
 const showUserMenu = ref(false)
 const userAvatarRef = ref<HTMLElement | null>(null)
 const userMenuStyle = ref<CSSProperties>({})
+let userMenuPositionFrame: number | undefined
 const showTrashMenu = ref(false)
 const trashCount = ref(0)
 const trashIcon = computed<DockIconName>(() => trashCount.value > 0 ? 'trashFull' : 'trashEmpty')
@@ -120,7 +126,7 @@ async function refreshTrashCount() {
 
 function toggleTrashMenu() {
   showTrashMenu.value = !showTrashMenu.value
-  showUserMenu.value = false
+  closeUserMenu()
   if (showTrashMenu.value) void refreshTrashCount()
 }
 
@@ -146,9 +152,26 @@ function updateUserMenuPosition() {
     Math.max(viewportPadding, avatarRect.left + avatarRect.width / 2 - menuWidth / 2),
   )
 
-  userMenuStyle.value = {
-    left: `${left}px`,
-    bottom: `${window.innerHeight - avatarRect.top + 14}px`,
+  const nextLeft = `${left}px`
+  const nextBottom = `${window.innerHeight - avatarRect.top + 28}px`
+  if (userMenuStyle.value.left !== nextLeft || userMenuStyle.value.bottom !== nextBottom) {
+    userMenuStyle.value = { left: nextLeft, bottom: nextBottom }
+  }
+}
+
+function trackUserMenuPosition() {
+  if (!showUserMenu.value) {
+    userMenuPositionFrame = undefined
+    return
+  }
+  updateUserMenuPosition()
+  userMenuPositionFrame = window.requestAnimationFrame(trackUserMenuPosition)
+}
+
+function stopTrackingUserMenuPosition() {
+  if (userMenuPositionFrame !== undefined) {
+    window.cancelAnimationFrame(userMenuPositionFrame)
+    userMenuPositionFrame = undefined
   }
 }
 
@@ -157,12 +180,16 @@ async function toggleUserMenu() {
   showTrashMenu.value = false
   if (showUserMenu.value) {
     await nextTick()
-    updateUserMenuPosition()
+    stopTrackingUserMenuPosition()
+    trackUserMenuPosition()
+  } else {
+    stopTrackingUserMenuPosition()
   }
 }
 
 function closeUserMenu() {
   showUserMenu.value = false
+  stopTrackingUserMenuPosition()
 }
 
 function handleLogout() {
@@ -199,6 +226,7 @@ onUnmounted(() => {
   window.removeEventListener('dock-config-updated', onDockConfigUpdated)
   window.removeEventListener('trash-changed', refreshTrashCount)
   window.removeEventListener('resize', updateUserMenuPosition)
+  stopTrackingUserMenuPosition()
 })
 
 const themeTitle = computed(() => {
@@ -292,13 +320,15 @@ function getDockItemStyle(index: number) {
       @pointermove="onMouseMove"
       @mouseleave="onMouseLeave"
     >
-      <button
+      <RouterLink
         v-for="(tab, index) in tabs"
         :key="tab.path"
+        :to="tab.path"
         class="dock-item"
         :class="{ active: activeTab === tab.path }"
         :style="getDockItemStyle(index)"
-        @click="navigateTo(tab.path)"
+        :aria-label="tab.label"
+        @click="closeDockPopups"
       >
         <span class="dock-icon-tile" :class="{ custom: dockConfig.iconStyle === 'custom', minimal: dockConfig.iconStyle === 'minimal' }">
           <span class="dock-icon-glass"></span>
@@ -306,7 +336,7 @@ function getDockItemStyle(index: number) {
         </span>
         <span class="dock-label" role="tooltip">{{ tab.label }}</span>
         <span v-if="activeTab === tab.path" class="dock-indicator-dot"></span>
-      </button>
+      </RouterLink>
 
       <div class="dock-trash-entry" :class="{ open: showTrashMenu }">
         <button class="dock-item dock-trash-btn" :style="getDockItemStyle(tabs.length)" aria-label="回收站" @click.stop="toggleTrashMenu">
@@ -326,12 +356,14 @@ function getDockItemStyle(index: number) {
       </div>
 
       <!-- User avatar button -->
-      <div ref="userAvatarRef" class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
-        <div class="avatar-circle">
-          <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
-          <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
+      <div class="user-avatar-entry">
+        <div ref="userAvatarRef" class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
+          <div class="avatar-circle">
+            <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
+            <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
+          </div>
+          <span class="dock-label" role="tooltip">账户</span>
         </div>
-        <span class="dock-label" role="tooltip">账户</span>
       </div>
     </nav>
 
@@ -512,6 +544,14 @@ function getDockItemStyle(index: number) {
   transform-origin: bottom center;
   transition: transform var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), margin var(--dock-item-transition, .16s) cubic-bezier(.2, .8, .2, 1), color .15s ease;
   will-change: transform;
+  text-decoration: none;
+}
+
+.dock-icon-tile,
+.dock-icon-glass,
+.dock-icon,
+.dock-icon :deep(*) {
+  pointer-events: none;
 }
 
 .dock-item:active {
@@ -626,12 +666,19 @@ function getDockItemStyle(index: number) {
 }
 
 /* ===== User avatar button ===== */
-.user-avatar-btn {
+.user-avatar-entry {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
   margin-left: 12px;
+}
+
+.user-avatar-btn {
   cursor: pointer;
 }
 
-.user-avatar-btn::before {
+.user-avatar-entry::before {
   content: '';
   position: absolute;
   top: 14%;
@@ -691,11 +738,11 @@ function getDockItemStyle(index: number) {
     transform: none;
   }
 
-  .user-avatar-btn {
+  .user-avatar-entry {
     margin-left: 7px;
   }
 
-  .user-avatar-btn::before {
+  .user-avatar-entry::before {
     right: calc(100% + 5px);
   }
 

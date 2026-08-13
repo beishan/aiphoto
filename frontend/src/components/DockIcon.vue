@@ -22,7 +22,7 @@ const icon = computed(() => icons[props.name])
 
 <template>
   <span class="dock-glyph" :class="`dock-glyph--${variant}`">
-    <img v-if="variant === 'custom' && customSrc" :src="customSrc" alt="" />
+    <img v-if="variant === 'custom' && customSrc" :src="customSrc" alt="" draggable="false" />
     <el-icon v-else><component :is="icon" /></el-icon>
   </span>
 </template>

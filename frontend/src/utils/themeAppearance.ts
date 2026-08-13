@@ -172,10 +172,18 @@ export function applyBackground(config: BackgroundConfig) {
   root.style.setProperty('--el-bg-color-overlay', rgba(config.surfaceColor, Math.min(100, config.surfaceOpacity + 8)))
   root.style.setProperty('--el-fill-color-blank', rgba(config.surfaceColor, config.surfaceOpacity))
   root.style.setProperty('--el-fill-color-light', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.1 : 0.04))
+  root.style.setProperty('--el-fill-color-lighter', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.07 : 0.025))
+  root.style.setProperty('--el-fill-color-extra-light', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.045 : 0.015))
+  root.style.setProperty('--el-fill-color-dark', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.16 : 0.08))
   root.style.setProperty('--el-border-color', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.2 : 0.12))
   root.style.setProperty('--el-border-color-light', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.14 : 0.08))
+  root.style.setProperty('--el-border-color-lighter', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.1 : 0.05))
   root.style.setProperty('--el-text-color-primary', surfaceDark ? '#FFFFFF' : '#172235')
   root.style.setProperty('--el-text-color-regular', surfaceDark ? 'rgba(255,255,255,.68)' : 'rgba(23,34,53,.7)')
+  root.style.setProperty('--el-text-color-secondary', surfaceDark ? 'rgba(255,255,255,.52)' : 'rgba(23,34,53,.56)')
+  root.style.setProperty('--el-text-color-placeholder', surfaceDark ? 'rgba(255,255,255,.36)' : 'rgba(23,34,53,.4)')
+  root.style.setProperty('--el-disabled-bg-color', mix(config.surfaceColor, surfaceDark ? '#FFFFFF' : '#000000', surfaceDark ? 0.06 : 0.03))
+  root.style.setProperty('--el-disabled-text-color', surfaceDark ? 'rgba(255,255,255,.32)' : 'rgba(23,34,53,.34)')
 }
 
 export function applyThemeAppearance(theme: AppTheme) {

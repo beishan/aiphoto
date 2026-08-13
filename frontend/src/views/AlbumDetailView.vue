@@ -133,11 +133,12 @@ function onPhotoClick(photo: Photo, index: number) {
     <!-- Description -->
     <div class="description-section">
       <div v-if="editingDescription" class="description-edit">
-        <textarea
+        <el-input
           v-model="descriptionText"
+          type="textarea"
           placeholder="添加相册描述..."
           class="description-input"
-          rows="3"
+          :rows="3"
         />
         <div class="description-actions">
           <button class="btn-cancel" @click="cancelEditDescription">取消</button>
@@ -329,20 +330,9 @@ function onPhotoClick(photo: Photo, index: number) {
 
 .description-input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
-  background: var(--bg-primary);
-  color: var(--text-primary);
 }
 
-.description-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
+.description-input :deep(.el-textarea__inner) { border-radius: 8px; }
 
 .description-actions {
   display: flex;

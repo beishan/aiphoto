@@ -232,22 +232,17 @@ const fileTypeOptions = [
     <!-- Search bar -->
     <div class="search-header">
       <div class="search-input-wrapper">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
-        </svg>
-        <input
+        <el-input
           v-model="query"
-          type="text"
           placeholder="搜索照片..."
           class="search-input"
+          clearable
+          @clear="hasSearched = false; results = []"
           @keyup.enter="handleSearch"
           autofocus
-        />
-        <button v-if="query" class="clear-btn" @click="query = ''; hasSearched = false; results = []">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-            <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-          </svg>
-        </button>
+        >
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
       </div>
 
       <button class="type-toggle" @click="toggleSearchType">
@@ -359,9 +354,9 @@ const fileTypeOptions = [
         <div class="filter-section">
           <div class="filter-section-title">拍摄日期</div>
           <div class="date-range-row">
-            <input type="date" v-model="filters.startDate" class="date-input" />
+            <el-date-picker v-model="filters.startDate" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" class="date-input" />
             <span class="date-sep">~</span>
-            <input type="date" v-model="filters.endDate" class="date-input" />
+            <el-date-picker v-model="filters.endDate" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" class="date-input" />
           </div>
         </div>
 
@@ -369,16 +364,15 @@ const fileTypeOptions = [
         <div class="filter-section two-col">
           <div class="filter-col">
             <div class="filter-section-title">扫描目录</div>
-            <select v-model="filters.folderId" class="filter-select">
-              <option :value="null">全部目录</option>
-              <option v-for="f in allFolders" :key="f.id" :value="f.id">{{ f.name }} ({{ f.photoCount }})</option>
-            </select>
+            <el-select v-model="filters.folderId" class="filter-select" placeholder="全部目录" clearable :value-on-clear="null">
+              <el-option v-for="f in allFolders" :key="f.id" :value="f.id" :label="`${f.name} (${f.photoCount})`" />
+            </el-select>
           </div>
           <div class="filter-col">
             <div class="filter-section-title">文件类型</div>
-            <select v-model="filters.fileType" class="filter-select">
-              <option v-for="opt in fileTypeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
+            <el-select v-model="filters.fileType" class="filter-select">
+              <el-option v-for="opt in fileTypeOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
+            </el-select>
           </div>
         </div>
 
@@ -386,18 +380,18 @@ const fileTypeOptions = [
         <div class="filter-section two-col">
           <div class="filter-col">
             <div class="filter-section-title">排序</div>
-            <select v-model="filters.sortBy" class="filter-select">
-              <option value="date">拍摄日期</option>
-              <option value="rating">评分</option>
-              <option value="name">文件名</option>
-            </select>
+            <el-select v-model="filters.sortBy" class="filter-select">
+              <el-option value="date" label="拍摄日期" />
+              <el-option value="rating" label="评分" />
+              <el-option value="name" label="文件名" />
+            </el-select>
           </div>
           <div class="filter-col">
             <div class="filter-section-title">方向</div>
-            <select v-model="filters.sortOrder" class="filter-select">
-              <option value="desc">降序</option>
-              <option value="asc">升序</option>
-            </select>
+            <el-select v-model="filters.sortOrder" class="filter-select">
+              <el-option value="desc" label="降序" />
+              <el-option value="asc" label="升序" />
+            </el-select>
           </div>
         </div>
 
@@ -486,13 +480,7 @@ const fileTypeOptions = [
 
 .search-input-wrapper {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   height: 40px;
-  padding: 0 12px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
 }
 
 .search-icon {
@@ -501,19 +489,10 @@ const fileTypeOptions = [
 }
 
 .search-input {
-  flex: 1;
+  width: 100%;
   height: 100%;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-family: inherit;
 }
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
+.search-input :deep(.el-input__wrapper) { height: 40px; border-radius: var(--radius-md); }
 
 .clear-btn {
   display: flex;
@@ -793,13 +772,8 @@ const fileTypeOptions = [
 }
 
 .date-input {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
+  flex: 1;
+  width: auto;
 }
 
 .date-sep {
@@ -808,18 +782,7 @@ const fileTypeOptions = [
 
 /* Filter select */
 .filter-select {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-
-.filter-select:focus {
-  border-color: var(--accent);
+  width: 100%;
 }
 
 /* Filter actions */

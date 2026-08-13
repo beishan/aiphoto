@@ -504,6 +504,68 @@ button {
   flex: 1;
 }
 
+/* Element Plus form and data components share the active app theme. */
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-date-editor.el-input__wrapper {
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  box-shadow: 0 0 0 1px var(--separator) inset;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--accent-border) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 3px var(--accent-soft);
+}
+
+.el-table {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: var(--bg-tertiary);
+  --el-table-row-hover-bg-color: var(--accent-soft);
+  --el-table-border-color: var(--separator);
+  --el-table-header-text-color: var(--text-secondary);
+  --el-table-text-color: var(--text-primary);
+  border-radius: 12px;
+  background: transparent;
+}
+
+.el-table::before,
+.el-table__inner-wrapper::before {
+  background-color: var(--separator);
+}
+
+.el-table .el-table__cell {
+  background: transparent;
+}
+
+.el-table .el-table-fixed-column--right {
+  background: var(--bg-card);
+}
+
+.el-table__empty-text {
+  color: var(--text-tertiary);
+}
+
+.el-upload-dragger {
+  border-color: var(--separator);
+  background: var(--bg-tertiary);
+}
+
+.el-upload-dragger:hover,
+.el-upload-dragger.is-dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 [data-theme="macos26"] .el-overlay {
   background: rgba(38, 54, 78, 0.22);
   backdrop-filter: blur(14px) saturate(140%);
@@ -535,12 +597,23 @@ button {
 [data-theme="macos26"] .el-input__wrapper,
 [data-theme="macos26"] .el-select__wrapper,
 [data-theme="macos26"] .el-textarea__inner,
-[data-theme="macos26"] .el-segmented {
+[data-theme="macos26"] .el-segmented,
+[data-theme="macos26"] .el-table,
+[data-theme="macos26"] .el-upload-dragger {
   border: 1px solid rgba(255, 255, 255, 0.76);
   background: rgba(255, 255, 255, 0.46);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 5px 16px rgba(48, 66, 100, 0.08);
   backdrop-filter: blur(18px) saturate(170%);
   -webkit-backdrop-filter: blur(18px) saturate(170%);
+}
+
+[data-theme="macos26"] .el-table th.el-table__cell {
+  background: rgba(255, 255, 255, 0.36);
+}
+
+[data-theme="macos26"] .el-table tr,
+[data-theme="macos26"] .el-table td.el-table__cell {
+  background: transparent;
 }
 
 [data-theme="macos26"] .el-input__wrapper.is-focus,

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { UploadFile as ElementUploadFile } from 'element-plus'
+import { isAxiosError } from 'axios'
 import { useMessage } from '@/utils/feedback'
 import { useTaskStore } from '@/stores/taskStore'
 import http from '@/api/http'
@@ -17,19 +19,18 @@ interface UploadFile {
   progress: number
   status: 'pending' | 'uploading' | 'completed' | 'failed' | 'duplicate' | 'cancelled'
   error?: string
-  xhr?: XMLHttpRequest
+  controller?: AbortController
 }
 
 const message = useMessage()
 const taskStore = useTaskStore()
-const fileInput = ref<HTMLInputElement | null>(null)
 const files = ref<UploadFile[]>([])
 const uploading = ref(false)
 const MAX_CONCURRENT = 3
 
 const totalFiles = computed(() => files.value.length)
 const completedCount = computed(() => files.value.filter((f) => f.status === 'completed').length)
-const failedCount = computed(() => files.value.filter((f) => f.status === 'failed' || f.status === 'duplicate').length)
+const failedCount = computed(() => files.value.filter((f) => f.status === 'failed').length)
 const activeCount = computed(() => files.value.filter((f) => f.status === 'uploading' || f.status === 'pending').length)
 const overallProgress = computed(() => {
   if (totalFiles.value === 0) return 0
@@ -41,10 +42,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / 1048576).toFixed(1) + ' MB'
-}
-
-function triggerSelect() {
-  fileInput.value?.click()
 }
 
 function addFiles(newFiles: FileList | File[]) {
@@ -64,7 +61,7 @@ function addFiles(newFiles: FileList | File[]) {
 
 function removeFile(id: string) {
   const f = files.value.find((f) => f.id === id)
-  if (f?.xhr) f.xhr.abort()
+  f?.controller?.abort()
   files.value = files.value.filter((f) => f.id !== id)
 }
 
@@ -74,7 +71,7 @@ function clearCompleted() {
 
 function cancelAll() {
   files.value.forEach((f) => {
-    if (f.xhr) f.xhr.abort()
+    f.controller?.abort()
     if (f.status === 'pending' || f.status === 'uploading') f.status = 'cancelled'
   })
   uploading.value = false
@@ -86,7 +83,6 @@ async function startUpload() {
 
   uploading.value = true
   let successCount = 0
-  let failCount = 0
 
   const queue = [...pending]
   const workers: Promise<void>[] = []
@@ -99,7 +95,6 @@ async function startUpload() {
           if (!item || item.status !== 'pending') continue
           const ok = await uploadSingle(item)
           if (ok) successCount++
-          else failCount++
         }
       })()
     )
@@ -112,80 +107,75 @@ async function startUpload() {
     message.success(`成功上传 ${successCount} 张照片`)
     emit('uploaded')
   }
-  if (failCount > 0) {
-    message.warning(`${failCount} 张照片上传失败`)
+  const currentFailedCount = pending.filter(item => item.status === 'failed').length
+  const currentDuplicateCount = pending.filter(item => item.status === 'duplicate').length
+  if (currentDuplicateCount > 0) {
+    message.info(`${currentDuplicateCount} 张重复照片已跳过`)
+  }
+  if (currentFailedCount > 0) {
+    message.warning(`${currentFailedCount} 张照片上传失败，请查看具体原因`)
   }
 }
 
-function uploadSingle(item: UploadFile): Promise<boolean> {
-  return new Promise((resolve) => {
-    const formData = new FormData()
-    formData.append('file', item.file)
+async function uploadSingle(item: UploadFile): Promise<boolean> {
+  const formData = new FormData()
+  formData.append('file', item.file, item.name)
 
-    const xhr = new XMLHttpRequest()
-    item.xhr = xhr
-    item.status = 'uploading'
-    item.progress = 0
+  const controller = new AbortController()
+  item.controller = controller
+  item.status = 'uploading'
+  item.progress = 0
+  taskStore.addUploadTask(item.id, item.name)
+  taskStore.updateUploadProgress(item.id, 0)
 
-    taskStore.addUploadTask(item.id, item.name)
-    taskStore.updateUploadProgress(item.id, 0)
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const pct = Math.round((e.loaded / e.total) * 100)
-        item.progress = pct
-        taskStore.updateUploadProgress(item.id, pct)
-      }
+  try {
+    await http.post('/photos/upload', formData, {
+      signal: controller.signal,
+      timeout: 600000,
+      onUploadProgress(event) {
+        if (!event.total) return
+        const progress = Math.round((event.loaded / event.total) * 100)
+        item.progress = progress
+        taskStore.updateUploadProgress(item.id, progress)
+      },
     })
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        item.status = 'completed'
-        item.progress = 100
-        taskStore.completeUploadTask(item.id)
-        resolve(true)
-      } else if (xhr.status === 409) {
-        item.status = 'duplicate'
-        item.error = '重复文件'
-        taskStore.failUploadTask(item.id)
-        resolve(false)
-      } else {
-        item.status = 'failed'
-        try {
-          const resp = JSON.parse(xhr.responseText)
-          item.error = resp.message || '上传失败'
-        } catch {
-          item.error = '上传失败'
-        }
-        taskStore.failUploadTask(item.id)
-        resolve(false)
-      }
-    })
-
-    xhr.addEventListener('error', () => {
-      item.status = 'failed'
-      item.error = '网络错误'
-      taskStore.failUploadTask(item.id)
-      resolve(false)
-    })
-
-    xhr.addEventListener('abort', () => {
+    item.status = 'completed'
+    item.progress = 100
+    taskStore.completeUploadTask(item.id)
+    return true
+  } catch (error) {
+    if (controller.signal.aborted) {
       item.status = 'cancelled'
       item.error = '已取消'
-      taskStore.failUploadTask(item.id)
-      resolve(false)
-    })
-
-    const token = localStorage.getItem('token')
-    xhr.open('POST', '/api/photos/upload')
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-    xhr.send(formData)
-  })
+    } else if (isAxiosError(error)) {
+      const status = error.response?.status
+      if (status === 409) {
+        item.status = 'duplicate'
+        item.error = '照片已存在，已跳过'
+      } else if (status === 413) {
+        item.status = 'failed'
+        item.error = '文件超过服务器上传限制'
+      } else if (!error.response) {
+        item.status = 'failed'
+        item.error = '网络连接失败，请检查服务状态'
+      } else {
+        item.status = 'failed'
+        item.error = error.response.data?.message || `上传失败（${status}）`
+      }
+    } else {
+      item.status = 'failed'
+      item.error = '上传失败'
+    }
+    taskStore.failUploadTask(item.id)
+    return false
+  } finally {
+    item.controller = undefined
+  }
 }
 
 function retryFailed() {
   files.value.forEach((f) => {
-    if (f.status === 'failed' || f.status === 'duplicate') {
+    if (f.status === 'failed') {
       f.status = 'pending'
       f.progress = 0
       f.error = undefined
@@ -194,27 +184,8 @@ function retryFailed() {
   startUpload()
 }
 
-function handleFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
-  if (input.files && input.files.length > 0) {
-    addFiles(input.files)
-    input.value = ''
-  }
-}
-
-function handleDrop(e: DragEvent) {
-  e.preventDefault()
-  dragging.value = false
-  if (e.dataTransfer?.files) addFiles(e.dataTransfer.files)
-}
-
-const dragging = ref(false)
-function handleDragOver(e: DragEvent) {
-  e.preventDefault()
-  dragging.value = true
-}
-function handleDragLeave() {
-  dragging.value = false
+function handleElementFile(uploadFile: ElementUploadFile) {
+  if (uploadFile.raw) addFiles([uploadFile.raw])
 }
 
 function getObjectUrl(file: File): string {
@@ -223,26 +194,27 @@ function getObjectUrl(file: File): string {
 </script>
 
 <template>
-  <div class="uploader" @drop="handleDrop" @dragover="handleDragOver" @dragleave="handleDragLeave">
-    <input
-      ref="fileInput"
-      type="file"
+  <div class="uploader">
+    <el-upload
+      v-if="files.length === 0"
+      class="upload-drop-shell"
       accept="image/*,video/*"
       multiple
-      style="display: none"
-      @change="handleFileChange"
-    />
-
-    <!-- Drop zone (shown when no files selected) -->
-    <div v-if="files.length === 0" class="drop-zone" :class="{ dragging }" @click="triggerSelect">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="48" height="48" class="drop-icon">
-        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
-      <p class="drop-text">拖拽照片到这里，或点击选择</p>
-      <p class="drop-hint">支持 JPG / PNG / HEIC / WebP / MP4 / MOV</p>
-    </div>
+      drag
+      :auto-upload="false"
+      :show-file-list="false"
+      :on-change="handleElementFile"
+    >
+      <div class="drop-zone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="48" height="48" class="drop-icon">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p class="drop-text">拖拽照片到这里，或点击选择</p>
+        <p class="drop-hint">支持 JPG / PNG / HEIC / WebP / MP4 / MOV</p>
+      </div>
+    </el-upload>
 
     <!-- File list -->
     <div v-else class="file-panel">
@@ -253,7 +225,9 @@ function getObjectUrl(file: File): string {
           <span v-if="uploading" class="progress-text">{{ overallProgress }}%</span>
         </div>
         <div class="header-actions">
-          <button v-if="!uploading" class="btn-add" @click="triggerSelect">添加</button>
+          <el-upload v-if="!uploading" multiple :auto-upload="false" :show-file-list="false" accept="image/*,video/*" :on-change="handleElementFile">
+            <el-button link type="primary">添加</el-button>
+          </el-upload>
           <button v-if="failedCount > 0 && !uploading" class="btn-retry" @click="retryFailed">重试失败</button>
           <button v-if="completedCount > 0 && !uploading" class="btn-clear" @click="clearCompleted">清除已完成</button>
           <button v-if="uploading" class="btn-cancel" @click="cancelAll">取消</button>
@@ -299,7 +273,7 @@ function getObjectUrl(file: File): string {
                   <span class="status-dot completed"></span> 已完成
                 </template>
                 <template v-else-if="item.status === 'duplicate'">
-                  <span class="status-dot duplicate"></span> 重复文件
+                  <span class="status-dot duplicate"></span> {{ item.error || '照片已存在，已跳过' }}
                 </template>
                 <template v-else-if="item.status === 'failed'">
                   <span class="status-dot failed"></span> {{ item.error }}
@@ -337,6 +311,10 @@ function getObjectUrl(file: File): string {
 </template>
 
 <style scoped>
+.upload-drop-shell { display: block; width: 100%; }
+.upload-drop-shell :deep(.el-upload),
+.upload-drop-shell :deep(.el-upload-dragger) { display: block; width: 100%; }
+.upload-drop-shell :deep(.el-upload-dragger) { overflow: hidden; padding: 0; border-radius: var(--radius-lg); }
 .uploader {
   min-height: 120px;
 }

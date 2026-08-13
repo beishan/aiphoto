@@ -257,7 +257,7 @@ function downloadPhoto() {
             <button v-if="!editing" class="edit-btn" @click="startEditNote">编辑</button>
           </div>
           <div v-if="editing" class="note-edit">
-            <textarea v-model="editNote" class="note-input" rows="3" placeholder="添加描述..." maxlength="2000"></textarea>
+            <el-input v-model="editNote" class="note-input" type="textarea" :rows="3" placeholder="添加描述..." maxlength="2000" show-word-limit />
             <div class="note-actions">
               <button class="btn-cancel" @click="editing = false">取消</button>
               <button class="btn-save" @click="saveNote">保存</button>
@@ -402,8 +402,8 @@ function downloadPhoto() {
 .note-text { font-size: 14px; color: var(--text-secondary); cursor: pointer; padding: 8px; border-radius: var(--radius-md); min-height: 40px; }
 .note-text:hover { background: var(--bg-secondary); }
 .note-edit { display: flex; flex-direction: column; gap: 8px; }
-.note-input { width: 100%; padding: 10px 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: inherit; resize: vertical; outline: none; }
-.note-input:focus { border-color: var(--accent); }
+.note-input { width: 100%; }
+.note-input :deep(.el-textarea__inner) { border-radius: var(--radius-md); }
 .note-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .btn-cancel, .btn-save { padding: 6px 14px; border-radius: var(--radius-md); font-size: 13px; border: none; cursor: pointer; }
 .btn-cancel { background: var(--bg-tertiary); color: var(--text-secondary); }

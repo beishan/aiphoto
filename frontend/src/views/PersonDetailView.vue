@@ -216,7 +216,7 @@ function getBboxStyle(bboxJson: string) {
       </button>
       <div class="header-info">
         <div v-if="editing" class="name-edit">
-          <input v-model="editName" type="text" class="name-input" @keyup.enter="saveName" autofocus />
+          <el-input v-model="editName" class="name-input" autofocus @keyup.enter="saveName" />
           <button class="name-save" @click="saveName">保存</button>
           <button class="name-cancel" @click="editing = false">取消</button>
         </div>
@@ -366,16 +366,8 @@ function getBboxStyle(bboxJson: string) {
 
 .name-input {
   flex: 1;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 16px;
-  font-family: inherit;
-  outline: none;
 }
+.name-input :deep(.el-input__wrapper) { min-height: 32px; border-radius: var(--radius-md); }
 
 .name-save, .name-cancel {
   padding: 4px 12px;

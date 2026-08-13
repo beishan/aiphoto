@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import { userApi } from '@/api/userApi'
 import type { User } from '@/types'
 import AvatarCropDialog from '@/components/AvatarCropDialog.vue'
@@ -9,7 +9,6 @@ const user = ref<User | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const uploading = ref(false)
-const avatarInput = ref<HTMLInputElement | null>(null)
 const selectedAvatar = ref<File | null>(null)
 const cropDialogVisible = ref(false)
 
@@ -25,6 +24,16 @@ const userInitial = computed(() => user.value?.username?.charAt(0).toUpperCase()
 const yesterday = new Date()
 yesterday.setDate(yesterday.getDate() - 1)
 const disabledBirthDate = (date: Date) => date.getTime() > yesterday.getTime()
+
+function getSessionUser(): User | null {
+  try { return JSON.parse(sessionStorage.getItem('user') || 'null') as User | null }
+  catch { return null }
+}
+
+function mergeUser(nextUser: User): User {
+  const cached = getSessionUser()
+  return cached ? { ...cached, ...nextUser } : nextUser
+}
 
 function applyUser(nextUser: User) {
   user.value = nextUser
@@ -42,12 +51,17 @@ function syncSession(nextUser: User) {
 
 async function loadProfile() {
   loading.value = true
+  const cachedUser = getSessionUser()
+  if (cachedUser) applyUser(cachedUser)
   try {
     const { data } = await userApi.me()
-    applyUser(data)
-    syncSession(data)
+    const nextUser = mergeUser(data)
+    applyUser(nextUser)
+    syncSession(nextUser)
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '个人资料加载失败')
+    if (!cachedUser) {
+      ElMessage.error(e.response?.data?.message || '个人资料加载失败')
+    }
   } finally {
     loading.value = false
   }
@@ -63,8 +77,9 @@ async function saveProfile() {
       photoPreferences: form.photoPreferences.trim() || null,
       notes: form.notes.trim() || null,
     })
-    applyUser(data)
-    syncSession(data)
+    const nextUser = mergeUser(data)
+    applyUser(nextUser)
+    syncSession(nextUser)
     ElMessage.success('个人设置已保存')
   } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '个人设置保存失败')
@@ -73,10 +88,8 @@ async function saveProfile() {
   }
 }
 
-function handleAvatarSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+function handleAvatarSelected(uploadFile: UploadFile) {
+  const file = uploadFile.raw
   if (!file) return
   if (file.size > 5 * 1024 * 1024) {
     ElMessage.warning('头像图片不能超过 5MB')
@@ -99,8 +112,9 @@ async function uploadCroppedAvatar(file: File) {
   uploading.value = true
   try {
     const { data } = await userApi.uploadAvatar(file)
-    applyUser(data)
-    syncSession(data)
+    const nextUser = mergeUser(data)
+    applyUser(nextUser)
+    syncSession(nextUser)
     cropDialogVisible.value = false
     selectedAvatar.value = null
     ElMessage.success('头像已更新')
@@ -118,8 +132,9 @@ async function removeAvatar() {
   uploading.value = true
   try {
     const { data } = await userApi.deleteAvatar()
-    applyUser(data)
-    syncSession(data)
+    const nextUser = mergeUser(data)
+    applyUser(nextUser)
+    syncSession(nextUser)
     ElMessage.success('头像已移除')
   } catch (e: any) {
     ElMessage.error(e.response?.data?.message || '头像移除失败')
@@ -147,14 +162,14 @@ onMounted(loadProfile)
           <strong>个人头像</strong>
           <p>支持 JPG、PNG、WebP、GIF，图片大小不超过 5MB。</p>
           <div class="profile-button-row">
-            <input
-              ref="avatarInput"
-              type="file"
+            <el-upload
+              :auto-upload="false"
+              :show-file-list="false"
               accept="image/jpeg,image/png,image/webp,image/gif"
-              hidden
-              @change="handleAvatarSelected"
-            />
-            <el-button type="primary" :loading="uploading" @click="avatarInput?.click()">选择头像</el-button>
+              :on-change="handleAvatarSelected"
+            >
+              <el-button type="primary" :loading="uploading">选择头像</el-button>
+            </el-upload>
             <el-button v-if="user.avatar" type="danger" plain :disabled="uploading" @click="removeAvatar">移除头像</el-button>
           </div>
         </div>

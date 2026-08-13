@@ -2,11 +2,22 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   file: File | null
   uploading?: boolean
-}>()
+  shape?: 'circle' | 'square'
+  title?: string
+  tip?: string
+  outputName?: string
+  confirmText?: string
+}>(), {
+  shape: 'circle',
+  title: '调整头像',
+  tip: '拖动图片调整位置，圆形区域将作为你的新头像。',
+  outputName: 'avatar.png',
+  confirmText: '确认上传',
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -148,8 +159,11 @@ async function confirmCrop() {
   }
 
   const outputRatio = OUTPUT_SIZE / stageSize.value
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+  context.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+  if (props.shape === 'circle') {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+  }
   context.translate(
     OUTPUT_SIZE / 2 + offsetX.value * outputRatio,
     OUTPUT_SIZE / 2 + offsetY.value * outputRatio,
@@ -161,10 +175,10 @@ async function confirmCrop() {
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.92))
   if (!blob) {
-    ElMessage.error('头像生成失败，请重新选择图片')
+    ElMessage.error('图片生成失败，请重新选择图片')
     return
   }
-  emit('confirm', new File([blob], 'avatar.png', { type: 'image/png' }))
+  emit('confirm', new File([blob], props.outputName, { type: 'image/png' }))
 }
 
 onBeforeUnmount(revokePreview)
@@ -173,7 +187,7 @@ onBeforeUnmount(revokePreview)
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="调整头像"
+    :title="title"
     width="min(560px, calc(100vw - 28px))"
     :close-on-click-modal="!uploading"
     :close-on-press-escape="!uploading"
@@ -182,7 +196,7 @@ onBeforeUnmount(revokePreview)
     @close="closeDialog"
   >
     <div class="crop-content">
-      <p class="crop-tip">拖动图片调整位置，圆形区域将作为你的新头像。</p>
+      <p class="crop-tip">{{ tip }}</p>
       <div
         ref="cropStage"
         class="crop-stage"
@@ -196,11 +210,11 @@ onBeforeUnmount(revokePreview)
           v-if="previewUrl"
           :src="previewUrl"
           :style="imageStyle"
-          alt="头像裁剪预览"
+          alt="图片裁剪预览"
           draggable="false"
           @load="handleImageLoad"
         />
-        <div class="crop-mask" />
+        <div class="crop-mask" :class="shape" />
       </div>
 
       <div class="crop-controls">
@@ -219,7 +233,7 @@ onBeforeUnmount(revokePreview)
 
     <template #footer>
       <el-button :disabled="uploading" @click="closeDialog">取消</el-button>
-      <el-button type="primary" :loading="uploading" @click="confirmCrop">确认上传</el-button>
+      <el-button type="primary" :loading="uploading" @click="confirmCrop">{{ confirmText }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -272,10 +286,12 @@ onBeforeUnmount(revokePreview)
   height: calc(100% - 8px);
   margin: 4px;
   border: 2px solid rgba(255, 255, 255, .92);
-  border-radius: 50%;
   box-shadow: 0 0 0 999px rgba(4, 10, 22, .58);
   pointer-events: none;
 }
+
+.crop-mask.circle { border-radius: 50%; }
+.crop-mask.square { border-radius: 14px; }
 
 .crop-controls {
   display: grid;

@@ -53,14 +53,14 @@ function openViewer(photos: Photo[], index: number) {
         </svg>
       </button>
       <h2>宝宝相册</h2>
-      <select
+      <el-select
         v-if="albums.length > 0"
         v-model="selectedAlbum"
         class="album-select"
         @change="loadBabyAlbum"
       >
-        <option v-for="a in albums" :key="a.id" :value="a.id">{{ a.name }}</option>
-      </select>
+        <el-option v-for="a in albums" :key="a.id" :value="a.id" :label="a.name" />
+      </el-select>
     </div>
 
     <!-- Empty -->
@@ -127,14 +127,7 @@ function openViewer(photos: Photo[], index: number) {
 }
 
 .album-select {
-  padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
+  width: 180px;
 }
 
 .loading-state {

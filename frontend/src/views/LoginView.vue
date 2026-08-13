@@ -79,37 +79,38 @@ async function handleSubmit() {
           <h2>{{ isRegister ? '创建账号' : '登录' }}</h2>
         </div>
 
-        <form @submit.prevent="handleSubmit" class="login-form">
-          <div class="input-group">
-            <input
+        <el-form class="login-form" @submit.prevent="handleSubmit">
+          <el-form-item>
+            <el-input
               v-model="form.username"
-              type="text"
               placeholder="用户名"
               class="ios-input"
               autocomplete="username"
+              size="large"
             />
-          </div>
-          <div class="input-group">
-            <input
+          </el-form-item>
+          <el-form-item>
+            <el-input
               v-model="form.password"
               type="password"
               placeholder="密码"
               class="ios-input"
               autocomplete="current-password"
+              show-password
+              size="large"
               @keyup.enter="handleSubmit"
             />
-          </div>
+          </el-form-item>
 
-          <button
-            type="submit"
+          <el-button
+            native-type="submit"
+            type="primary"
             class="login-btn"
-            :class="{ loading }"
-            :disabled="loading"
+            :loading="loading"
           >
-            <span v-if="loading" class="spinner"></span>
-            <span v-else>{{ isRegister ? '注册' : '登录' }}</span>
-          </button>
-        </form>
+            {{ isRegister ? '注册' : '登录' }}
+          </el-button>
+        </el-form>
 
         <div class="login-footer">
           <button class="switch-btn" @click="isRegister = !isRegister">
@@ -215,44 +216,20 @@ async function handleSubmit() {
   gap: 16px;
 }
 
-.input-group {
-  position: relative;
-}
-
 .ios-input {
   width: 100%;
-  height: 50px;
-  padding: 0 16px;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 16px;
-  font-family: inherit;
-  transition: border-color 0.2s, background 0.2s;
-  outline: none;
 }
 
-.ios-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.ios-input:focus {
-  border-color: var(--accent);
-  background: rgba(10, 132, 255, 0.08);
-}
+.ios-input :deep(.el-input__wrapper) { min-height: 50px; border-radius: var(--radius-md); }
+.login-form :deep(.el-form-item) { margin-bottom: 0; }
 
 .login-btn {
   width: 100%;
   height: 50px;
   border-radius: var(--radius-md);
-  background: var(--accent);
-  color: white;
   font-size: 17px;
   font-weight: 600;
   font-family: inherit;
-  border: none;
-  cursor: pointer;
   transition: background 0.2s, transform 0.1s;
   margin-top: 4px;
 }
@@ -263,11 +240,6 @@ async function handleSubmit() {
 
 .login-btn:active {
   transform: scale(0.98);
-}
-
-.login-btn.loading {
-  opacity: 0.7;
-  pointer-events: none;
 }
 
 .spinner {
