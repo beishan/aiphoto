@@ -7,6 +7,7 @@ import { userApi } from '@/api/userApi'
 import { tagApi } from '@/api/tagApi'
 import { folderApi } from '@/api/folderApi'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Key, Lock, Plus, Unlock, UserFilled } from '@element-plus/icons-vue'
 import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
@@ -96,6 +97,11 @@ const namingOptions = [
 const users = ref<User[]>([])
 const showUserDialog = ref(false)
 const newUser = ref({ username: '', password: '', role: 'USER', nickname: '' })
+const enabledUserCount = computed(() => users.value.filter(user => user.enabled).length)
+
+function userInitial(user: User) {
+  return (user.nickname || user.username || '?').trim().slice(0, 1).toUpperCase()
+}
 
 async function loadUsers() {
   try {
@@ -683,35 +689,51 @@ async function loadSystemInfo() {
         </div>
 
         <!-- ====== 用户管理 ====== -->
-        <div v-if="activeSection === 'users'" class="content-panel">
-          <div class="panel-header-row">
-            <el-button type="primary" @click="showUserDialog = true">+ 新增用户</el-button>
+        <div v-if="activeSection === 'users'" class="content-panel user-management">
+          <div class="user-management-header">
+            <div class="user-management-title">
+              <span class="section-icon"><el-icon><UserFilled /></el-icon></span>
+              <div>
+                <h2>用户管理</h2>
+                <p>管理家庭成员的账户、访问状态与登录凭据。</p>
+              </div>
+            </div>
+            <el-button class="add-user-button" type="primary" :icon="Plus" @click="showUserDialog = true">新增用户</el-button>
           </div>
-          <div class="panel-card">
-            <el-table :data="users" class="user-table" empty-text="暂无用户" stripe>
-              <el-table-column prop="username" label="用户名" min-width="130">
-                <template #default="{ row }"><span class="cell-username">{{ row.username }}</span></template>
+          <div class="user-summary" aria-label="用户统计">
+            <div><strong>{{ users.length }}</strong><span>全部用户</span></div>
+            <div><strong>{{ enabledUserCount }}</strong><span>当前启用</span></div>
+            <div><strong>{{ users.length - enabledUserCount }}</strong><span>已停用</span></div>
+          </div>
+          <div class="panel-card user-table-card">
+            <el-table :data="users" class="user-table" empty-text="暂无用户">
+              <el-table-column prop="username" label="用户" min-width="180">
+                <template #default="{ row }">
+                  <div class="user-identity">
+                    <span class="user-initial" :class="{ admin: row.role === 'ADMIN' }">{{ userInitial(row) }}</span>
+                    <div><strong>{{ row.nickname || row.username }}</strong><small>@{{ row.username }}</small></div>
+                  </div>
+                </template>
               </el-table-column>
-              <el-table-column prop="nickname" label="昵称" min-width="120">
-                <template #default="{ row }">{{ row.nickname || '-' }}</template>
+              <el-table-column label="角色" width="110">
+                <template #default="{ row }"><span class="user-badge role" :class="{ admin: row.role === 'ADMIN' }">{{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}</span></template>
               </el-table-column>
-              <el-table-column label="角色" width="100">
-                <template #default="{ row }"><el-tag :type="row.role === 'ADMIN' ? 'primary' : 'info'" effect="light">{{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}</el-tag></template>
+              <el-table-column label="状态" width="105">
+                <template #default="{ row }"><span class="user-badge status" :class="row.enabled ? 'enabled' : 'disabled'"><i />{{ row.enabled ? '已启用' : '已停用' }}</span></template>
               </el-table-column>
-              <el-table-column label="状态" width="90">
-                <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'danger'" effect="light">{{ row.enabled ? '启用' : '禁用' }}</el-tag></template>
-              </el-table-column>
-              <el-table-column label="创建时间" min-width="150">
+              <el-table-column label="创建时间" min-width="165">
                 <template #default="{ row }"><span class="cell-date">{{ formatDate(row.createdAt) }}</span></template>
               </el-table-column>
-              <el-table-column label="最后登录" min-width="150">
+              <el-table-column label="最后登录" min-width="165">
                 <template #default="{ row }"><span class="cell-date">{{ formatDate(row.lastLoginAt) }}</span></template>
               </el-table-column>
-              <el-table-column label="操作" fixed="right" min-width="220">
+              <el-table-column label="操作" min-width="270" align="right" header-align="right">
                 <template #default="{ row }">
-                  <el-button link type="primary" @click="resetPassword(row.id)">重置密码</el-button>
-                  <el-button link type="primary" @click="toggleEnabled(row.id)">{{ row.enabled ? '禁用' : '启用' }}</el-button>
-                  <el-button link type="danger" @click="deleteUser(row.id, row.username)">删除</el-button>
+                  <div class="user-actions">
+                    <el-button class="user-action-button" :icon="Key" @click="resetPassword(row.id)">重置密码</el-button>
+                    <el-button class="user-action-button" :class="row.enabled ? 'warning' : 'success'" :icon="row.enabled ? Lock : Unlock" @click="toggleEnabled(row.id)">{{ row.enabled ? '停用' : '启用' }}</el-button>
+                    <el-button class="user-action-button danger" :icon="Delete" @click="deleteUser(row.id, row.username)">删除</el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -1143,14 +1165,15 @@ async function loadSystemInfo() {
     </div>
 
     <!-- User dialog -->
-    <el-dialog v-model="showUserDialog" title="新增用户" width="420px">
+    <el-dialog v-model="showUserDialog" class="user-create-dialog" title="新增用户" width="440px" align-center>
+      <p class="dialog-intro">创建一个新的家庭成员账户，并设置其访问权限。</p>
       <el-form label-position="top">
         <el-form-item label="用户名"><el-input v-model="newUser.username" placeholder="用户名" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="newUser.password" type="password" show-password placeholder="密码" /></el-form-item>
         <el-form-item label="昵称"><el-input v-model="newUser.nickname" placeholder="昵称（可选）" /></el-form-item>
         <el-form-item label="角色"><el-select v-model="newUser.role" style="width:100%"><el-option label="普通用户" value="USER" /><el-option label="管理员" value="ADMIN" /></el-select></el-form-item>
       </el-form>
-      <template #footer><el-button @click="showUserDialog = false">取消</el-button><el-button type="primary" @click="createUser">创建</el-button></template>
+      <template #footer><el-button @click="showUserDialog = false">取消</el-button><el-button type="primary" :icon="Plus" @click="createUser">创建用户</el-button></template>
     </el-dialog>
 
     <!-- Tag dialog -->
@@ -3184,6 +3207,281 @@ async function loadSystemInfo() {
   -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
 }
 
+/* User management */
+.user-management {
+  display: grid;
+  gap: 16px;
+}
+
+.user-management-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.user-management-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+
+.section-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid var(--accent-border, var(--separator));
+  border-radius: 13px;
+  background: var(--accent-soft, var(--primary-alpha-10));
+  color: var(--accent);
+  font-size: 21px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, transparent);
+}
+
+.user-management-title h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.user-management-title p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.add-user-button {
+  min-height: 40px;
+  padding-inline: 17px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--primary-gradient);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 24%, transparent);
+  font-weight: 700;
+}
+
+.user-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.user-summary > div {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-card) 90%, transparent);
+  color: var(--text-secondary);
+  backdrop-filter: blur(var(--glass-blur, 18px));
+}
+
+.user-summary strong {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.user-summary span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.user-table-card {
+  overflow-x: auto;
+  padding: 8px 10px 10px;
+}
+
+.user-table {
+  min-width: 980px;
+  --el-table-header-bg-color: transparent;
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.user-table :deep(th.el-table__cell) {
+  height: 48px;
+  border-bottom-color: var(--separator);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-table :deep(td.el-table__cell) {
+  height: 70px;
+  border-bottom-color: color-mix(in srgb, var(--separator) 74%, transparent);
+}
+
+.user-table :deep(.el-table__row:last-child td) {
+  border-bottom: 0;
+}
+
+.user-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.user-initial {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 18%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-secondary) 10%, var(--bg-tertiary));
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.user-initial.admin {
+  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+  background: var(--accent-soft, var(--primary-alpha-10));
+  color: var(--accent);
+}
+
+.user-identity div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.user-identity strong,
+.user-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-identity strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.user-identity small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.user-badge {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.user-badge.role.admin {
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--accent-soft, var(--primary-alpha-10));
+  color: var(--accent);
+}
+
+.user-badge.status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.user-badge.enabled {
+  border-color: color-mix(in srgb, var(--success) 27%, transparent);
+  background: color-mix(in srgb, var(--success) 11%, transparent);
+  color: var(--success);
+}
+
+.user-badge.disabled {
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.user-management .cell-date {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.user-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.user-action-button {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--separator));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-card));
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.user-action-button.warning {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--separator));
+  background: color-mix(in srgb, var(--warning) 9%, var(--surface-card));
+  color: var(--warning);
+}
+
+.user-action-button.success {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--separator));
+  background: color-mix(in srgb, var(--success) 9%, var(--surface-card));
+  color: var(--success);
+}
+
+.user-action-button.danger {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--separator));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface-card));
+  color: var(--danger);
+}
+
+.user-action-button:hover,
+.user-action-button:focus-visible {
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 13%, var(--surface-card));
+}
+
+.dialog-intro {
+  margin: -4px 0 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+:deep(.user-create-dialog) {
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
 @media (max-width: 900px) {
   .settings-view {
     width: min(100% - 24px, 1200px);
@@ -3218,6 +3516,10 @@ async function loadSystemInfo() {
     flex: 0 0 auto;
     padding: 10px 14px;
   }
+
+  .user-management-header {
+    align-items: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3242,6 +3544,23 @@ async function loadSystemInfo() {
 
   .settings-content {
     padding: 0 12px;
+  }
+
+  .user-management-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .add-user-button {
+    width: 100%;
+  }
+
+  .user-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .user-summary > div {
+    min-height: 52px;
   }
 }
 </style>

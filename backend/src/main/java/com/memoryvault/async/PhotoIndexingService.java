@@ -1,5 +1,7 @@
 package com.memoryvault.async;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.memoryvault.ai.AiServiceClient;
 import com.memoryvault.dto.TaskProgressDTO;
 import com.memoryvault.entity.*;
@@ -12,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +35,7 @@ public class PhotoIndexingService {
     private final PhotoTagRepository photoTagRepository;
     private final SettingService settingService;
     private final CategoryRepository categoryRepository;
+    private final ObjectMapper objectMapper;
 
     @Async
     public void indexPhotos(Long taskId, List<Long> photoIds) {
@@ -44,10 +49,15 @@ public class PhotoIndexingService {
 
         try {
             int total = photoIds.size();
+            int succeeded = 0;
+            List<Map<String, Object>> failures = new ArrayList<>();
 
             for (int i = 0; i < total; i++) {
                 Photo photo = photoRepository.findById(photoIds.get(i)).orElse(null);
-                if (photo == null) continue;
+                if (photo == null) {
+                    failures.add(Map.of("photoId", photoIds.get(i), "error", "Photo not found"));
+                    continue;
+                }
 
                 try {
                     // Read photo from local storage
@@ -135,8 +145,13 @@ public class PhotoIndexingService {
                     }
 
                     photoRepository.save(photo);
+                    succeeded++;
                 } catch (Exception e) {
                     log.error("Failed to process photo {}: {}", photo.getId(), e.getMessage());
+                    failures.add(Map.of(
+                            "photoId", photo.getId(),
+                            "error", safeErrorMessage(e)
+                    ));
                 }
 
                 int progress = (int) ((i + 1) * 100.0 / total);
@@ -146,15 +161,41 @@ public class PhotoIndexingService {
                 progressHandler.sendProgress(createProgressDTO(task, "Processing photo " + (i + 1) + "/" + total));
             }
 
-            task.setStatus(AiTask.TaskStatus.COMPLETED);
+            task.setProgress(100);
+            task.setFinishedAt(LocalDateTime.now());
+            task.setStatus(failures.isEmpty() ? AiTask.TaskStatus.COMPLETED : AiTask.TaskStatus.FAILED);
+            task.setResultJson(toResultJson(Map.of(
+                    "total", total,
+                    "succeeded", succeeded,
+                    "failed", failures.size(),
+                    "failures", failures
+            )));
             aiTaskRepository.save(task);
-            progressHandler.sendProgress(createProgressDTO(task, "Completed"));
+            String message = failures.isEmpty()
+                    ? "Completed"
+                    : "Failed: " + failures.size() + " of " + total + " photo(s)";
+            progressHandler.sendProgress(createProgressDTO(task, message));
         } catch (Exception e) {
             log.error("Photo indexing failed", e);
             task.setStatus(AiTask.TaskStatus.FAILED);
-            task.setResultJson("{\"error\": \"" + e.getMessage() + "\"}");
+            task.setFinishedAt(LocalDateTime.now());
+            task.setResultJson(toResultJson(Map.of("error", safeErrorMessage(e))));
             aiTaskRepository.save(task);
         }
+    }
+
+    private String toResultJson(Object result) {
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (JsonProcessingException exception) {
+            log.warn("Failed to serialize AI task result", exception);
+            return "{\"error\":\"Failed to serialize task result\"}";
+        }
+    }
+
+    private String safeErrorMessage(Exception exception) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
     private static final Map<String, String> YOLO_TO_CATEGORY_ICON = Map.of(

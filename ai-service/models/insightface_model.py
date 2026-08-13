@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 import insightface
+import torch
 from insightface.app import FaceAnalysis
 
 logger = logging.getLogger(__name__)
@@ -32,13 +33,19 @@ class InsightFaceModel:
             raise ValueError("InsightFace 目录必须采用 <root>/models/<模型名> 结构")
         model_name = path.name
         logger.info(f"Loading InsightFace model: {path}")
+        cuda_available = torch.cuda.is_available()
+        providers = (
+            ["CUDAExecutionProvider", "CPUExecutionProvider"]
+            if cuda_available
+            else ["CPUExecutionProvider"]
+        )
         self.app = FaceAnalysis(
             name=model_name,
             root=str(path.parent.parent),
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            providers=providers,
         )
-        self.app.prepare(ctx_id=0, det_size=(640, 640))
-        logger.info("InsightFace model loaded")
+        self.app.prepare(ctx_id=0 if cuda_available else -1, det_size=(640, 640))
+        logger.info("InsightFace model loaded with providers: %s", providers)
 
     def detect(self, image_data: bytes, filename: str = "") -> list[FaceDetection]:
         """Detect faces and extract embeddings."""

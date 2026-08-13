@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+
+const OUTPUT_SIZE = 512
+const MIN_ZOOM = 1
+const MAX_ZOOM = 4
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -13,10 +17,10 @@ const props = withDefaults(defineProps<{
   confirmText?: string
 }>(), {
   shape: 'circle',
-  title: '调整头像',
-  tip: '拖动图片调整位置，圆形区域将作为你的新头像。',
-  outputName: 'avatar.png',
-  confirmText: '确认上传',
+  title: '选择图像区域',
+  tip: '拖动图片调整位置，缩放后保留方框内的头像内容。',
+  outputName: 'avatar.jpg',
+  confirmText: '应用并上传',
 })
 
 const emit = defineEmits<{
@@ -25,115 +29,46 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-const OUTPUT_SIZE = 512
-const previewUrl = ref('')
-const cropStage = ref<HTMLElement | null>(null)
-const stageSize = ref(360)
-const imageElement = ref<HTMLImageElement | null>(null)
+const cropCanvas = ref<HTMLCanvasElement | null>(null)
+const previewCanvas = ref<HTMLCanvasElement | null>(null)
 const imageWidth = ref(0)
 const imageHeight = ref(0)
-const zoom = ref(1)
-const rotation = ref(0)
-const offsetX = ref(0)
-const offsetY = ref(0)
-const dragging = ref(false)
-const dragStart = ref({ x: 0, y: 0, offsetX: 0, offsetY: 0 })
+const zoom = ref(MIN_ZOOM)
+const imageReady = computed(() => imageWidth.value > 0 && imageHeight.value > 0)
+const zoomPercent = computed(() => Math.round(zoom.value * 100))
+const editorKicker = computed(() => props.shape === 'circle' ? '头像编辑器' : '图标编辑器')
+const previewTitle = computed(() => props.shape === 'circle' ? '头像预览' : '图标预览')
+const previewDescription = computed(() => props.shape === 'circle' ? '个人资料显示效果' : '浏览器标签页显示效果')
+const outputDescription = computed(() => `将生成 512 × 512 ${props.shape === 'circle' ? 'JPG 头像' : 'PNG 图标'}`)
 
-const isQuarterTurn = computed(() => Math.abs(rotation.value / 90) % 2 === 1)
-const rotatedWidth = computed(() => isQuarterTurn.value ? imageHeight.value : imageWidth.value)
-const rotatedHeight = computed(() => isQuarterTurn.value ? imageWidth.value : imageHeight.value)
-const baseScale = computed(() => {
-  if (!rotatedWidth.value || !rotatedHeight.value) return 1
-  return Math.max(stageSize.value / rotatedWidth.value, stageSize.value / rotatedHeight.value)
-})
-const displayWidth = computed(() => imageWidth.value * baseScale.value)
-const displayHeight = computed(() => imageHeight.value * baseScale.value)
-const imageStyle = computed(() => ({
-  width: `${displayWidth.value}px`,
-  height: `${displayHeight.value}px`,
-  transform: `translate(-50%, -50%) translate(${offsetX.value}px, ${offsetY.value}px) rotate(${rotation.value}deg) scale(${zoom.value})`,
-}))
+let sourceUrl = ''
+let cropImage: HTMLImageElement | null = null
+let loadSequence = 0
+let offsetX = 0
+let offsetY = 0
+let dragging = false
+let dragPointerId: number | null = null
+let dragStartX = 0
+let dragStartY = 0
+let dragStartOffsetX = 0
+let dragStartOffsetY = 0
 
-function revokePreview() {
-  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-  previewUrl.value = ''
+function revokeSourceUrl() {
+  if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+  sourceUrl = ''
 }
 
-function resetAdjustments() {
-  zoom.value = 1
-  rotation.value = 0
-  offsetX.value = 0
-  offsetY.value = 0
-}
-
-function measureStage() {
-  if (cropStage.value?.clientWidth) stageSize.value = cropStage.value.clientWidth
-}
-
-function clampOffset() {
-  const width = rotatedWidth.value * baseScale.value * zoom.value
-  const height = rotatedHeight.value * baseScale.value * zoom.value
-  const maxX = Math.max(0, (width - stageSize.value) / 2)
-  const maxY = Math.max(0, (height - stageSize.value) / 2)
-  offsetX.value = Math.max(-maxX, Math.min(maxX, offsetX.value))
-  offsetY.value = Math.max(-maxY, Math.min(maxY, offsetY.value))
-}
-
-watch(() => props.file, (file) => {
-  revokePreview()
-  resetAdjustments()
+function clearImage() {
+  loadSequence++
+  revokeSourceUrl()
+  cropImage = null
   imageWidth.value = 0
   imageHeight.value = 0
-  if (file) previewUrl.value = URL.createObjectURL(file)
-}, { immediate: true })
-
-watch(() => props.modelValue, (visible) => {
-  if (visible) requestAnimationFrame(() => {
-    measureStage()
-    clampOffset()
-  })
-})
-
-watch([zoom, rotation], clampOffset)
-
-function handleImageLoad(event: Event) {
-  const image = event.target as HTMLImageElement
-  imageElement.value = image
-  imageWidth.value = image.naturalWidth
-  imageHeight.value = image.naturalHeight
-  measureStage()
-  clampOffset()
-}
-
-function startDrag(event: PointerEvent) {
-  if (!imageWidth.value) return
-  dragging.value = true
-  dragStart.value = {
-    x: event.clientX,
-    y: event.clientY,
-    offsetX: offsetX.value,
-    offsetY: offsetY.value,
-  }
-  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-}
-
-function moveDrag(event: PointerEvent) {
-  if (!dragging.value) return
-  offsetX.value = dragStart.value.offsetX + event.clientX - dragStart.value.x
-  offsetY.value = dragStart.value.offsetY + event.clientY - dragStart.value.y
-  clampOffset()
-}
-
-function endDrag() {
-  dragging.value = false
-}
-
-function rotateLeft() {
-  rotation.value = (rotation.value - 90) % 360
-}
-
-function rotateRight() {
-  rotation.value = (rotation.value + 90) % 360
+  zoom.value = MIN_ZOOM
+  offsetX = 0
+  offsetY = 0
+  dragging = false
+  dragPointerId = null
 }
 
 function closeDialog() {
@@ -142,192 +77,236 @@ function closeDialog() {
   emit('cancel')
 }
 
-async function confirmCrop() {
-  const image = imageElement.value
-  if (!image || !imageWidth.value) {
-    ElMessage.warning('图片仍在加载，请稍后再试')
-    return
-  }
+function clampOffsets() {
+  if (!cropImage) return
+  const baseScale = Math.max(OUTPUT_SIZE / cropImage.naturalWidth, OUTPUT_SIZE / cropImage.naturalHeight)
+  const scale = baseScale * zoom.value
+  const maxX = Math.max(0, (cropImage.naturalWidth * scale - OUTPUT_SIZE) / 2)
+  const maxY = Math.max(0, (cropImage.naturalHeight * scale - OUTPUT_SIZE) / 2)
+  offsetX = Math.max(-maxX, Math.min(maxX, offsetX))
+  offsetY = Math.max(-maxY, Math.min(maxY, offsetY))
+}
 
-  const canvas = document.createElement('canvas')
-  canvas.width = OUTPUT_SIZE
-  canvas.height = OUTPUT_SIZE
+function renderCrop() {
+  const canvas = cropCanvas.value
+  if (!canvas || !cropImage) return
+  clampOffsets()
   const context = canvas.getContext('2d')
-  if (!context) {
-    ElMessage.error('当前浏览器无法处理图片')
-    return
-  }
-
-  const outputRatio = OUTPUT_SIZE / stageSize.value
+  if (!context) return
+  const baseScale = Math.max(OUTPUT_SIZE / cropImage.naturalWidth, OUTPUT_SIZE / cropImage.naturalHeight)
+  const scale = baseScale * zoom.value
+  const width = cropImage.naturalWidth * scale
+  const height = cropImage.naturalHeight * scale
   context.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
   if (props.shape === 'circle') {
     context.fillStyle = '#ffffff'
     context.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
   }
-  context.translate(
-    OUTPUT_SIZE / 2 + offsetX.value * outputRatio,
-    OUTPUT_SIZE / 2 + offsetY.value * outputRatio,
-  )
-  context.rotate(rotation.value * Math.PI / 180)
-  const drawScale = baseScale.value * zoom.value * outputRatio
-  context.scale(drawScale, drawScale)
-  context.drawImage(image, -imageWidth.value / 2, -imageHeight.value / 2)
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(cropImage, (OUTPUT_SIZE - width) / 2 + offsetX, (OUTPUT_SIZE - height) / 2 + offsetY, width, height)
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 0.92))
-  if (!blob) {
-    ElMessage.error('图片生成失败，请重新选择图片')
-    return
+  const preview = previewCanvas.value
+  const previewContext = preview?.getContext('2d')
+  if (preview && previewContext) {
+    previewContext.clearRect(0, 0, preview.width, preview.height)
+    previewContext.drawImage(canvas, 0, 0, preview.width, preview.height)
   }
-  emit('confirm', new File([blob], props.outputName, { type: 'image/png' }))
 }
 
-onBeforeUnmount(revokePreview)
+function resetCrop() {
+  zoom.value = MIN_ZOOM
+  offsetX = 0
+  offsetY = 0
+  renderCrop()
+}
+
+function updateZoom() {
+  zoom.value = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom.value))
+  renderCrop()
+}
+
+function adjustZoom(amount: number) {
+  zoom.value = Math.round(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom.value + amount)) * 100) / 100
+  renderCrop()
+}
+
+function handleWheel(event: WheelEvent) {
+  adjustZoom(event.deltaY < 0 ? 0.08 : -0.08)
+}
+
+function startDrag(event: PointerEvent) {
+  const canvas = cropCanvas.value
+  if (!canvas || !cropImage) return
+  dragging = true
+  dragPointerId = event.pointerId
+  dragStartX = event.clientX
+  dragStartY = event.clientY
+  dragStartOffsetX = offsetX
+  dragStartOffsetY = offsetY
+  canvas.setPointerCapture(event.pointerId)
+}
+
+function moveDrag(event: PointerEvent) {
+  const canvas = cropCanvas.value
+  if (!dragging || !canvas || dragPointerId !== event.pointerId) return
+  const displayScale = OUTPUT_SIZE / canvas.getBoundingClientRect().width
+  offsetX = dragStartOffsetX + (event.clientX - dragStartX) * displayScale
+  offsetY = dragStartOffsetY + (event.clientY - dragStartY) * displayScale
+  renderCrop()
+}
+
+function endDrag(event: PointerEvent) {
+  if (dragPointerId !== event.pointerId) return
+  dragging = false
+  dragPointerId = null
+  const canvas = cropCanvas.value
+  if (canvas?.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeDialog()
+    return
+  }
+  const movement: Record<string, [number, number]> = {
+    ArrowLeft: [-4, 0], ArrowRight: [4, 0], ArrowUp: [0, -4], ArrowDown: [0, 4],
+  }
+  const delta = movement[event.key]
+  if (!delta) return
+  event.preventDefault()
+  offsetX += delta[0]
+  offsetY += delta[1]
+  renderCrop()
+}
+
+async function loadImage() {
+  clearImage()
+  if (!props.modelValue || !props.file) return
+  const sequence = loadSequence
+  const url = URL.createObjectURL(props.file)
+  sourceUrl = url
+  const image = new Image()
+  image.onload = async () => {
+    if (sequence !== loadSequence || !props.modelValue) return
+    cropImage = image
+    imageWidth.value = image.naturalWidth
+    imageHeight.value = image.naturalHeight
+    await nextTick()
+    resetCrop()
+    cropCanvas.value?.focus()
+  }
+  image.onerror = () => {
+    if (sequence !== loadSequence || !props.modelValue) return
+    ElMessage.error('无法读取该图片，请选择其他图片')
+    closeDialog()
+  }
+  image.src = url
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement) {
+  const type = props.shape === 'circle' ? 'image/jpeg' : 'image/png'
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('图片生成失败')), type, 0.92)
+  })
+}
+
+async function confirmCrop() {
+  const canvas = cropCanvas.value
+  if (!canvas || !cropImage || props.uploading) return
+  try {
+    renderCrop()
+    const blob = await canvasToBlob(canvas)
+    emit('confirm', new File([blob], props.outputName, { type: blob.type }))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '图片处理失败')
+  }
+}
+
+watch(() => [props.modelValue, props.file] as const, () => void loadImage(), { immediate: true })
+onBeforeUnmount(clearImage)
 </script>
 
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    :title="title"
-    width="min(560px, calc(100vw - 28px))"
-    :close-on-click-modal="!uploading"
-    :close-on-press-escape="!uploading"
-    :show-close="!uploading"
-    class="avatar-crop-dialog"
-    @close="closeDialog"
-  >
-    <div class="crop-content">
-      <p class="crop-tip">{{ tip }}</p>
-      <div
-        ref="cropStage"
-        class="crop-stage"
-        :class="{ dragging }"
-        @pointerdown="startDrag"
-        @pointermove="moveDrag"
-        @pointerup="endDrag"
-        @pointercancel="endDrag"
-      >
-        <img
-          v-if="previewUrl"
-          :src="previewUrl"
-          :style="imageStyle"
-          alt="图片裁剪预览"
-          draggable="false"
-          @load="handleImageLoad"
-        />
-        <div class="crop-mask" :class="shape" />
-      </div>
+  <Teleport to="body">
+    <Transition name="crop-dialog">
+      <div v-if="modelValue" class="crop-overlay" @click.self="closeDialog">
+        <section class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-dialog-title">
+          <header class="crop-header">
+            <div>
+              <span class="crop-kicker">{{ editorKicker }}</span>
+              <h2 id="crop-dialog-title">{{ title }}</h2>
+              <p>{{ tip }}</p>
+            </div>
+            <button class="crop-close" type="button" aria-label="关闭图片编辑器" :disabled="uploading" @click="closeDialog">×</button>
+          </header>
 
-      <div class="crop-controls">
-        <div class="zoom-control">
-          <span>缩放</span>
-          <el-slider v-model="zoom" :min="1" :max="3" :step="0.01" :show-tooltip="false" />
-          <span>{{ Math.round(zoom * 100) }}%</span>
-        </div>
-        <div class="adjust-actions">
-          <el-button @click="rotateLeft">向左旋转</el-button>
-          <el-button @click="rotateRight">向右旋转</el-button>
-          <el-button @click="resetAdjustments">重置</el-button>
-        </div>
-      </div>
-    </div>
+          <div class="crop-body">
+            <div class="crop-workbench">
+              <div class="crop-stage">
+                <canvas
+                  ref="cropCanvas"
+                  class="crop-canvas"
+                  width="512"
+                  height="512"
+                  tabindex="0"
+                  aria-label="图片裁剪区域，可拖动图片、滚轮缩放或使用方向键调整位置"
+                  @pointerdown="startDrag"
+                  @pointermove="moveDrag"
+                  @pointerup="endDrag"
+                  @pointercancel="endDrag"
+                  @wheel.prevent="handleWheel"
+                  @keydown="handleKeydown"
+                />
+                <div class="crop-grid" aria-hidden="true"><i /><i /><i /><i /></div>
+                <span class="crop-corner crop-corner-tl" /><span class="crop-corner crop-corner-tr" />
+                <span class="crop-corner crop-corner-bl" /><span class="crop-corner crop-corner-br" />
+              </div>
+              <p class="crop-drag-hint">按住并拖动图片 · 滚轮也可缩放</p>
+            </div>
 
-    <template #footer>
-      <el-button :disabled="uploading" @click="closeDialog">取消</el-button>
-      <el-button type="primary" :loading="uploading" @click="confirmCrop">{{ confirmText }}</el-button>
-    </template>
-  </el-dialog>
+            <aside class="crop-panel">
+              <div class="result-preview">
+                <canvas ref="previewCanvas" width="64" height="64" :class="shape" aria-hidden="true" />
+                <div><strong>{{ previewTitle }}</strong><span>{{ previewDescription }}</span></div>
+              </div>
+              <div class="source-meta"><span>原图</span><strong>{{ imageWidth }} × {{ imageHeight }}</strong></div>
+              <div class="zoom-control">
+                <div class="zoom-label"><label for="image-zoom">缩放</label><output for="image-zoom">{{ zoomPercent }}%</output></div>
+                <div class="zoom-row">
+                  <button type="button" aria-label="缩小图片" :disabled="zoom <= MIN_ZOOM" @click="adjustZoom(-0.1)">−</button>
+                  <input id="image-zoom" v-model.number="zoom" type="range" :min="MIN_ZOOM" :max="MAX_ZOOM" step="0.01" @input="updateZoom" />
+                  <button type="button" aria-label="放大图片" :disabled="zoom >= MAX_ZOOM" @click="adjustZoom(0.1)">+</button>
+                </div>
+              </div>
+              <button class="reset-crop" type="button" @click="resetCrop">居中并重置缩放</button>
+            </aside>
+          </div>
+
+          <footer class="crop-footer">
+            <span>{{ outputDescription }}</span>
+            <div>
+              <el-button :disabled="uploading" @click="closeDialog">取消</el-button>
+              <el-button type="primary" :loading="uploading" :disabled="!imageReady" @click="confirmCrop">{{ confirmText }}</el-button>
+            </div>
+          </footer>
+        </section>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
-.crop-content {
-  display: grid;
-  justify-items: center;
-  gap: 18px;
-}
-
-.crop-tip {
-  width: 100%;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.crop-stage {
-  position: relative;
-  width: min(360px, calc(100vw - 76px));
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: 18px;
-  background: #111827;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-
-.crop-stage.dragging {
-  cursor: grabbing;
-}
-
-.crop-stage img {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  max-width: none;
-  transform-origin: center;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.crop-mask {
-  position: absolute;
-  inset: 0;
-  width: calc(100% - 8px);
-  height: calc(100% - 8px);
-  margin: 4px;
-  border: 2px solid rgba(255, 255, 255, .92);
-  box-shadow: 0 0 0 999px rgba(4, 10, 22, .58);
-  pointer-events: none;
-}
-
-.crop-mask.circle { border-radius: 50%; }
-.crop-mask.square { border-radius: 14px; }
-
-.crop-controls {
-  display: grid;
-  width: 100%;
-  gap: 14px;
-}
-
-.zoom-control {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 48px;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.zoom-control span:last-child {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.adjust-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
-@media (max-width: 480px) {
-  .crop-content {
-    gap: 14px;
-  }
-
-  .adjust-actions :deep(.el-button) {
-    flex: 1;
-    margin-left: 0;
-  }
-}
+.crop-overlay{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:24px;background:rgba(7,12,20,.72);backdrop-filter:blur(12px) saturate(140%)}
+.crop-dialog{width:min(880px,100%);max-height:calc(100vh - 48px);overflow:auto;color:var(--text-primary);border:1px solid var(--border-color-light);border-radius:var(--radius-xl);background:var(--surface-elevated);box-shadow:var(--shadow-xl),0 30px 80px rgba(0,0,0,.3)}
+.crop-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 28px 20px;border-bottom:1px solid var(--border-color-light)}
+.crop-kicker{display:block;margin-bottom:4px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.crop-header h2{margin:0;font-size:22px;line-height:1.25}.crop-header p{margin:6px 0 0;color:var(--text-secondary);font-size:13px}
+.crop-close{width:34px;height:34px;flex:0 0 auto;padding:0;color:var(--text-secondary);font:inherit;font-size:25px;line-height:1;cursor:pointer;border:1px solid transparent;border-radius:50%;background:transparent;transition:160ms ease}.crop-close:hover:not(:disabled){color:var(--text-primary);border-color:var(--border-color);background:var(--surface-hover)}
+.crop-body{display:grid;grid-template-columns:minmax(300px,1fr) 240px;gap:30px;padding:28px}.crop-workbench{min-width:0}.crop-stage{position:relative;width:min(100%,440px);aspect-ratio:1;margin:0 auto;overflow:hidden;cursor:grab;border:1px solid rgba(255,255,255,.32);border-radius:6px;background-color:#17201c;background-image:linear-gradient(45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.035) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.035) 75%);background-position:0 0,0 8px,8px -8px,-8px 0;background-size:16px 16px;box-shadow:0 18px 44px rgba(8,20,14,.2);touch-action:none;user-select:none}.crop-stage:active{cursor:grabbing}.crop-canvas{display:block;width:100%;height:100%;outline:none}.crop-canvas:focus-visible{box-shadow:inset 0 0 0 3px var(--primary-light)}
+.crop-grid{position:absolute;inset:0;pointer-events:none}.crop-grid i{position:absolute;display:block;background:rgba(255,255,255,.3)}.crop-grid i:nth-child(1),.crop-grid i:nth-child(2){top:0;bottom:0;width:1px}.crop-grid i:nth-child(1){left:33.333%}.crop-grid i:nth-child(2){left:66.666%}.crop-grid i:nth-child(3),.crop-grid i:nth-child(4){right:0;left:0;height:1px}.crop-grid i:nth-child(3){top:33.333%}.crop-grid i:nth-child(4){top:66.666%}
+.crop-corner{position:absolute;width:22px;height:22px;pointer-events:none;border-color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}.crop-corner-tl{top:8px;left:8px;border-top:3px solid;border-left:3px solid}.crop-corner-tr{top:8px;right:8px;border-top:3px solid;border-right:3px solid}.crop-corner-bl{bottom:8px;left:8px;border-bottom:3px solid;border-left:3px solid}.crop-corner-br{right:8px;bottom:8px;border-right:3px solid;border-bottom:3px solid}.crop-drag-hint{margin:12px 0 0;color:var(--text-tertiary);font-size:12px;text-align:center}
+.crop-panel{display:flex;flex-direction:column;gap:22px;padding:4px 0}.result-preview{display:flex;align-items:center;gap:14px;padding-bottom:20px;border-bottom:1px solid var(--border-color-light)}.result-preview canvas{width:64px;height:64px;flex:0 0 auto;border:1px solid var(--border-color-light);background:var(--surface-hover);box-shadow:var(--shadow-sm)}.result-preview canvas.circle{border-radius:50%}.result-preview canvas.square{border-radius:14px}.result-preview strong,.result-preview span{display:block}.result-preview strong{font-size:14px}.result-preview span{margin-top:3px;color:var(--text-tertiary);font-size:11px}
+.source-meta,.zoom-label{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-secondary);font-size:12px}.source-meta strong,.zoom-label output{color:var(--text-primary);font-size:12px;font-variant-numeric:tabular-nums}.zoom-label label{font-weight:600}.zoom-row{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:10px;margin-top:10px}.zoom-row button{width:34px;height:34px;padding:0;color:var(--text-primary);font:inherit;font-size:18px;cursor:pointer;border:1px solid var(--border-color);border-radius:10px;background:var(--surface-card)}.zoom-row button:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}.zoom-row button:disabled{cursor:not-allowed;opacity:.4}.zoom-row input{width:100%;accent-color:var(--accent);cursor:pointer}.reset-crop{align-self:flex-start;padding:0;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;border:0;background:transparent}.reset-crop:hover{text-decoration:underline}
+.crop-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 28px;border-top:1px solid var(--border-color-light)}.crop-footer>span{color:var(--text-tertiary);font-size:12px}.crop-footer>div{display:flex;gap:10px}.crop-dialog-enter-active,.crop-dialog-leave-active{transition:opacity 180ms ease}.crop-dialog-enter-active .crop-dialog,.crop-dialog-leave-active .crop-dialog{transition:transform 180ms ease,opacity 180ms ease}.crop-dialog-enter-from,.crop-dialog-leave-to{opacity:0}.crop-dialog-enter-from .crop-dialog,.crop-dialog-leave-to .crop-dialog{opacity:0;transform:translateY(10px) scale(.985)}
+@media(max-width:640px){.crop-overlay{align-items:end;padding:0}.crop-dialog{width:100%;max-height:94vh;border-right:0;border-bottom:0;border-left:0;border-radius:var(--radius-xl) var(--radius-xl) 0 0}.crop-header,.crop-body,.crop-footer{padding-right:18px;padding-left:18px}.crop-body{grid-template-columns:1fr;gap:22px}.crop-stage{width:min(100%,360px)}.crop-panel{gap:16px}.result-preview{display:none}.crop-footer{align-items:stretch;flex-direction:column}.crop-footer>span{text-align:center}.crop-footer>div{display:grid;grid-template-columns:1fr 1.4fr}.crop-footer :deep(.el-button){width:100%;margin-left:0}}
 </style>

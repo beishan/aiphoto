@@ -32,6 +32,11 @@ class ModelManager:
         self.lock = RLock()
         self.models: dict[str, Any | None] = {name: None for name in MODEL_TYPES}
         self.errors: dict[str, str | None] = {name: None for name in MODEL_TYPES}
+        default_capacity = 3 if torch.cuda.is_available() else 1
+        self.max_loaded_models = max(
+            1, int(os.environ.get("AI_MAX_LOADED_MODELS", default_capacity))
+        )
+        self.load_order: list[str] = []
         self.config = self._load_config()
 
     def _defaults(self) -> dict[str, dict[str, Any]]:
@@ -68,19 +73,20 @@ class ModelManager:
         return candidate
 
     def load_enabled(self) -> None:
+        """Validate configured paths; inference endpoints load models on demand."""
         for name in MODEL_TYPES:
-            if self.config[name].get("enabled") and name != "blip":
-                self.reload(name)
+            setting = self.config[name]
+            if setting.get("enabled"):
+                path = self.resolve_path(str(setting.get("path", "")))
+                if not path.exists():
+                    self.errors[name] = f"本地模型不存在: {path}"
 
     def reload(self, name: str) -> dict[str, Any]:
         if name not in MODEL_TYPES:
             raise ValueError(f"不支持的模型类型: {name}")
         with self.lock:
-            self.models[name] = None
+            self._unload(name)
             self.errors[name] = None
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
 
             setting = self.config[name]
             if not setting.get("enabled"):
@@ -90,6 +96,7 @@ class ModelManager:
             try:
                 if not path.exists():
                     raise FileNotFoundError(f"本地模型不存在: {path}")
+                self._make_room(name)
                 if name == "clip":
                     self.models[name] = CLIPModel(str(path))
                 elif name == "insightface":
@@ -98,17 +105,44 @@ class ModelManager:
                     self.models[name] = YOLOModel(str(path))
                 else:
                     self.models[name] = BLIPModel(str(path))
+                self._touch(name)
             except Exception as exc:  # Keep the service available for configuration.
                 self.errors[name] = str(exc)
                 logger.exception("Failed to load local %s model", name)
             return self.model_status(name)
 
-    def get(self, name: str, lazy: bool = False) -> Any | None:
-        model = self.models.get(name)
-        if model is None and lazy and self.config[name].get("enabled"):
-            self.reload(name)
+    def get(self, name: str, lazy: bool = True) -> Any | None:
+        with self.lock:
             model = self.models.get(name)
-        return model
+            if model is None and lazy and self.config[name].get("enabled"):
+                self.reload(name)
+                model = self.models.get(name)
+            if model is not None:
+                self._touch(name)
+            return model
+
+    def _make_room(self, requested_name: str) -> None:
+        while sum(model is not None for model in self.models.values()) >= self.max_loaded_models:
+            victim = next(
+                (name for name in self.load_order if name != requested_name), None
+            )
+            if victim is None:
+                break
+            logger.info("Unloading AI model to free memory: %s", victim)
+            self._unload(victim)
+
+    def _touch(self, name: str) -> None:
+        if name in self.load_order:
+            self.load_order.remove(name)
+        self.load_order.append(name)
+
+    def _unload(self, name: str) -> None:
+        self.models[name] = None
+        if name in self.load_order:
+            self.load_order.remove(name)
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def update(self, name: str, path: str, enabled: bool) -> dict[str, Any]:
         if name not in MODEL_TYPES:
@@ -135,5 +169,6 @@ class ModelManager:
         return {
             "root": str(self.root),
             "offline": True,
+            "maxLoadedModels": self.max_loaded_models,
             "models": [self.model_status(name) for name in MODEL_TYPES],
         }

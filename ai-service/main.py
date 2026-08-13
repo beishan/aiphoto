@@ -15,10 +15,13 @@ model_manager = ModelManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load models on startup."""
-    logger.info("Loading configured local AI models from %s", model_manager.root)
+    """Validate local models; inference endpoints load them on demand."""
+    logger.info("Validating configured local AI models from %s", model_manager.root)
     model_manager.load_enabled()
-    logger.info("Local AI model initialization complete")
+    logger.info(
+        "Local AI model validation complete; at most %s model(s) will stay loaded",
+        model_manager.max_loaded_models,
+    )
     yield
     logger.info("Shutting down AI service")
 
@@ -81,11 +84,20 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Check service health and model status."""
+    model_states = model_manager.status()["models"]
+    enabled_states = [item for item in model_states if item["enabled"]]
+    available_count = sum(
+        1 for item in enabled_states if item["exists"] and not item["error"]
+    )
+    if enabled_states and available_count == len(enabled_states):
+        status = "healthy"
+    elif available_count > 0:
+        status = "degraded"
+    else:
+        status = "unhealthy"
     return HealthResponse(
-        status="healthy",
-        models={
-            item["name"]: item["loaded"] for item in model_manager.status()["models"]
-        },
+        status=status,
+        models={item["name"]: item["loaded"] for item in model_states},
     )
 
 

@@ -49,6 +49,9 @@ services:
     #           capabilities: [gpu]
     environment:
       - AI_MODEL_ROOT=/models
+      # CPU/Docker Desktop defaults to one resident model to avoid memory exhaustion.
+      # Set this to 3 on a NAS with sufficient NVIDIA GPU memory.
+      - AI_MAX_LOADED_MODELS=${AI_MAX_LOADED_MODELS:-1}
       - CUDA_VISIBLE_DEVICES=0
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1

@@ -494,16 +494,6 @@ function getDockItemStyle(index: number) {
   pointer-events: none;
 }
 
-.dock::after {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  z-index: -2;
-  border-radius: calc(var(--dock-tile-size) * .34);
-  box-shadow: inset 0 0 18px rgba(255, 255, 255, .14);
-  pointer-events: none;
-}
-
 /* Light theme dock */
 :global([data-theme="light"]) .dock {
   --dock-bg-rgb: 255, 255, 255;
@@ -731,6 +721,12 @@ function getDockItemStyle(index: number) {
     gap: 3px;
     padding: 6px 7px 8px;
     --dock-tile-size: 36px !important;
+  }
+
+  .dock-icon,
+  .dock-icon-tile.custom .dock-icon {
+    width: min(var(--dock-icon-size), 34px);
+    height: min(var(--dock-icon-size), 34px);
   }
 
   .dock-item {

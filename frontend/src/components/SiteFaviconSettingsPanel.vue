@@ -133,8 +133,8 @@ onMounted(loadStatus)
     :file="selectedFile"
     :uploading="saving"
     shape="square"
-    title="调整网站图标"
-    tip="拖动图片调整位置，方形区域将作为浏览器标签页图标。"
+    title="选择图像区域"
+    tip="拖动图片调整位置，缩放后保留方框内的网站图标内容。"
     output-name="favicon.png"
     confirm-text="应用并上传"
     @confirm="uploadCroppedIcon"
@@ -151,8 +151,8 @@ onMounted(loadStatus)
 .favicon-status { padding: 5px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
 .favicon-content { justify-content: space-between; gap: 24px; padding-top: 22px; }
 .favicon-preview-wrap { min-width: 0; gap: 16px; }
-.favicon-preview { display: grid; width: 82px; height: 82px; flex-shrink: 0; place-items: center; overflow: hidden; border: 1px solid var(--separator); border-radius: 20px; background: var(--bg-tertiary); box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
-.favicon-preview img { width: 62px; height: 62px; object-fit: contain; }
+.favicon-preview { width: 82px; height: 82px; flex-shrink: 0; overflow: hidden; border-radius: 20px; }
+.favicon-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .favicon-preview-wrap strong { color: var(--text-primary); font-size: 14px; }
 .favicon-actions { flex-shrink: 0; gap: 9px; }
 @media (max-width: 680px) { .favicon-content { align-items: stretch; flex-direction: column; } .favicon-actions :deep(.el-button) { flex: 1; margin-left: 0; } }

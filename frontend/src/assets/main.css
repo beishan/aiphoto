@@ -334,9 +334,9 @@ button {
   box-shadow: 0 10px 28px rgba(48, 66, 100, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
-[data-theme="macos26"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[data-theme="macos26"] textarea,
-[data-theme="macos26"] select {
+[data-theme="macos26"] input:not([class*="el-"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="macos26"] textarea:not([class*="el-"]),
+[data-theme="macos26"] select:not([class*="el-"]) {
   border-color: rgba(255, 255, 255, 0.74);
   background: rgba(255, 255, 255, 0.46);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 5px 16px rgba(48, 66, 100, 0.08);
@@ -344,9 +344,9 @@ button {
   -webkit-backdrop-filter: blur(18px) saturate(170%);
 }
 
-[data-theme="macos26"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
-[data-theme="macos26"] textarea:focus,
-[data-theme="macos26"] select:focus {
+[data-theme="macos26"] input:not([class*="el-"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+[data-theme="macos26"] textarea:not([class*="el-"]):focus,
+[data-theme="macos26"] select:not([class*="el-"]):focus {
   border-color: rgba(0, 122, 255, 0.62);
   box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.13), inset 0 1px 0 #fff;
 }
@@ -524,6 +524,27 @@ button {
 .el-select__wrapper.is-focused,
 .el-textarea__inner:focus {
   box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 3px var(--accent-soft);
+}
+
+/* Element Plus owns the visible field frame. Its internal native inputs must
+   stay visually transparent, otherwise global theme rules create a second box. */
+.el-input__inner,
+.el-select__input,
+.el-range-input {
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.el-input__inner:focus,
+.el-select__input:focus,
+.el-range-input:focus {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
 }
 
 .el-table {
