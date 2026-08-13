@@ -1,5 +1,6 @@
 import http from './http'
 import type { User } from '@/types'
+import type { DockConfig } from '@/utils/themeAppearance'
 
 export const userApi = {
   list() {
@@ -32,6 +33,10 @@ export const userApi = {
 
   updateTheme(theme: 'dark' | 'light' | 'macos26') {
     return http.put<User>('/users/me/theme', { theme })
+  },
+
+  updateDockConfig(config: DockConfig) {
+    return http.put<User>('/users/me/dock-config', config)
   },
 
   create(data: { username: string; password: string; role?: string; nickname?: string }) {

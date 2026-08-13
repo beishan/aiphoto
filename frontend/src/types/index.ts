@@ -91,6 +91,7 @@ export interface User {
   photoPreferences: string | null
   notes: string | null
   theme: 'dark' | 'light' | 'macos26' | null
+  dockConfig: import('@/utils/themeAppearance').DockConfig | null
   enabled: boolean
   createdAt: string
   lastLoginAt: string | null

@@ -191,7 +191,9 @@ export function loadDockConfig(): DockConfig {
   catch { return { ...DEFAULT_DOCK } }
 }
 
-export function setDockConfig(config: DockConfig) {
+export function setDockConfig(config: DockConfig, notify = true) {
   localStorage.setItem('dockConfig', JSON.stringify(config))
-  window.dispatchEvent(new CustomEvent<DockConfig>('dock-config-updated', { detail: config }))
+  if (notify) {
+    window.dispatchEvent(new CustomEvent<DockConfig>('dock-config-updated', { detail: config }))
+  }
 }

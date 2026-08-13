@@ -17,6 +17,7 @@ public class UserDTO {
     private String photoPreferences;
     private String notes;
     private String theme;
+    private DockConfigDTO dockConfig;
     private Boolean enabled;
     private LocalDateTime createdAt;
     private LocalDateTime lastLoginAt;

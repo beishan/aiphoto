@@ -232,8 +232,8 @@ const dockStyle = computed(() => ({
   '--dock-opacity': dockConfig.value.opacity,
   '--dock-blur': dockConfig.value.blurStrength + 'px',
   '--dock-icon-size': dockConfig.value.iconSize + 'px',
-  '--dock-tile-size': dockConfig.value.iconSize + 22 + 'px',
-  '--dock-base-gap': Math.max(10, Math.round(dockConfig.value.iconSize * 0.42)) + 'px',
+  '--dock-tile-size': '48px',
+  '--dock-base-gap': '11px',
   '--dock-anim-speed': dockConfig.value.animationSpeed + 's',
 }))
 
@@ -241,7 +241,7 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
 
 function getDockItemStyle(index: number) {
   const scale = getTabScale(index)
-  const tileSize = dockConfig.value.iconSize + 22
+  const tileSize = 48
   const lift = (scale - 1) * tileSize * 0.72
   const spread = (scale - 1) * tileSize / 2
   return {
@@ -546,7 +546,7 @@ function getDockItemStyle(index: number) {
   display: none;
 }
 
-.dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:100%;height:100%;filter:none}.dock-icon-tile.minimal{border:1px solid var(--separator);overflow:hidden;background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:none}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
+.dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:var(--dock-icon-size);height:var(--dock-icon-size);filter:none}.dock-icon-tile.minimal{border:1px solid var(--separator);overflow:hidden;background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:none}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
 
 .dock-icon {
   position: relative;
@@ -684,7 +684,6 @@ function getDockItemStyle(index: number) {
     gap: 3px;
     padding: 6px 7px 8px;
     --dock-tile-size: 36px !important;
-    --dock-icon-size: 22px !important;
   }
 
   .dock-item {

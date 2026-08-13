@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, provide } from 'vue'
+import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
 import { ElMessage } from 'element-plus'
-import { applyThemeAppearance, type AppTheme } from '@/utils/themeAppearance'
+import { applyThemeAppearance, type AppTheme, type DockConfig } from '@/utils/themeAppearance'
 import { userApi } from '@/api/userApi'
 import type { User } from '@/types'
 
@@ -20,6 +20,7 @@ const initialTheme: Theme = sessionTheme || (storedTheme === 'liquid-glass'
   : validThemes.includes(storedTheme as Theme) ? storedTheme as Theme : 'dark')
 const theme = ref<Theme>(initialTheme)
 let themeSyncQueue = Promise.resolve()
+let dockSyncTimer: ReturnType<typeof setTimeout> | undefined
 
 document.documentElement.dataset.theme = initialTheme
 applyThemeAppearance(initialTheme)
@@ -27,19 +28,43 @@ applyThemeAppearance(initialTheme)
 onMounted(() => {
   document.documentElement.dataset.theme = theme.value
   applyThemeAppearance(theme.value)
+  window.addEventListener('dock-config-updated', onDockConfigUpdated)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('dock-config-updated', onDockConfigUpdated)
+  if (dockSyncTimer) clearTimeout(dockSyncTimer)
+})
+
+function updateSessionUser(updates: Partial<User>) {
+  try {
+    const storedUser = JSON.parse(sessionStorage.getItem('user') || 'null') as User | null
+    if (storedUser) sessionStorage.setItem('user', JSON.stringify({ ...storedUser, ...updates }))
+  } catch { /* ignore invalid legacy session data */ }
+}
+
+function onDockConfigUpdated(event: Event) {
+  const config = (event as CustomEvent<DockConfig>).detail
+  updateSessionUser({ dockConfig: config })
+  if (dockSyncTimer) clearTimeout(dockSyncTimer)
+  const token = localStorage.getItem('token')
+  if (!token) return
+  dockSyncTimer = setTimeout(() => {
+    if (localStorage.getItem('token') !== token) return
+    void userApi.updateDockConfig(config).then(({ data }) => {
+      if (localStorage.getItem('token') === token) updateSessionUser({ dockConfig: data.dockConfig })
+    }).catch(() => {
+      ElMessage.warning('Dock 配置已在当前设备生效，但同步到账号失败')
+    })
+  }, 400)
+}
 
 watch(theme, (val) => {
   document.documentElement.dataset.theme = val
   localStorage.setItem('theme', val)
   applyThemeAppearance(val)
 
-  try {
-    const storedUser = JSON.parse(sessionStorage.getItem('user') || 'null') as User | null
-    if (storedUser) {
-      sessionStorage.setItem('user', JSON.stringify({ ...storedUser, theme: val }))
-    }
-  } catch { /* ignore invalid legacy session data */ }
+  updateSessionUser({ theme: val })
 
   const token = localStorage.getItem('token')
   if (token) {
@@ -48,7 +73,7 @@ watch(theme, (val) => {
       try {
         const { data } = await userApi.updateTheme(val)
         if (localStorage.getItem('token') === token) {
-          sessionStorage.setItem('user', JSON.stringify(data))
+          updateSessionUser({ theme: data.theme })
         }
       } catch {
         ElMessage.warning('主题已在当前设备生效，但同步到账号失败')

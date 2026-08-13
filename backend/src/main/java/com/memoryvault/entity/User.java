@@ -47,6 +47,19 @@ public class User {
     @Column(length = 20)
     private String theme;
 
+    private Double dockOpacity;
+
+    private Integer dockBlurStrength;
+
+    private Integer dockIconSize;
+
+    private Double dockMaxScale;
+
+    private Double dockAnimationSpeed;
+
+    @Column(length = 20)
+    private String dockIconStyle;
+
     private Boolean enabled = true;
 
     private LocalDateTime lastLoginAt;

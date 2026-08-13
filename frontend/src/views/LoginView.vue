@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMessage } from '@/utils/feedback'
 import { authApi } from '@/api/authApi'
 import { userApi } from '@/api/userApi'
-import type { AppTheme } from '@/utils/themeAppearance'
+import { loadDockConfig, setDockConfig, type AppTheme } from '@/utils/themeAppearance'
 
 const router = useRouter()
 const message = useMessage()
@@ -38,6 +38,14 @@ async function handleSubmit() {
           const response = await userApi.updateTheme(theme.value)
           data.user = response.data
         } catch { /* 本地主题仍然有效，稍后可再次同步 */ }
+      }
+      if (data.user.dockConfig) {
+        setDockConfig(data.user.dockConfig, false)
+      } else {
+        try {
+          const response = await userApi.updateDockConfig(loadDockConfig())
+          data.user = response.data
+        } catch { /* 本地 Dock 配置仍然有效，稍后可再次同步 */ }
       }
       sessionStorage.setItem('user', JSON.stringify(data.user))
       message.success('登录成功')

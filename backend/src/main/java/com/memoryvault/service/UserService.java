@@ -2,6 +2,7 @@ package com.memoryvault.service;
 
 import com.memoryvault.dto.LoginRequest;
 import com.memoryvault.dto.LoginResponse;
+import com.memoryvault.dto.DockConfigDTO;
 import com.memoryvault.dto.UserDTO;
 import com.memoryvault.dto.UserProfileUpdateRequest;
 import com.memoryvault.entity.User;
@@ -161,6 +162,31 @@ public class UserService implements UserDetailsService {
         return toDTO(userRepository.save(user));
     }
 
+    @Transactional
+    public UserDTO updateCurrentDockConfig(String username, DockConfigDTO config) {
+        validateDockConfig(config);
+        User user = findByUsername(username);
+        user.setDockOpacity(config.getOpacity());
+        user.setDockBlurStrength(config.getBlurStrength());
+        user.setDockIconSize(config.getIconSize());
+        user.setDockMaxScale(config.getMaxScale());
+        user.setDockAnimationSpeed(config.getAnimationSpeed());
+        user.setDockIconStyle(config.getIconStyle());
+        return toDTO(userRepository.save(user));
+    }
+
+    private void validateDockConfig(DockConfigDTO config) {
+        if (config == null
+                || config.getOpacity() == null || config.getOpacity() < 0.2 || config.getOpacity() > 1
+                || config.getBlurStrength() == null || config.getBlurStrength() < 0 || config.getBlurStrength() > 50
+                || config.getIconSize() == null || config.getIconSize() < 16 || config.getIconSize() > 32
+                || config.getMaxScale() == null || config.getMaxScale() < 1 || config.getMaxScale() > 2
+                || config.getAnimationSpeed() == null || config.getAnimationSpeed() < 0.1 || config.getAnimationSpeed() > 1
+                || !Set.of("minimal", "macos26", "custom").contains(config.getIconStyle())) {
+            throw new IllegalArgumentException("Dock 配置不合法");
+        }
+    }
+
     private User findByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("用户不存在"));
@@ -316,6 +342,16 @@ public class UserService implements UserDetailsService {
         dto.setPhotoPreferences(user.getPhotoPreferences());
         dto.setNotes(user.getProfileNotes());
         dto.setTheme(user.getTheme());
+        if (user.getDockOpacity() != null) {
+            DockConfigDTO dockConfig = new DockConfigDTO();
+            dockConfig.setOpacity(user.getDockOpacity());
+            dockConfig.setBlurStrength(user.getDockBlurStrength());
+            dockConfig.setIconSize(user.getDockIconSize());
+            dockConfig.setMaxScale(user.getDockMaxScale());
+            dockConfig.setAnimationSpeed(user.getDockAnimationSpeed());
+            dockConfig.setIconStyle(user.getDockIconStyle());
+            dto.setDockConfig(dockConfig);
+        }
         dto.setEnabled(user.getEnabled());
         dto.setCreatedAt(user.getCreatedAt());
         dto.setLastLoginAt(user.getLastLoginAt());

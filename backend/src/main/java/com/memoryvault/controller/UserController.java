@@ -1,6 +1,7 @@
 package com.memoryvault.controller;
 
 import com.memoryvault.dto.UserDTO;
+import com.memoryvault.dto.DockConfigDTO;
 import com.memoryvault.dto.UserProfileUpdateRequest;
 import com.memoryvault.entity.User;
 import com.memoryvault.repository.UserRepository;
@@ -64,6 +65,14 @@ public class UserController {
             @RequestBody Map<String, String> request) {
         return ResponseEntity.ok(
                 userService.updateCurrentTheme(authentication.getName(), request.get("theme")));
+    }
+
+    @PutMapping("/me/dock-config")
+    public ResponseEntity<UserDTO> updateCurrentDockConfig(
+            Authentication authentication,
+            @RequestBody DockConfigDTO request) {
+        return ResponseEntity.ok(
+                userService.updateCurrentDockConfig(authentication.getName(), request));
     }
 
     @PostMapping
