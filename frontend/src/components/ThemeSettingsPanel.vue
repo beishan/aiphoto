@@ -114,7 +114,7 @@ const dockPreviewStyle = computed(() => ({
   '--preview-size': `${dock.value.iconSize + dock.value.iconPadding * 2}px`,
   '--preview-icon-size': `${dock.value.iconSize}px`,
   '--preview-scale': String(dock.value.maxScale),
-  '--preview-gap': '11px',
+  '--preview-gap': `${dock.value.iconGap}px`,
   '--preview-spread': `${Math.round((dock.value.maxScale - 1) * 36)}px`,
 }))
 
@@ -339,6 +339,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
           <label class="range-control"><span><b>玻璃模糊</b><output>{{ dock.blurStrength }} px</output></span><small>调整背景折射的柔和程度。</small><el-slider :model-value="dock.blurStrength" :min="5" :max="40" :show-tooltip="false" @input="(value: number | number[]) => updateDock('blurStrength', sliderValue(value))" /></label>
           <label class="range-control"><span><b>Dock 整体大小</b><output>{{ dock.iconSize }} px</output></span><small>同时调整图标、头像和玻璃托盘的整体尺寸。</small><el-slider :model-value="dock.iconSize" :min="16" :max="60" :show-tooltip="false" @input="(value: number | number[]) => updateDock('iconSize', sliderValue(value))" /></label>
           <label class="range-control"><span><b>图标与托盘内边距</b><output>{{ dock.iconPadding }} px</output></span><small>单独控制图标四周与玻璃托盘之间的留白。</small><el-slider :model-value="dock.iconPadding" :min="4" :max="18" :show-tooltip="false" @input="(value: number | number[]) => updateDock('iconPadding', sliderValue(value))" /></label>
+          <label class="range-control"><span><b>图标间距</b><output>{{ dock.iconGap }} px</output></span><small>单独调整相邻 Dock 图标之间的水平距离。</small><el-slider :model-value="dock.iconGap" :min="2" :max="20" :show-tooltip="false" @input="(value: number | number[]) => updateDock('iconGap', sliderValue(value))" /></label>
           <label class="range-control"><span><b>悬浮放大</b><output>{{ dock.maxScale.toFixed(2) }}×</output></span><small>设置指针靠近图标时的最大比例。</small><el-slider :model-value="dock.maxScale" :min="1.1" :max="2" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('maxScale', sliderValue(value))" /></label>
           <label class="range-control"><span><b>动画速度</b><output>{{ dock.animationSpeed.toFixed(2) }} s</output></span><small>控制 Dock 图标跟随与复位速度。</small><el-slider :model-value="dock.animationSpeed" :min="0.1" :max="0.5" :step="0.05" :show-tooltip="false" @input="(value: number | number[]) => updateDock('animationSpeed', sliderValue(value))" /></label>
         </div>

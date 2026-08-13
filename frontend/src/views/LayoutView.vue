@@ -258,7 +258,7 @@ const dockStyle = computed(() => ({
   '--dock-icon-size': dockConfig.value.iconSize + 'px',
   '--dock-icon-padding': dockConfig.value.iconPadding + 'px',
   '--dock-tile-size': `calc(${dockConfig.value.iconSize}px + ${dockConfig.value.iconPadding * 2}px)`,
-  '--dock-base-gap': '11px',
+  '--dock-base-gap': dockConfig.value.iconGap + 'px',
   '--dock-anim-speed': dockConfig.value.animationSpeed + 's',
 }))
 

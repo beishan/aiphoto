@@ -15,6 +15,7 @@ export interface DockConfig {
   blurStrength: number
   iconSize: number
   iconPadding: number
+  iconGap: number
   maxScale: number
   animationSpeed: number
   iconStyle: 'minimal' | 'macos26' | 'custom'
@@ -37,6 +38,7 @@ export const DEFAULT_DOCK: DockConfig = {
   blurStrength: 20,
   iconSize: 26,
   iconPadding: 11,
+  iconGap: 11,
   maxScale: 1.5,
   animationSpeed: 0.25,
   iconStyle: 'macos26',
