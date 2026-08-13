@@ -5,11 +5,13 @@ import { useMessage } from '@/utils/feedback'
 import { authApi } from '@/api/authApi'
 import { userApi } from '@/api/userApi'
 import { loadDockConfig, setDockConfig, type AppTheme } from '@/utils/themeAppearance'
+import { useDockIconStore } from '@/stores/dockIconStore'
 
 const router = useRouter()
 const message = useMessage()
 const theme = inject<Ref<AppTheme>>('theme')!
 const setTheme = inject<(value: AppTheme) => void>('setTheme')!
+const dockIconStore = useDockIconStore()
 const validThemes: AppTheme[] = ['dark', 'light', 'macos26']
 
 const form = ref({ username: '', password: '' })
@@ -48,6 +50,7 @@ async function handleSubmit() {
         } catch { /* 本地 Dock 配置仍然有效，稍后可再次同步 */ }
       }
       sessionStorage.setItem('user', JSON.stringify(data.user))
+      dockIconStore.restoreCached()
       message.success('登录成功')
       router.push('/')
     }

@@ -53,6 +53,8 @@ public class User {
 
     private Integer dockIconSize;
 
+    private Integer dockIconPadding;
+
     private Double dockMaxScale;
 
     private Double dockAnimationSpeed;

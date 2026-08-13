@@ -169,6 +169,7 @@ public class UserService implements UserDetailsService {
         user.setDockOpacity(config.getOpacity());
         user.setDockBlurStrength(config.getBlurStrength());
         user.setDockIconSize(config.getIconSize());
+        user.setDockIconPadding(config.getIconPadding());
         user.setDockMaxScale(config.getMaxScale());
         user.setDockAnimationSpeed(config.getAnimationSpeed());
         user.setDockIconStyle(config.getIconStyle());
@@ -180,6 +181,7 @@ public class UserService implements UserDetailsService {
                 || config.getOpacity() == null || config.getOpacity() < 0.2 || config.getOpacity() > 1
                 || config.getBlurStrength() == null || config.getBlurStrength() < 0 || config.getBlurStrength() > 50
                 || config.getIconSize() == null || config.getIconSize() < 16 || config.getIconSize() > 60
+                || config.getIconPadding() == null || config.getIconPadding() < 4 || config.getIconPadding() > 18
                 || config.getMaxScale() == null || config.getMaxScale() < 1 || config.getMaxScale() > 2
                 || config.getAnimationSpeed() == null || config.getAnimationSpeed() < 0.1 || config.getAnimationSpeed() > 1
                 || !Set.of("minimal", "macos26", "custom").contains(config.getIconStyle())) {
@@ -347,6 +349,7 @@ public class UserService implements UserDetailsService {
             dockConfig.setOpacity(user.getDockOpacity());
             dockConfig.setBlurStrength(user.getDockBlurStrength());
             dockConfig.setIconSize(user.getDockIconSize());
+            dockConfig.setIconPadding(user.getDockIconPadding() == null ? 11 : user.getDockIconPadding());
             dockConfig.setMaxScale(user.getDockMaxScale());
             dockConfig.setAnimationSpeed(user.getDockAnimationSpeed());
             dockConfig.setIconStyle(user.getDockIconStyle());

@@ -110,7 +110,13 @@ function getTabScale(index: number): number {
 }
 
 // ===== User avatar menu =====
-const currentUser = ref<User | null>(null)
+function getSessionUser(): User | null {
+  try { return JSON.parse(sessionStorage.getItem('user') || 'null') as User | null }
+  catch { return null }
+}
+
+// Read the cached profile during setup so the very first frame already has the avatar.
+const currentUser = ref<User | null>(getSessionUser())
 const showUserMenu = ref(false)
 const userAvatarRef = ref<HTMLElement | null>(null)
 const userMenuStyle = ref<CSSProperties>({})
@@ -129,17 +135,6 @@ function toggleTrashMenu() {
   closeUserMenu()
   if (showTrashMenu.value) void refreshTrashCount()
 }
-
-onMounted(async () => {
-  const token = localStorage.getItem('token')
-  if (!token) return
-  try {
-    const stored = sessionStorage.getItem('user')
-    if (stored) {
-      currentUser.value = JSON.parse(stored)
-    }
-  } catch { /* ignore */ }
-})
 
 function updateUserMenuPosition() {
   if (!showUserMenu.value || !userAvatarRef.value) return
@@ -195,6 +190,7 @@ function closeUserMenu() {
 function handleLogout() {
   localStorage.removeItem('token')
   sessionStorage.removeItem('user')
+  dockIconStore.deactivate()
   closeUserMenu()
   router.push('/login')
 }
@@ -260,7 +256,8 @@ const dockStyle = computed(() => ({
   '--dock-opacity': dockConfig.value.opacity,
   '--dock-blur': dockConfig.value.blurStrength + 'px',
   '--dock-icon-size': dockConfig.value.iconSize + 'px',
-  '--dock-tile-size': '48px',
+  '--dock-icon-padding': dockConfig.value.iconPadding + 'px',
+  '--dock-tile-size': `calc(${dockConfig.value.iconSize}px + ${dockConfig.value.iconPadding * 2}px)`,
   '--dock-base-gap': '11px',
   '--dock-anim-speed': dockConfig.value.animationSpeed + 's',
 }))
@@ -269,7 +266,7 @@ const animSpeed = computed(() => dockConfig.value.animationSpeed + 's')
 
 function getDockItemStyle(index: number) {
   const scale = getTabScale(index)
-  const tileSize = 48
+  const tileSize = dockConfig.value.iconSize + dockConfig.value.iconPadding * 2
   const lift = (scale - 1) * tileSize * 0.72
   const spread = (scale - 1) * tileSize / 2
   return {
@@ -468,7 +465,7 @@ function getDockItemStyle(index: number) {
   align-items: flex-end;
   justify-content: center;
   gap: var(--dock-base-gap, 10px);
-  padding: 7px 10px 9px;
+  padding: max(5px, calc(var(--dock-icon-padding) * .65)) max(7px, calc(var(--dock-icon-padding) * .8)) max(6px, calc(var(--dock-icon-padding) * .75));
   border-radius: calc(var(--dock-tile-size) * .44);
   max-width: calc(100% - 20px);
   isolation: isolate;
@@ -677,8 +674,8 @@ function getDockItemStyle(index: number) {
 }
 
 .avatar-circle {
-  width: calc(var(--dock-tile-size) - 6px);
-  height: calc(var(--dock-tile-size) - 6px);
+  width: var(--dock-icon-size);
+  height: var(--dock-icon-size);
   border-radius: 50%;
   background: linear-gradient(145deg, #5ac8fa, #007aff 58%, #5e5ce6);
   display: flex;
@@ -716,8 +713,7 @@ function getDockItemStyle(index: number) {
   .dock {
     bottom: calc(10px + var(--safe-bottom));
     gap: 3px;
-    padding: 6px 7px 8px;
-    --dock-tile-size: 36px !important;
+    padding: max(4px, calc(var(--dock-icon-padding) * .5)) max(5px, calc(var(--dock-icon-padding) * .6)) max(5px, calc(var(--dock-icon-padding) * .6));
   }
 
   .dock-icon,

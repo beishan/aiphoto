@@ -7,6 +7,7 @@ public class DockConfigDTO {
     private Double opacity;
     private Integer blurStrength;
     private Integer iconSize;
+    private Integer iconPadding;
     private Double maxScale;
     private Double animationSpeed;
     private String iconStyle;
