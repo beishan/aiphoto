@@ -1,6 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import naive from 'naive-ui'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
@@ -12,7 +11,6 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
-app.use(naive)
 app.use(ElementPlus)
 
 // 注册所有 Element Plus 图标

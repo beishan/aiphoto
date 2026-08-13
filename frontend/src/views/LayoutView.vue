@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch, nextTick, onMounted, onUnmounted, type Ref } from 'vue'
+import { computed, inject, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import TaskFloat from '@/components/TaskFloat.vue'
 import type { User } from '@/types'
@@ -107,6 +107,8 @@ function getTabScale(index: number): number {
 // ===== User avatar menu =====
 const currentUser = ref<User | null>(null)
 const showUserMenu = ref(false)
+const userAvatarRef = ref<HTMLElement | null>(null)
+const userMenuStyle = ref<CSSProperties>({})
 const showTrashMenu = ref(false)
 const trashCount = ref(0)
 const trashIcon = computed<DockIconName>(() => trashCount.value > 0 ? 'trashFull' : 'trashEmpty')
@@ -133,9 +135,30 @@ onMounted(async () => {
   } catch { /* ignore */ }
 })
 
-function toggleUserMenu() {
+function updateUserMenuPosition() {
+  if (!showUserMenu.value || !userAvatarRef.value) return
+
+  const avatarRect = userAvatarRef.value.getBoundingClientRect()
+  const menuWidth = 220
+  const viewportPadding = 12
+  const left = Math.min(
+    window.innerWidth - menuWidth - viewportPadding,
+    Math.max(viewportPadding, avatarRect.left + avatarRect.width / 2 - menuWidth / 2),
+  )
+
+  userMenuStyle.value = {
+    left: `${left}px`,
+    bottom: `${window.innerHeight - avatarRect.top + 14}px`,
+  }
+}
+
+async function toggleUserMenu() {
   showUserMenu.value = !showUserMenu.value
   showTrashMenu.value = false
+  if (showUserMenu.value) {
+    await nextTick()
+    updateUserMenuPosition()
+  }
 }
 
 function closeUserMenu() {
@@ -166,6 +189,7 @@ onMounted(() => {
   window.addEventListener('user-profile-updated', onProfileUpdated)
   window.addEventListener('dock-config-updated', onDockConfigUpdated)
   window.addEventListener('trash-changed', refreshTrashCount)
+  window.addEventListener('resize', updateUserMenuPosition)
   void dockIconStore.hydrate().catch(() => undefined)
   void refreshTrashCount()
 })
@@ -174,6 +198,7 @@ onUnmounted(() => {
   window.removeEventListener('user-profile-updated', onProfileUpdated)
   window.removeEventListener('dock-config-updated', onDockConfigUpdated)
   window.removeEventListener('trash-changed', refreshTrashCount)
+  window.removeEventListener('resize', updateUserMenuPosition)
 })
 
 const themeTitle = computed(() => {
@@ -301,7 +326,7 @@ function getDockItemStyle(index: number) {
       </div>
 
       <!-- User avatar button -->
-      <div class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
+      <div ref="userAvatarRef" class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
         <div class="avatar-circle">
           <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
           <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
@@ -312,7 +337,7 @@ function getDockItemStyle(index: number) {
 
     <!-- User popup menu -->
     <Transition name="popup">
-      <div v-if="showUserMenu" class="user-popup-menu glass">
+      <div v-if="showUserMenu" class="user-popup-menu glass" :style="userMenuStyle">
         <div class="popup-header">
           <div class="popup-avatar">
             <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="popup-avatar-img" />
@@ -504,61 +529,24 @@ function getDockItemStyle(index: number) {
   width: calc(var(--dock-tile-size) - 4px);
   height: calc(var(--dock-tile-size) - 4px);
   place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .76);
+  overflow: visible;
+  border: 0;
   border-radius: 27%;
-  background: linear-gradient(145deg, #75d7ff, #1689e8 58%, #0755ae);
-  box-shadow:
-    0 5px 12px rgba(15, 47, 83, .24),
-    inset 0 1px 1px rgba(255, 255, 255, .74),
-    inset 0 -1px 2px rgba(0, 35, 91, .3);
+  background: none;
+  box-shadow: none;
   isolation: isolate;
   transition: filter .18s ease, box-shadow .18s ease;
 }
 
-.dock-item:nth-child(2) .dock-icon-tile {
-  background: linear-gradient(145deg, #ffaf75, #ff713d 56%, #d43b22);
-}
-
-.dock-item:nth-child(3) .dock-icon-tile {
-  background: linear-gradient(145deg, #ff8dc7, #eb3d84 56%, #9e1c61);
-}
-
-.dock-item:nth-child(4) .dock-icon-tile {
-  background: linear-gradient(145deg, #67dfbd, #18a881 56%, #08715d);
-}
-
-.dock-item:nth-child(5) .dock-icon-tile {
-  background: linear-gradient(145deg, #ffc968, #ed902b 58%, #a84b19);
-}
-
-.dock-item:nth-child(6) .dock-icon-tile {
-  background: linear-gradient(145deg, #ab9cff, #655ee8 56%, #3b36a8);
-}
-
-.dock-item:nth-child(7) .dock-icon-tile {
-  background: linear-gradient(145deg, #c8d0da, #748294 56%, #3c4959);
-}
-
 .dock-icon-glass {
-  position: absolute;
-  inset: 1px 2px 48%;
-  border-radius: 42% 42% 52% 52%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
-  mix-blend-mode: screen;
+  display: none;
 }
 
 .dock-icon-tile::after {
-  content: '';
-  position: absolute;
-  inset: auto 12% 5%;
-  height: 22%;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .18);
-  filter: blur(4px);
+  display: none;
 }
 
-.dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:100%;height:100%;filter:none}.dock-icon-tile.minimal{border-color:var(--separator);background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:linear-gradient(145deg,#eef2f6,#9eabb7 58%,#53616f)}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
+.dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:100%;height:100%;filter:none}.dock-icon-tile.minimal{border:1px solid var(--separator);overflow:hidden;background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:none}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
 
 .dock-icon {
   position: relative;
@@ -566,17 +554,18 @@ function getDockItemStyle(index: number) {
   display: block;
   width: var(--dock-icon-size);
   height: var(--dock-icon-size);
-  color: rgba(255, 255, 255, .96);
-  filter: drop-shadow(0 1.5px 1px rgba(14, 42, 68, .35));
+  color: var(--text-primary);
+  filter: drop-shadow(0 2px 3px rgba(14, 42, 68, .22));
 }
 
 .dock-item:hover .dock-icon-tile,
 .dock-item.active .dock-icon-tile {
-  filter: saturate(112%) brightness(1.04);
-  box-shadow:
-    0 8px 20px rgba(15, 47, 83, .3),
-    inset 0 1px 1px rgba(255, 255, 255, .86),
-    inset 0 -1px 2px rgba(0, 35, 91, .3);
+  filter: none;
+  box-shadow: none;
+}
+
+.dock-item.active .dock-icon {
+  color: var(--accent);
 }
 
 .dock-item:hover .dock-icon-tile.custom,
@@ -681,8 +670,6 @@ function getDockItemStyle(index: number) {
 /* ===== Popup menu ===== */
 .user-popup-menu {
   position: fixed;
-  bottom: calc(18px + var(--safe-bottom) + var(--dock-tile-size) + 28px);
-  right: 12px;
   width: 220px;
   border-radius: 18px;
   padding: 8px;
@@ -697,7 +684,7 @@ function getDockItemStyle(index: number) {
     gap: 3px;
     padding: 6px 7px 8px;
     --dock-tile-size: 36px !important;
-    --dock-icon-size: 18px !important;
+    --dock-icon-size: 22px !important;
   }
 
   .dock-item {

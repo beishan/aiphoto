@@ -5,6 +5,7 @@ import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 
@@ -73,12 +74,19 @@ async function toggleFavorite() {
 
 async function deletePhoto() {
   if (!currentPhoto.value) return
-  if (!confirm('确定将这张照片移入回收站吗？')) return
+  try {
+    await ElMessageBox.confirm('确定将这张照片移入回收站吗？', '删除照片', {
+      type: 'warning',
+      confirmButtonText: '移入回收站',
+      cancelButtonText: '取消',
+      customClass: 'mv-message-box',
+    })
+  } catch { return }
   const photo = currentPhoto.value
   try {
     await photoApi.delete(photo.id)
   } catch (e) {
-    alert('删除失败，请重试')
+    ElMessage.error('删除失败，请重试')
     return
   }
   // Remove from photos array
@@ -118,7 +126,7 @@ async function addToAlbum(albumId: number) {
     await albumApi.addPhoto(albumId, currentPhoto.value.id)
     showAlbumPicker.value = false
   } catch (e) {
-    alert('添加失败，请重试')
+    ElMessage.error('添加失败，请重试')
   } finally {
     addingToAlbum.value = false
   }
@@ -132,7 +140,7 @@ async function createAndAdd() {
     await albumApi.addPhoto(newAlbum.id, currentPhoto.value.id)
     showAlbumPicker.value = false
   } catch (e) {
-    alert('创建失败，请重试')
+    ElMessage.error('创建失败，请重试')
   } finally {
     creatingAlbum.value = false
   }
@@ -140,6 +148,10 @@ async function createAndAdd() {
 
 function handleKeydown(e: KeyboardEvent) {
   if (!props.show) return
+  if (e.key === 'Escape' && showAlbumPicker.value) {
+    showAlbumPicker.value = false
+    return
+  }
   if (e.key === 'Escape') close()
   if (e.key === 'ArrowLeft') prev()
   if (e.key === 'ArrowRight') next()
@@ -261,36 +273,21 @@ onUnmounted(() => {
           </div>
         </Transition>
 
-        <!-- Album picker modal -->
-        <Transition name="slide-up">
-          <div v-if="showAlbumPicker" class="album-picker-overlay" @click.self="showAlbumPicker = false">
-            <div class="album-picker glass">
-              <div class="picker-header">
-                <h3 class="picker-title">添加到相册</h3>
-                <button class="picker-close" @click="showAlbumPicker = false">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                    <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                  </svg>
-                </button>
-              </div>
-
+        <el-dialog v-model="showAlbumPicker" title="添加到相册" width="460px" :z-index="10020" class="mv-dialog album-picker-dialog">
               <!-- Create new album -->
               <div v-if="showCreateAlbum" class="create-album-row">
-                <input
+                <el-input
                   v-model="newAlbumName"
-                  type="text"
-                  class="album-name-input"
                   placeholder="输入相册名称"
                   @keyup.enter="createAndAdd"
-                  autofocus
                 />
-                <button
-                  class="create-confirm-btn"
+                <el-button
+                  type="primary"
                   @click="createAndAdd"
                   :disabled="!newAlbumName.trim() || creatingAlbum"
                 >
                   {{ creatingAlbum ? '创建中...' : '创建并添加' }}
-                </button>
+                </el-button>
               </div>
               <button v-else class="create-album-btn" @click="showCreateAlbum = true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
@@ -323,9 +320,7 @@ onUnmounted(() => {
               <div v-else class="picker-loading">
                 <div class="loading-spinner"></div>
               </div>
-            </div>
-          </div>
-        </Transition>
+        </el-dialog>
       </div>
     </Transition>
   </Teleport>

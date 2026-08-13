@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog } from '@/utils/feedback'
 import { photoApi } from '@/api/photoApi'
 import { tagApi } from '@/api/tagApi'
 import type { PhotoDetail, Tag } from '@/types'
 import PhotoViewer from '@/components/PhotoViewer.vue'
+import { ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
@@ -123,8 +124,18 @@ async function addTag(tag: Tag) {
 }
 
 async function addNewTag() {
-  const name = prompt('请输入标签名称')
-  if (!name || !photo.value) return
+  if (!photo.value) return
+  let name = ''
+  try {
+    const result = await ElMessageBox.prompt('请输入标签名称', '新建标签', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputPattern: /\S+/,
+      inputErrorMessage: '标签名称不能为空',
+      customClass: 'mv-message-box',
+    })
+    name = result.value.trim()
+  } catch { return }
   try {
     await tagApi.addByName(photo.value.id, name)
     await loadPhoto()

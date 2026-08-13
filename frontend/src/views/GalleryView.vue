@@ -4,7 +4,7 @@ import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
 import type { Album } from '@/types'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog } from '@/utils/feedback'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import Uploader from '@/components/Uploader.vue'
@@ -472,24 +472,9 @@ async function handleToggleFavorite(photoId: number) {
       </svg>
     </button>
 
-    <!-- Uploader modal -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showUploader" class="uploader-overlay" @click.self="showUploader = false">
-          <div class="uploader-sheet glass">
-            <div class="sheet-header">
-              <h3>上传照片</h3>
-              <button @click="showUploader = false" class="sheet-close">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                </svg>
-              </button>
-            </div>
-            <Uploader @uploaded="handleUploaded" @done="showUploader = false" />
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <el-dialog v-model="showUploader" title="上传照片" width="min(720px, calc(100vw - 24px))" class="mv-dialog uploader-dialog" destroy-on-close>
+      <Uploader @uploaded="handleUploaded" @done="showUploader = false" />
+    </el-dialog>
 
     <PhotoViewer
       v-model:show="viewerVisible"

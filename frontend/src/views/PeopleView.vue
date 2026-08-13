@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onActivated, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useDialog, useMessage } from 'naive-ui'
+import { useDialog, useMessage } from '@/utils/feedback'
 import { peopleApi } from '@/api/peopleApi'
 import type { Person } from '@/types'
 import type { Face } from '@/api/peopleApi'
@@ -261,28 +261,13 @@ function getBboxStyle(bboxJson: string) {
       </div>
     </template>
 
-    <!-- Merge Dialog -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showMergeDialog" class="modal-overlay" @click.self="showMergeDialog = false">
-          <div class="modal-panel">
-            <div class="modal-header">
-              <h3>合并人物</h3>
-              <button class="modal-close" @click="showMergeDialog = false">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z"/>
-                </svg>
-              </button>
-            </div>
+    <el-dialog v-model="showMergeDialog" title="合并人物" width="560px" class="mv-dialog">
             <div class="modal-body">
               <div class="merge-section">
                 <label class="merge-label">合并到（保留的人物）</label>
-                <select v-model="mergeTarget" class="merge-select">
-                  <option :value="null">请选择</option>
-                  <option v-for="p in people" :key="p.id" :value="p.id">
-                    {{ p.name || '未命名' }} ({{ p.photoCount }} 张)
-                  </option>
-                </select>
+                <el-select v-model="mergeTarget" placeholder="请选择" clearable class="merge-select">
+                  <el-option v-for="p in people" :key="p.id" :value="p.id" :label="`${p.name || '未命名'} (${p.photoCount} 张)`" />
+                </el-select>
               </div>
               <div class="merge-arrow">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -291,36 +276,18 @@ function getBboxStyle(bboxJson: string) {
               </div>
               <div class="merge-section">
                 <label class="merge-label">合并源（将被删除的人物）</label>
-                <select v-model="mergeSource" class="merge-select">
-                  <option :value="null">请选择</option>
-                  <option v-for="p in people" :key="p.id" :value="p.id">
-                    {{ p.name || '未命名' }} ({{ p.photoCount }} 张)
-                  </option>
-                </select>
+                <el-select v-model="mergeSource" placeholder="请选择" clearable class="merge-select">
+                  <el-option v-for="p in people" :key="p.id" :value="p.id" :label="`${p.name || '未命名'} (${p.photoCount} 张)`" />
+                </el-select>
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn-cancel" @click="showMergeDialog = false">取消</button>
-              <button class="btn-confirm" @click="executeMerge" :disabled="!mergeTarget || !mergeSource">合并</button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+      <template #footer>
+        <el-button @click="showMergeDialog = false">取消</el-button>
+        <el-button type="primary" @click="executeMerge" :disabled="!mergeTarget || !mergeSource">合并</el-button>
+      </template>
+    </el-dialog>
 
-    <!-- Assign Dialog -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showAssignDialog" class="modal-overlay" @click.self="showAssignDialog = false">
-          <div class="modal-panel">
-            <div class="modal-header">
-              <h3>分配人脸</h3>
-              <button class="modal-close" @click="showAssignDialog = false">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z"/>
-                </svg>
-              </button>
-            </div>
+    <el-dialog v-model="showAssignDialog" title="分配人脸" width="520px" class="mv-dialog">
             <div class="modal-body">
               <p class="assign-hint">选择此人脸所属的人物：</p>
               <div class="assign-list">
@@ -342,13 +309,10 @@ function getBboxStyle(bboxJson: string) {
                 </div>
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn-cancel" @click="showAssignDialog = false">取消</button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+      <template #footer>
+        <el-button @click="showAssignDialog = false">取消</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

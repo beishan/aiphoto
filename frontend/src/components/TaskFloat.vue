@@ -23,10 +23,6 @@ const allTasks = computed(() => {
   return [...uploads, ...ais]
 })
 
-function toggle() {
-  expanded.value = !expanded.value
-}
-
 function getStatusColor(status: string) {
   switch (status) {
     case 'COMPLETED': return 'var(--success)'
@@ -49,28 +45,28 @@ function getTypeLabel(type: string) {
 
 <template>
   <div class="task-float-wrapper">
-    <!-- Floating icon -->
-    <button class="task-float-btn" :class="{ active: taskStore.hasActiveTasks }" @click="toggle">
-      <!-- Idle: list icon -->
-      <svg v-if="!taskStore.hasActiveTasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="20" height="20">
-        <rect x="4" y="3" width="16" height="18" rx="2"/>
-        <line x1="8" y1="8" x2="16" y2="8"/>
-        <line x1="8" y1="12" x2="16" y2="12"/>
-        <line x1="8" y1="16" x2="12" y2="16"/>
-      </svg>
-      <!-- Active: spinning arc -->
-      <svg v-else class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20">
-        <path d="M12 2a10 10 0 019.95 9" />
-        <path d="M22 12a10 10 0 01-9 9.95" opacity="0.7"/>
-        <path d="M12 22a10 10 0 01-9.95-9" opacity="0.4"/>
-        <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
-      </svg>
-      <span v-if="taskStore.activeCount > 0" class="task-badge">{{ taskStore.activeCount }}</span>
-    </button>
+    <el-popover v-model:visible="expanded" placement="bottom-start" :width="320" trigger="click" popper-class="mv-system-popover">
+      <template #reference>
+        <button class="task-float-btn" :class="{ active: taskStore.hasActiveTasks }" aria-label="系统任务通知">
+          <!-- Idle: list icon -->
+          <svg v-if="!taskStore.hasActiveTasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="20" height="20">
+            <rect x="4" y="3" width="16" height="18" rx="2"/>
+            <line x1="8" y1="8" x2="16" y2="8"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+            <line x1="8" y1="16" x2="12" y2="16"/>
+          </svg>
+          <!-- Active: spinning arc -->
+          <svg v-else class="spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20">
+            <path d="M12 2a10 10 0 019.95 9" />
+            <path d="M22 12a10 10 0 01-9 9.95" opacity="0.7"/>
+            <path d="M12 22a10 10 0 01-9.95-9" opacity="0.4"/>
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+          </svg>
+          <span v-if="taskStore.activeCount > 0" class="task-badge">{{ taskStore.activeCount }}</span>
+        </button>
+      </template>
 
-    <!-- Expanded panel -->
-    <Transition name="slide-down">
-      <div v-if="expanded" class="task-panel glass">
+      <div class="task-panel">
         <div class="panel-header">
           <span class="panel-title">任务进度</span>
           <button class="panel-close" @click="expanded = false">
@@ -102,7 +98,7 @@ function getTypeLabel(type: string) {
           </div>
         </div>
       </div>
-    </Transition>
+    </el-popover>
   </div>
 </template>
 
@@ -159,24 +155,10 @@ function getTypeLabel(type: string) {
 }
 
 .task-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  width: 300px;
   max-height: 400px;
-  border-radius: var(--radius-lg);
-  border: 0.5px solid var(--glass-border);
   overflow: hidden;
-  z-index: 300;
   display: flex;
   flex-direction: column;
-  background: rgba(28, 28, 30, 0.92);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
-}
-
-:root[data-theme="light"] .task-panel {
-  background: rgba(255, 255, 255, 0.92);
 }
 
 .panel-header {

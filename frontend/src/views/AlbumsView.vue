@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { useAlbumStore } from '@/stores/albumStore'
 import type { Album } from '@/types'
 
@@ -105,50 +105,23 @@ const albumTypeIcons: Record<string, string> = {
       </svg>
     </button>
 
-    <!-- Create modal -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showCreate" class="modal-overlay" @click.self="showCreate = false">
-          <div class="modal-sheet glass">
-            <div class="sheet-header">
-              <h3>新建相册</h3>
-              <button @click="showCreate = false" class="sheet-close">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                </svg>
-              </button>
-            </div>
-
-            <div class="form-group">
-              <label>名称</label>
-              <input v-model="newAlbum.name" type="text" placeholder="相册名称" class="ios-input" />
-            </div>
-
-            <div class="form-group">
-              <label>描述（可选）</label>
-              <textarea v-model="newAlbum.description" placeholder="添加相册描述..." class="ios-textarea" rows="2"></textarea>
-            </div>
-
-            <div class="form-group">
-              <label>类型</label>
-              <div class="type-selector">
-                <button
-                  v-for="(label, key) in albumTypeLabels"
-                  :key="key"
-                  class="type-btn"
-                  :class="{ active: newAlbum.type === key }"
-                  @click="newAlbum.type = key as typeof newAlbum.type"
-                >
-                  {{ label }}
-                </button>
-              </div>
-            </div>
-
-            <button class="submit-btn" @click="handleCreate">创建</button>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <el-dialog v-model="showCreate" title="新建相册" width="460px" destroy-on-close class="mv-dialog">
+      <el-form label-position="top">
+        <el-form-item label="名称" required>
+          <el-input v-model="newAlbum.name" placeholder="相册名称" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item label="描述（可选）">
+          <el-input v-model="newAlbum.description" type="textarea" :rows="3" placeholder="添加相册描述..." />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-segmented v-model="newAlbum.type" :options="Object.entries(albumTypeLabels).map(([value, label]) => ({ value, label }))" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreate = false">取消</el-button>
+        <el-button type="primary" @click="handleCreate">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

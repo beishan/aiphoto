@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { albumApi } from '@/api/albumApi'
 import type { Album, Photo } from '@/types'
 import PhotoCard from '@/components/PhotoCard.vue'

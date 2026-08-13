@@ -34,7 +34,7 @@ export const DEFAULT_BACKGROUNDS: Record<AppTheme, BackgroundConfig> = {
 export const DEFAULT_DOCK: DockConfig = {
   opacity: 0.72,
   blurStrength: 20,
-  iconSize: 22,
+  iconSize: 26,
   maxScale: 1.5,
   animationSpeed: 0.25,
   iconStyle: 'macos26',

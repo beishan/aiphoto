@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog } from '@/utils/feedback'
 import { peopleApi } from '@/api/peopleApi'
 import type { Face } from '@/api/peopleApi'
 import { usePhotoStore } from '@/stores/photoStore'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { useCategoryStore } from '@/stores/categoryStore'
 import type { Category } from '@/types'
 import { photoApi } from '@/api/photoApi'
@@ -227,59 +227,24 @@ async function handleReclassify() {
       <div v-else class="fab-spinner"></div>
     </button>
 
-    <!-- Create modal -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showCreate" class="modal-overlay" @click.self="showCreate = false">
-          <div class="modal-sheet glass">
-            <div class="sheet-header">
-              <h3>新建分类</h3>
-              <button @click="showCreate = false" class="sheet-close">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                </svg>
-              </button>
-            </div>
-
-            <div class="form-group">
-              <label>名称</label>
-              <input v-model="newCategoryName" type="text" placeholder="分类名称" class="ios-input" />
-            </div>
-
-            <div class="form-group">
-              <label>颜色</label>
-              <div class="color-selector">
-                <button
-                  v-for="color in colorOptions"
-                  :key="color"
-                  class="color-btn"
-                  :class="{ active: newCategoryColor === color }"
-                  :style="{ background: color }"
-                  @click="newCategoryColor = color"
-                />
-              </div>
-            </div>
-
-            <button class="submit-btn" @click="handleCreate">创建并选择模板</button>
+    <el-dialog v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
+      <el-form label-position="top">
+        <el-form-item label="名称" required>
+          <el-input v-model="newCategoryName" placeholder="分类名称" maxlength="50" />
+        </el-form-item>
+        <el-form-item label="颜色">
+          <div class="color-selector">
+            <button v-for="color in colorOptions" :key="color" class="color-btn" :class="{ active: newCategoryColor === color }" :style="{ background: color }" @click="newCategoryColor = color" />
           </div>
-        </div>
-      </Transition>
-    </Teleport>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreate = false">取消</el-button>
+        <el-button type="primary" @click="handleCreate">创建并选择模板</el-button>
+      </template>
+    </el-dialog>
 
-    <!-- Photo picker modal -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showPhotoPicker" class="modal-overlay" @click.self="closePhotoPicker">
-          <div class="modal-sheet glass picker-sheet">
-            <div class="sheet-header">
-              <h3>选择模板照片 ({{ selectedPhotoIds.length }}/5)</h3>
-              <button @click="closePhotoPicker" class="sheet-close">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                </svg>
-              </button>
-            </div>
-
+    <el-dialog v-model="showPhotoPicker" :title="`选择模板照片 (${selectedPhotoIds.length}/5)`" width="min(900px, calc(100vw - 24px))" class="mv-dialog picker-dialog" @closed="closePhotoPicker">
             <p class="picker-hint">选择 2-5 张代表此分类的照片，AI 将自动找到相似的照片</p>
 
             <div class="picker-grid">
@@ -305,17 +270,11 @@ async function handleReclassify() {
               </button>
             </div>
 
-            <button
-              class="submit-btn"
-              :disabled="selectedPhotoIds.length < 2"
-              @click="handleTrain"
-            >
-              开始训练 (已选 {{ selectedPhotoIds.length }} 张)
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+      <template #footer>
+        <el-button @click="closePhotoPicker">取消</el-button>
+        <el-button type="primary" :disabled="selectedPhotoIds.length < 2" @click="handleTrain">开始训练（已选 {{ selectedPhotoIds.length }} 张）</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

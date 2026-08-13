@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { useTaskStore } from '@/stores/taskStore'
 import http from '@/api/http'
 

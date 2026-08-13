@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, ref, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { authApi } from '@/api/authApi'
 import { userApi } from '@/api/userApi'
 import type { AppTheme } from '@/utils/themeAppearance'

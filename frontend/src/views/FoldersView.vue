@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { folderApi } from '@/api/folderApi'
 import type { ScanFolder } from '@/types'
 import type { BrowseItem } from '@/api/folderApi'
@@ -318,19 +318,7 @@ function closeAddDialog() {
       </svg>
     </button>
 
-    <!-- Add modal -->
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="showAdd" class="modal-overlay" @click.self="closeAddDialog">
-          <div class="modal-sheet glass">
-            <div class="sheet-header">
-              <h3>添加文件夹</h3>
-              <button @click="closeAddDialog" class="sheet-close">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                  <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
-                </svg>
-              </button>
-            </div>
+    <el-dialog v-model="showAdd" title="添加文件夹" width="620px" class="mv-dialog folder-dialog" @closed="closeAddDialog">
 
             <div class="form-group">
               <label>名称</label>
@@ -446,13 +434,11 @@ function closeAddDialog() {
               </div>
             </div>
 
-            <button class="submit-btn" :disabled="adding" @click="handleAdd">
-              {{ adding ? '添加中...' : '添加' }}
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+      <template #footer>
+        <el-button @click="closeAddDialog">取消</el-button>
+        <el-button type="primary" :loading="adding" @click="handleAdd">添加</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

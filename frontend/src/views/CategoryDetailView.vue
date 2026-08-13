@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
+import { useMessage } from '@/utils/feedback'
 import { categoryApi } from '@/api/categoryApi'
 import { useCategoryStore } from '@/stores/categoryStore'
 import { usePhotoStore } from '@/stores/photoStore'

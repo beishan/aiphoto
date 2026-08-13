@@ -4,7 +4,6 @@ import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus
 import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
 import DockIcon, { type DockIconName, type DockIconStyle } from '@/components/DockIcon.vue'
 import { useDockIconStore } from '@/stores/dockIconStore'
-import { userApi } from '@/api/userApi'
 import {
   DEFAULT_BACKGROUNDS,
   DEFAULT_DOCK,
@@ -46,7 +45,7 @@ const backgroundModeOptions = [
 ]
 const dockIconStyleOptions = [
   { label: '现代简洁', value: 'minimal' as const, description: '高对比矢量图形', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
-  { label: 'macOS 26', value: 'macos26' as const, description: '液态玻璃与彩色渐变', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
+  { label: 'macOS 26', value: 'macos26' as const, description: '液态玻璃与无边框图标', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
   { label: '自定义', value: 'custom' as const, description: '完整显示自己上传的图片', previewIcons: ['photo', 'albums', 'settings'] as DockIconName[] },
 ]
 const customIconItems: Array<{ name: DockIconName; label: string }> = [
@@ -126,15 +125,6 @@ watch(activeTab, value => localStorage.setItem('themeSettingsActiveTab', value))
 
 function selectTheme(value: AppTheme) {
   setTheme(value)
-  try {
-    const storedUser = JSON.parse(sessionStorage.getItem('user') || 'null')
-    if (storedUser) sessionStorage.setItem('user', JSON.stringify({ ...storedUser, theme: value }))
-  } catch { /* ignore invalid legacy session data */ }
-  if (localStorage.getItem('token')) {
-    void userApi.updateTheme(value).catch(() => {
-      ElMessage.warning('主题已在当前设备生效，但账号同步失败')
-    })
-  }
 }
 
 function hexToRgba(hex: string, opacity: number) {
@@ -315,7 +305,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
         <el-button type="primary" link @click="restoreDock">恢复默认</el-button>
       </div>
       <div class="dock-layout">
-        <div class="dock-stage"><i class="orb one"></i><i class="orb two"></i><div class="dock-preview" :style="dockPreviewStyle"><span v-for="(item,index) in customIconItems.slice(0,7)" :key="item.name" class="dock-preview-item" :class="[item.name,{ magnified:index===2,custom:dock.iconStyle==='custom' }]"><DockIcon :name="item.name" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls[item.name]" /></span><span class="dock-preview-item trash"><DockIcon name="trashFull" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls.trashFull" /></span></div><span class="preview-label">实时预览</span></div>
+        <div class="dock-stage"><i class="orb one"></i><i class="orb two"></i><div class="dock-preview" :style="dockPreviewStyle"><span v-for="(item,index) in customIconItems.slice(0,7)" :key="item.name" class="dock-preview-item" :class="[item.name,dock.iconStyle,{ magnified:index===2 }]"><DockIcon :name="item.name" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls[item.name]" /></span><span class="dock-preview-item trash" :class="dock.iconStyle"><DockIcon name="trashFull" :variant="dock.iconStyle" :custom-src="dockIconStore.iconUrls.trashFull" /></span></div><span class="preview-label">实时预览</span></div>
         <div class="dock-controls">
           <section class="dock-icon-config">
             <div class="dock-icon-config-copy"><b>图标风格</b><small>选择系统图标、macOS 26 图标或上传自己的图标。</small></div>
@@ -383,6 +373,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
 .color-input-row{grid-template-columns:40px minmax(0,1fr)}.color-input-row :deep(.el-color-picker__trigger){width:40px;height:40px;border-radius:10px}.color-input-row :deep(.el-input__wrapper){min-height:40px;border-radius:10px}.color-input-row :deep(.el-input__inner){font-family:var(--font-mono)}
 .surface-color-grid label{display:grid;grid-template-columns:1fr;align-items:initial}.surface-color-grid label>.element-color-row{display:grid;grid-row:auto;grid-template-columns:34px minmax(0,1fr);gap:7px;color:var(--text-primary);font-family:var(--font-mono)}.element-color-row :deep(.el-color-picker__trigger){width:34px;height:32px;border-radius:9px}.element-color-row :deep(.el-input__wrapper){border-radius:9px}.element-color-row :deep(.el-input__inner){font-family:var(--font-mono);font-size:11px}.range-control :deep(.el-slider){height:24px}.range-control :deep(.el-slider__bar){background:var(--accent)}.range-control :deep(.el-slider__button){border-color:var(--accent)}
 .dock-preview-item :deep(.dock-glyph){width:58%;height:58%}.dock-preview-item.custom :deep(.dock-glyph){width:100%;height:100%}.dock-preview-item.tags{background:linear-gradient(145deg,#ff8dc7,#eb3d84 56%,#9e1c61)}.dock-preview-item.baby{background:linear-gradient(145deg,#67dfbd,#18a881 56%,#08715d)}.dock-preview-item.search{background:linear-gradient(145deg,#ab9cff,#655ee8 56%,#3b36a8)}.dock-preview-item.trash{background:linear-gradient(145deg,#edf1f4,#9aa8b4 56%,#53626f)}.dock-icon-style{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--separator)}.dock-icon-style>div{display:grid;gap:4px}.dock-icon-style b{color:var(--text-primary);font-size:12px}.dock-icon-style small{color:var(--text-tertiary);font-size:10px}.custom-icon-settings{margin-top:22px}.custom-icon-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.custom-icon-card{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:9px;padding:10px;border:1px solid var(--separator);border-radius:12px;background:var(--bg-card)}.custom-icon-card>strong{overflow:hidden;color:var(--text-primary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.custom-icon-image{display:grid;width:52px;height:52px;grid-row:span 2;place-items:center;overflow:hidden;border-radius:12px;background:var(--bg-tertiary);color:var(--text-primary)}.custom-icon-image img{width:100%;height:100%;object-fit:contain}.custom-icon-image :deep(.dock-glyph){width:55%;height:55%}.custom-icon-actions{display:flex;align-items:center;gap:4px}
+.dock-preview-item :deep(.dock-glyph){width:68%;height:68%}.dock-preview-item.macos26{border:0;background:none!important;box-shadow:none;color:#253247;text-shadow:none}.dock-preview-item.custom :deep(.dock-glyph){width:100%;height:100%}.dock-preview-item.tags{background:linear-gradient(145deg,#ff8dc7,#eb3d84 56%,#9e1c61)}.dock-preview-item.baby{background:linear-gradient(145deg,#67dfbd,#18a881 56%,#08715d)}.dock-preview-item.search{background:linear-gradient(145deg,#ab9cff,#655ee8 56%,#3b36a8)}.dock-preview-item.trash{background:linear-gradient(145deg,#edf1f4,#9aa8b4 56%,#53626f)}.dock-icon-style{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--separator)}.dock-icon-style>div{display:grid;gap:4px}.dock-icon-style b{color:var(--text-primary);font-size:12px}.dock-icon-style small{color:var(--text-tertiary);font-size:10px}.custom-icon-settings{margin-top:22px}.custom-icon-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.custom-icon-card{display:grid;grid-template-columns:52px minmax(0,1fr);align-items:center;gap:9px;padding:10px;border:1px solid var(--separator);border-radius:12px;background:var(--bg-card)}.custom-icon-card>strong{overflow:hidden;color:var(--text-primary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.custom-icon-image{display:grid;width:52px;height:52px;grid-row:span 2;place-items:center;overflow:hidden;border-radius:12px;background:var(--bg-tertiary);color:var(--text-primary)}.custom-icon-image img{width:100%;height:100%;object-fit:contain}.custom-icon-image :deep(.dock-glyph){width:55%;height:55%}.custom-icon-actions{display:flex;align-items:center;gap:4px}
 @media (max-width:760px){.theme-nav-row{flex-direction:column}.theme-tabs{grid-template-columns:repeat(2,1fr)}.auto-save-status{min-height:40px}.style-grid{grid-template-columns:1fr}.color-layout,.background-layout,.dock-layout{grid-template-columns:1fr}.live-preview,.dock-stage{min-height:300px}.background-presets{grid-template-columns:repeat(2,1fr)}}
 
 /* 与 aibook Theme Settings 保持同构的视觉规则 */

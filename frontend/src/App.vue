@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, provide } from 'vue'
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme } from 'naive-ui'
+import { ref, watch, onMounted, provide } from 'vue'
+import { ElMessage } from 'element-plus'
 import { applyThemeAppearance, type AppTheme } from '@/utils/themeAppearance'
+import { userApi } from '@/api/userApi'
+import type { User } from '@/types'
 
 type Theme = AppTheme
 
@@ -17,6 +19,7 @@ const initialTheme: Theme = sessionTheme || (storedTheme === 'liquid-glass'
   ? 'macos26'
   : validThemes.includes(storedTheme as Theme) ? storedTheme as Theme : 'dark')
 const theme = ref<Theme>(initialTheme)
+let themeSyncQueue = Promise.resolve()
 
 document.documentElement.dataset.theme = initialTheme
 applyThemeAppearance(initialTheme)
@@ -30,6 +33,28 @@ watch(theme, (val) => {
   document.documentElement.dataset.theme = val
   localStorage.setItem('theme', val)
   applyThemeAppearance(val)
+
+  try {
+    const storedUser = JSON.parse(sessionStorage.getItem('user') || 'null') as User | null
+    if (storedUser) {
+      sessionStorage.setItem('user', JSON.stringify({ ...storedUser, theme: val }))
+    }
+  } catch { /* ignore invalid legacy session data */ }
+
+  const token = localStorage.getItem('token')
+  if (token) {
+    themeSyncQueue = themeSyncQueue.then(async () => {
+      if (localStorage.getItem('token') !== token) return
+      try {
+        const { data } = await userApi.updateTheme(val)
+        if (localStorage.getItem('token') === token) {
+          sessionStorage.setItem('user', JSON.stringify(data))
+        }
+      } catch {
+        ElMessage.warning('主题已在当前设备生效，但同步到账号失败')
+      }
+    })
+  }
 })
 
 function setTheme(t: Theme) {
@@ -45,26 +70,8 @@ provide('theme', theme)
 provide('setTheme', setTheme)
 provide('toggleTheme', toggleTheme)
 
-const themeOverrides = {
-  common: {
-    primaryColor: 'var(--accent)',
-    primaryColorHover: 'var(--accent-hover)',
-    primaryColorPressed: 'var(--accent)',
-    primaryColorSuppl: 'var(--accent-hover)',
-    borderRadius: '12px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
-  },
-}
-
-const naiveTheme = computed(() => theme.value === 'dark' ? darkTheme : undefined)
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
-    <NMessageProvider>
-      <NDialogProvider>
-        <router-view />
-      </NDialogProvider>
-    </NMessageProvider>
-  </NConfigProvider>
+  <router-view />
 </template>
