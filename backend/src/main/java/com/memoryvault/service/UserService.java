@@ -179,7 +179,7 @@ public class UserService implements UserDetailsService {
         if (config == null
                 || config.getOpacity() == null || config.getOpacity() < 0.2 || config.getOpacity() > 1
                 || config.getBlurStrength() == null || config.getBlurStrength() < 0 || config.getBlurStrength() > 50
-                || config.getIconSize() == null || config.getIconSize() < 16 || config.getIconSize() > 44
+                || config.getIconSize() == null || config.getIconSize() < 16 || config.getIconSize() > 60
                 || config.getMaxScale() == null || config.getMaxScale() < 1 || config.getMaxScale() > 2
                 || config.getAnimationSpeed() == null || config.getAnimationSpeed() < 0.1 || config.getAnimationSpeed() > 1
                 || !Set.of("minimal", "macos26", "custom").contains(config.getIconStyle())) {

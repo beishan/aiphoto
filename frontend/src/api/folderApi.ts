@@ -17,7 +17,7 @@ export const folderApi = {
     return http.get<ScanFolder>(`/folders/${id}`)
   },
 
-  create(data: { name: string; path: string; storageMode: string }) {
+  create(data: { name: string; path: string; description?: string; storageMode: string }) {
     return http.post<ScanFolder>('/folders', data)
   },
 

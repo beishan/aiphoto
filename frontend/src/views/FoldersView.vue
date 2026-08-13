@@ -14,6 +14,7 @@ const loading = ref(true)
 const showAdd = ref(false)
 const newName = ref('')
 const newPath = ref('')
+const newDescription = ref('')
 const newStorageMode = ref('COPY')
 const adding = ref(false)
 const scanningIds = ref<Set<number>>(new Set())
@@ -116,10 +117,7 @@ function navigateToPath(path: string) {
 
 function selectFolder(item: BrowseItem) {
   newPath.value = item.path
-  // Auto-fill name from folder name if empty
-  if (!newName.value.trim()) {
-    newName.value = item.name
-  }
+  newName.value = item.path
   inputMode.value = 'input'
   message.success(`已选择: ${item.name}`)
 }
@@ -138,11 +136,13 @@ async function handleAdd() {
     await folderApi.create({
       name: newName.value.trim(),
       path: newPath.value.trim(),
+      description: newDescription.value.trim(),
       storageMode: newStorageMode.value,
     })
     showAdd.value = false
     newName.value = ''
     newPath.value = ''
+    newDescription.value = ''
     newStorageMode.value = 'COPY'
     await loadFolders()
     message.success('文件夹添加成功')
@@ -208,6 +208,7 @@ function closeAddDialog() {
   showAdd.value = false
   newName.value = ''
   newPath.value = ''
+  newDescription.value = ''
   newStorageMode.value = 'COPY'
   inputMode.value = 'input'
   browseItems.value = []
@@ -264,6 +265,7 @@ function closeAddDialog() {
             </span>
           </div>
           <div class="folder-path">{{ folder.path }}</div>
+          <div v-if="folder.description" class="folder-description">{{ folder.description }}</div>
           <div class="folder-meta">
             <span class="meta-item">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
@@ -322,7 +324,12 @@ function closeAddDialog() {
 
             <div class="form-group">
               <label>名称</label>
-              <el-input v-model="newName" placeholder="例如：家庭照片" class="ios-input" clearable />
+              <el-input v-model="newName" placeholder="默认使用所选目录路径" class="ios-input" clearable />
+            </div>
+
+            <div class="form-group">
+              <label>描述</label>
+              <el-input v-model="newDescription" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="目录用途说明（可选）" />
             </div>
 
             <div class="form-group">

@@ -18,11 +18,14 @@ public class ScanFolder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 1024)
     private String name;
 
     @Column(nullable = false, unique = true, length = 1024)
     private String path;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 
     @Column(nullable = false, length = 10)
     @Enumerated(EnumType.STRING)

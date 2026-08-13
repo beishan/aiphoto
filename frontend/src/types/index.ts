@@ -128,6 +128,7 @@ export interface ScanFolder {
   id: number
   name: string
   path: string
+  description: string | null
   storageMode: 'COPY' | 'LINK'
   scanStatus: 'IDLE' | 'SCANNING' | 'COMPLETED' | 'ERROR'
   lastScanAt: string | null

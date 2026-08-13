@@ -66,7 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_photos_deleted_at ON photos (deleted_at);
 -- Albums table
 CREATE TABLE IF NOT EXISTS albums (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(1024) NOT NULL,
     description VARCHAR(1000),
     type VARCHAR(20) NOT NULL DEFAULT 'VIRTUAL',
     cover_photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS scan_folders (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     path VARCHAR(1024) NOT NULL UNIQUE,
+    description TEXT,
     storage_mode VARCHAR(10) NOT NULL DEFAULT 'COPY',
     scan_status VARCHAR(20) NOT NULL DEFAULT 'IDLE',
     last_scan_at TIMESTAMP,
@@ -218,6 +219,8 @@ ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS file_count INTEGER DEFAULT 0;
 ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS scan_progress INTEGER DEFAULT 0;
 ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS hidden BOOLEAN DEFAULT FALSE;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE scan_folders ALTER COLUMN name TYPE VARCHAR(1024);
 
 -- Foreign key: photos.source_folder_id -> scan_folders.id (idempotent: drop then add)
 ALTER TABLE photos DROP CONSTRAINT IF EXISTS fk_photos_source_folder;

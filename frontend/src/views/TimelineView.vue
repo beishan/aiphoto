@@ -103,7 +103,7 @@ const groupedNodes = computed(() => {
 
 <template>
   <div class="timeline-view">
-    <div class="timeline-layout">
+    <div class="timeline-layout" :class="{ 'is-empty': !loading && timelineNodes.length === 0 }">
       <!-- Left timeline axis -->
       <aside class="timeline-axis">
         <button class="scroll-top-btn" @click="scrollToTop" title="返回顶部">
@@ -329,6 +329,17 @@ const groupedNodes = computed(() => {
   padding: 0 16px 20px;
 }
 
+.timeline-layout.is-empty .timeline-axis {
+  display: none;
+}
+
+.timeline-layout.is-empty .timeline-content {
+  display: grid;
+  min-height: calc(100vh - var(--top-bar-height));
+  padding: 0 20px calc(84px + var(--safe-bottom));
+  place-items: center;
+}
+
 .timeline-year {
   margin-bottom: 8px;
 }
@@ -420,12 +431,13 @@ const groupedNodes = computed(() => {
 
 .empty-state {
   display: flex;
+  width: 100%;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 50vh;
   gap: 12px;
   color: var(--text-secondary);
+  text-align: center;
 }
 
 .empty-icon { color: var(--text-tertiary); }

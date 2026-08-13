@@ -59,21 +59,29 @@ public class FolderService {
 
     @Transactional
     public ScanFolderDTO addFolder(ScanFolderDTO dto) {
+        if (dto.getPath() == null || dto.getPath().isBlank()) {
+            throw new IllegalArgumentException("请选择扫描目录");
+        }
+
         // Validate path exists
-        Path path = Paths.get(dto.getPath());
+        Path path = Paths.get(dto.getPath()).toAbsolutePath().normalize();
         if (!Files.exists(path) || !Files.isDirectory(path)) {
             throw new IllegalArgumentException("路径不存在或不是文件夹: " + dto.getPath());
         }
 
+        String normalizedPath = path.toString();
+
         // Check duplicate path
-        if (scanFolderRepository.existsByPath(dto.getPath())) {
-            throw new IllegalArgumentException("该路径已添加: " + dto.getPath());
+        if (scanFolderRepository.existsByPath(normalizedPath)) {
+            throw new IllegalArgumentException("该路径已添加: " + normalizedPath);
         }
 
         ScanFolder folder = new ScanFolder();
-        folder.setName(dto.getName());
-        folder.setPath(dto.getPath());
-        folder.setStorageMode(ScanFolder.StorageMode.valueOf(dto.getStorageMode()));
+        folder.setName(dto.getName() == null || dto.getName().isBlank() ? normalizedPath : dto.getName().trim());
+        folder.setPath(normalizedPath);
+        folder.setDescription(dto.getDescription() == null || dto.getDescription().isBlank() ? null : dto.getDescription().trim());
+        folder.setStorageMode(ScanFolder.StorageMode.valueOf(
+                dto.getStorageMode() == null ? "COPY" : dto.getStorageMode()));
         folder = scanFolderRepository.save(folder);
 
         return toDTO(folder);
@@ -97,6 +105,7 @@ public class FolderService {
                 .orElseThrow(() -> new RuntimeException("文件夹不存在"));
         if (dto.getName() != null) folder.setName(dto.getName());
         if (dto.getPath() != null) folder.setPath(dto.getPath());
+        if (dto.getDescription() != null) folder.setDescription(dto.getDescription().isBlank() ? null : dto.getDescription().trim());
         if (dto.getStorageMode() != null) folder.setStorageMode(ScanFolder.StorageMode.valueOf(dto.getStorageMode()));
         folder = scanFolderRepository.save(folder);
         return toDTO(folder);
@@ -496,6 +505,7 @@ public class FolderService {
         dto.setId(folder.getId());
         dto.setName(folder.getName());
         dto.setPath(folder.getPath());
+        dto.setDescription(folder.getDescription());
         dto.setStorageMode(folder.getStorageMode().name());
         dto.setScanStatus(folder.getScanStatus().name());
         dto.setLastScanAt(folder.getLastScanAt());

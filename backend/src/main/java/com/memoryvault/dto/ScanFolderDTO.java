@@ -9,6 +9,7 @@ public class ScanFolderDTO {
     private Long id;
     private String name;
     private String path;
+    private String description;
     private String storageMode;   // COPY / LINK
     private String scanStatus;    // IDLE / SCANNING / COMPLETED / ERROR
     private LocalDateTime lastScanAt;

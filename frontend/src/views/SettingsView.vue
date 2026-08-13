@@ -5,9 +5,9 @@ import { settingApi, type ModelFile, type ModelName, type ModelStatus, type Mode
 import { taskApi, type AiTask } from '@/api/taskApi'
 import { userApi } from '@/api/userApi'
 import { tagApi } from '@/api/tagApi'
-import { folderApi } from '@/api/folderApi'
+import { folderApi, type BrowseItem } from '@/api/folderApi'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Key, Lock, Plus, Unlock, UserFilled } from '@element-plus/icons-vue'
+import { Delete, FolderOpened, Key, Lock, Plus, Unlock, UserFilled } from '@element-plus/icons-vue'
 import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
@@ -238,7 +238,31 @@ async function saveEditedTag() {
 // ===== Folder Management =====
 const folders = ref<ScanFolder[]>([])
 const showFolderDialog = ref(false)
-const newFolder = ref({ name: '', path: '', storageMode: 'COPY' })
+const newFolder = ref({ name: '', path: '', description: '', storageMode: 'COPY' })
+const selectedBrowsePath = ref('')
+
+function openFolderDialog() {
+  newFolder.value = { name: '', path: '', description: '', storageMode: 'COPY' }
+  selectedBrowsePath.value = ''
+  showFolderDialog.value = true
+}
+
+async function loadFolderTreeNode(node: any, resolve: (items: BrowseItem[]) => void) {
+  try {
+    const path = node.level === 0 ? '' : node.data.path
+    const { data } = await folderApi.browse(path)
+    resolve(data.filter(item => item.isDirectory && item.readable))
+  } catch (e: any) {
+    resolve([])
+    message.error(e.response?.data?.message || '无法读取该目录')
+  }
+}
+
+function selectBrowseFolder(item: BrowseItem) {
+  selectedBrowsePath.value = item.path
+  newFolder.value.path = item.path
+  newFolder.value.name = item.path
+}
 
 async function loadFolders() {
   try {
@@ -248,15 +272,16 @@ async function loadFolders() {
 }
 
 async function createFolder() {
-  if (!newFolder.value.name || !newFolder.value.path) {
-    message.warning('请填写文件夹名称和路径')
+  if (!newFolder.value.path) {
+    message.warning('请从目录树中选择文件夹')
     return
   }
+  if (!newFolder.value.name.trim()) newFolder.value.name = newFolder.value.path
   try {
     await folderApi.create(newFolder.value)
     message.success('文件夹已添加')
     showFolderDialog.value = false
-    newFolder.value = { name: '', path: '', storageMode: 'COPY' }
+    newFolder.value = { name: '', path: '', description: '', storageMode: 'COPY' }
     await loadFolders()
   } catch (e: any) {
     message.error(e.response?.data?.message || '添加失败')
@@ -744,7 +769,7 @@ async function loadSystemInfo() {
         <div v-if="activeSection === 'folders'" class="content-panel">
           <div class="panel-header-row">
             <div style="display: flex; gap: 8px;">
-              <el-button type="primary" @click="showFolderDialog = true">+ 添加目录</el-button>
+              <el-button type="primary" :icon="Plus" @click="openFolderDialog">添加目录</el-button>
               <el-button @click="scanAll">扫描全部</el-button>
             </div>
           </div>
@@ -763,6 +788,7 @@ async function loadSystemInfo() {
             </div>
             <div class="folder-info-grid">
               <div><span class="info-label">路径</span><code>{{ f.path }}</code></div>
+              <div v-if="f.description" class="folder-description"><span class="info-label">描述</span><span>{{ f.description }}</span></div>
               <div><span class="info-label">照片数</span><span>{{ f.photoCount }}</span></div>
               <div><span class="info-label">启用</span><span>{{ f.enabled ? '是' : '否' }}</span></div>
               <div><span class="info-label">隐藏</span><span>{{ f.hidden ? '是' : '否' }}</span></div>
@@ -1187,13 +1213,41 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Folder dialog -->
-    <el-dialog v-model="showFolderDialog" title="添加扫描目录" width="460px">
-      <el-form label-position="top">
-        <el-form-item label="文件夹名称"><el-input v-model="newFolder.name" placeholder="文件夹名称" /></el-form-item>
-        <el-form-item label="NAS 目录"><el-input v-model="newFolder.path" placeholder="NAS 目录完整路径（如 /mnt/photos）" /></el-form-item>
+    <el-dialog v-model="showFolderDialog" class="folder-picker-dialog" title="添加扫描目录" width="720px" align-center>
+      <p class="dialog-intro">浏览服务器可访问的目录，选择需要扫描的照片或书籍目录。</p>
+      <div class="folder-picker-layout">
+        <section class="folder-tree-panel">
+          <header><strong>目录树</strong><small>点击箭头展开，点击目录进行选择</small></header>
+          <el-tree
+            class="folder-browser-tree"
+            node-key="path"
+            lazy
+            highlight-current
+            :load="loadFolderTreeNode"
+            :props="{ label: 'name', children: 'children', isLeaf: 'isLeaf' }"
+            @node-click="selectBrowseFolder"
+          >
+            <template #default="{ data }">
+              <span class="folder-tree-node" :class="{ selected: selectedBrowsePath === data.path }">
+                <el-icon><FolderOpened /></el-icon><span>{{ data.name }}</span>
+              </span>
+            </template>
+          </el-tree>
+        </section>
+        <el-form class="folder-details-form" label-position="top">
+          <el-form-item label="已选路径">
+            <el-input v-model="newFolder.path" readonly placeholder="请从左侧目录树选择" />
+          </el-form-item>
+          <el-form-item label="自定义名称">
+            <el-input v-model="newFolder.name" placeholder="默认使用所选目录路径" clearable />
+          </el-form-item>
+          <el-form-item label="目录描述">
+            <el-input v-model="newFolder.description" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="例如：家庭照片、摄影作品或电子书封面目录（可选）" />
+          </el-form-item>
         <el-form-item label="存储模式"><el-select v-model="newFolder.storageMode" style="width:100%"><el-option label="复制到本地存储" value="COPY" /><el-option label="仅链接（不复制）" value="LINK" /></el-select></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="showFolderDialog = false">取消</el-button><el-button type="primary" @click="createFolder">添加</el-button></template>
+        </el-form>
+      </div>
+      <template #footer><el-button @click="showFolderDialog = false">取消</el-button><el-button type="primary" :icon="Plus" :disabled="!newFolder.path" @click="createFolder">添加目录</el-button></template>
     </el-dialog>
 
     <!-- Edit tag dialog -->
@@ -1581,6 +1635,97 @@ async function loadSystemInfo() {
   font-size: 12px;
   color: var(--accent);
   word-break: break-all;
+}
+
+.folder-description {
+  grid-column: 1 / -1;
+  line-height: 1.5;
+}
+
+.folder-picker-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .9fr) minmax(300px, 1.1fr);
+  gap: 20px;
+}
+
+.folder-tree-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+}
+
+.folder-tree-panel header {
+  display: grid;
+  gap: 3px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.folder-tree-panel header strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.folder-tree-panel header small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.folder-browser-tree {
+  height: 310px;
+  overflow: auto;
+  padding: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  --el-tree-node-hover-bg-color: var(--accent-soft);
+}
+
+.folder-browser-tree :deep(.el-tree-node__content) {
+  height: 34px;
+  border-radius: 8px;
+}
+
+.folder-browser-tree :deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.folder-tree-node {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.folder-tree-node span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-tree-node .el-icon,
+.folder-tree-node.selected {
+  color: var(--accent);
+}
+
+.folder-details-form {
+  min-width: 0;
+}
+
+.folder-details-form :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+@media (max-width: 680px) {
+  .folder-picker-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .folder-browser-tree {
+    height: 230px;
+  }
 }
 
 .scan-progress-bar {
@@ -2642,11 +2787,10 @@ async function loadSystemInfo() {
 .user-table {
   display: block;
   width: 100%;
-  min-width: 900px;
 }
 
 .content-panel > .panel-card:has(.user-table) {
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .table-header,
@@ -3296,12 +3440,12 @@ async function loadSystemInfo() {
 }
 
 .user-table-card {
-  overflow-x: auto;
+  overflow: hidden;
   padding: 8px 10px 10px;
 }
 
 .user-table {
-  min-width: 980px;
+  min-width: 0;
   --el-table-header-bg-color: transparent;
   --el-table-row-hover-bg-color: color-mix(in srgb, var(--accent) 7%, transparent);
 }

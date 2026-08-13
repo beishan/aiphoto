@@ -479,8 +479,7 @@ function getDockItemStyle(index: number) {
   box-shadow:
     0 22px 52px rgba(0, 0, 0, 0.22),
     0 5px 14px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .dock::before {
@@ -501,8 +500,7 @@ function getDockItemStyle(index: number) {
   box-shadow:
     0 22px 52px rgba(45, 61, 94, .16),
     0 5px 14px rgba(45, 61, 94, .1),
-    inset 0 1px 0 rgba(255, 255, 255, .96),
-    inset 0 -1px 0 rgba(91, 111, 148, .1);
+    inset 0 1px 0 rgba(255, 255, 255, .96);
 }
 
 /* MACOS26 Liquid Glass dock */
@@ -512,8 +510,7 @@ function getDockItemStyle(index: number) {
   box-shadow:
     0 24px 58px rgba(45, 61, 94, .24),
     0 6px 16px rgba(45, 61, 94, .12),
-    inset 0 1px 0 rgba(255, 255, 255, .98),
-    inset 0 -1px 0 rgba(91, 111, 148, .14);
+    inset 0 1px 0 rgba(255, 255, 255, .98);
   backdrop-filter: blur(var(--dock-blur, 28px)) saturate(210%) contrast(106%);
   -webkit-backdrop-filter: blur(var(--dock-blur, 28px)) saturate(210%) contrast(106%);
 }
