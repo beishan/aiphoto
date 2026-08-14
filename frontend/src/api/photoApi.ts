@@ -66,6 +66,12 @@ export const photoApi = {
     return response
   },
 
+  async restoreAllTrash() {
+    const response = await http.post<{ restored: number }>('/photos/trash/restore-all')
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
   async permanentDelete(id: number) {
     const response = await http.delete(`/photos/trash/${id}`)
     window.dispatchEvent(new Event('trash-changed'))

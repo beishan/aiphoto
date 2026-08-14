@@ -190,19 +190,19 @@ function downloadPhoto() {
 <template>
   <div class="detail-view">
     <div class="detail-header glass">
-      <button class="back-btn" @click="goBack">
+      <el-button class="back-btn" @click="goBack">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info"><h2 class="header-title">照片详情</h2></div>
       <div class="header-actions">
-        <button class="header-btn" @click="downloadPhoto" title="下载">
+        <el-button class="header-btn" @click="downloadPhoto" title="下载">
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-        </button>
-        <button class="header-btn danger" @click="confirmDelete" title="删除">
+        </el-button>
+        <el-button class="header-btn danger" @click="confirmDelete" title="删除">
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-        </button>
+        </el-button>
       </div>
     </div>
 
@@ -215,22 +215,22 @@ function downloadPhoto() {
 
       <!-- Actions bar -->
       <div class="actions-bar">
-        <button class="action-btn" :class="{ active: photo.favorite }" @click="toggleFavorite">
+        <el-button class="action-btn" :class="{ active: photo.favorite }" @click="toggleFavorite">
           <svg viewBox="0 0 24 24" :fill="photo.favorite ? '#ff453a' : 'none'" :stroke="photo.favorite ? '#ff453a' : 'currentColor'" stroke-width="2" width="24" height="24">
             <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
           </svg>
           <span>收藏</span>
-        </button>
-        <button class="action-btn" :class="{ active: photo.inTimeline }" @click="toggleTimeline">
+        </el-button>
+        <el-button class="action-btn" :class="{ active: photo.inTimeline }" @click="toggleTimeline">
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
             <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 13l-4-4 1.41-1.41L12 13.17l4.59-4.58L18 10l-6 6z"/>
           </svg>
           <span>{{ photo.inTimeline ? '已加入' : '加入时间线' }}</span>
-        </button>
-        <button class="action-btn" @click="downloadPhoto">
+        </el-button>
+        <el-button class="action-btn" @click="downloadPhoto">
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
           <span>下载</span>
-        </button>
+        </el-button>
       </div>
 
       <!-- ===== Unified Info Panel ===== -->
@@ -239,14 +239,14 @@ function downloadPhoto() {
         <div class="info-section">
           <h3 class="section-title">评分</h3>
           <div class="rating-row">
-            <button v-for="s in 5" :key="s" class="star-btn" :class="{ active: s <= (hoverRating || photo.rating || 0) }"
+            <el-button v-for="s in 5" :key="s" class="star-btn" :class="{ active: s <= (hoverRating || photo.rating || 0) }"
               @mouseenter="hoverRating = s" @mouseleave="hoverRating = 0" @click="setRating(s)">
               <svg viewBox="0 0 24 24" :fill="s <= (hoverRating || photo.rating || 0) ? '#ffcc00' : 'none'"
                 :stroke="s <= (hoverRating || photo.rating || 0) ? '#ffcc00' : 'currentColor'" stroke-width="2" width="28" height="28">
                 <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
               </svg>
-            </button>
-            <button v-if="photo.rating" class="clear-btn" @click="setRating(0)">清除</button>
+            </el-button>
+            <el-button v-if="photo.rating" class="clear-btn" @click="setRating(0)">清除</el-button>
           </div>
         </div>
 
@@ -254,13 +254,13 @@ function downloadPhoto() {
         <div class="info-section">
           <div class="section-header">
             <h3 class="section-title">描述</h3>
-            <button v-if="!editing" class="edit-btn" @click="startEditNote">编辑</button>
+            <el-button v-if="!editing" class="edit-btn" @click="startEditNote">编辑</el-button>
           </div>
           <div v-if="editing" class="note-edit">
             <el-input v-model="editNote" class="note-input" type="textarea" :rows="3" placeholder="添加描述..." maxlength="2000" show-word-limit />
             <div class="note-actions">
-              <button class="btn-cancel" @click="editing = false">取消</button>
-              <button class="btn-save" @click="saveNote">保存</button>
+              <el-button class="btn-cancel" @click="editing = false">取消</el-button>
+              <el-button class="btn-save" @click="saveNote">保存</el-button>
             </div>
           </div>
           <p v-else class="note-text" @click="startEditNote">{{ photo.note || '点击添加描述...' }}</p>
@@ -276,21 +276,21 @@ function downloadPhoto() {
         <div class="info-section">
           <div class="section-header">
             <h3 class="section-title">标签</h3>
-            <button class="edit-btn" @click="showTagPicker = !showTagPicker">+ 添加</button>
+            <el-button class="edit-btn" @click="showTagPicker = !showTagPicker">+ 添加</el-button>
           </div>
           <div v-if="showTagPicker" class="tag-picker">
             <div v-if="availableTags.length > 0" class="tag-picker-list">
-              <button v-for="t in availableTags" :key="t.id" class="tag-pick-btn"
+              <el-button v-for="t in availableTags" :key="t.id" class="tag-pick-btn"
                 :style="{ borderColor: t.color || 'transparent', color: t.color || 'inherit' }"
-                @click="addTag(t)">{{ t.name }}</button>
+                @click="addTag(t)">{{ t.name }}</el-button>
             </div>
-            <button class="tag-new-btn" @click="addNewTag">+ 新建标签</button>
+            <el-button class="tag-new-btn" @click="addNewTag">+ 新建标签</el-button>
           </div>
           <div v-if="photo.tags && photo.tags.length > 0" class="tags-row">
             <span v-for="tag in photo.tags" :key="tag.id" class="tag-chip"
               :style="tag.color ? { borderColor: tag.color, color: tag.color } : {}">
               {{ tag.name }}
-              <button class="tag-remove" @click="removeTag(tag.id)">×</button>
+              <el-button class="tag-remove" @click="removeTag(tag.id)">×</el-button>
             </span>
           </div>
           <p v-else class="note-text">暂无标签</p>
@@ -300,7 +300,7 @@ function downloadPhoto() {
         <div class="info-section">
           <div class="section-header">
             <h3 class="section-title">时间线</h3>
-            <button class="edit-btn" @click="toggleTimeline">{{ photo.inTimeline ? '移除' : '添加' }}</button>
+            <el-button class="edit-btn" @click="toggleTimeline">{{ photo.inTimeline ? '移除' : '添加' }}</el-button>
           </div>
           <p class="info-status-text">
             {{ photo.inTimeline ? '✓ 已加入时间线' : '未加入时间线' }}

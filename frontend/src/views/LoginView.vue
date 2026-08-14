@@ -116,9 +116,9 @@ async function handleSubmit() {
         </el-form>
 
         <div class="login-footer">
-          <button class="switch-btn" @click="isRegister = !isRegister">
+          <el-button class="switch-btn" @click="isRegister = !isRegister">
             {{ isRegister ? '已有账号？登录' : '没有账号？注册' }}
-          </button>
+          </el-button>
         </div>
       </div>
     </div>

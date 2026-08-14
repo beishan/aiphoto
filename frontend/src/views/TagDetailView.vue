@@ -60,11 +60,11 @@ watch(sortBy, updateSort)
 <template>
   <div class="tag-detail-view">
     <div class="detail-header">
-      <button class="back-btn" @click="router.push('/tags')">
+      <el-button class="back-btn" @click="router.push('/tags')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info">
         <div class="tag-color-dot" v-if="tag" :style="{ background: tag.color || '#0a84ff' }"></div>
         <h1 class="tag-title">{{ tag?.name || '标签' }}</h1>

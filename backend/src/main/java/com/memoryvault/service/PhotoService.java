@@ -249,6 +249,11 @@ public class PhotoService {
     }
 
     @Transactional
+    public int restoreAllTrash() {
+        return photoRepository.restoreAllFromTrash();
+    }
+
+    @Transactional
     public void permanentDeletePhoto(Long id) {
         Photo photo = photoRepository.findTrashById(id)
                 .orElseThrow(() -> new RuntimeException("Photo not found in trash"));

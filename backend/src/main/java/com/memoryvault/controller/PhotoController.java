@@ -129,6 +129,11 @@ public class PhotoController {
         return ResponseEntity.ok(photoService.restorePhoto(id));
     }
 
+    @PostMapping("/trash/restore-all")
+    public ResponseEntity<Map<String, Integer>> restoreAllTrash() {
+        return ResponseEntity.ok(Map.of("restored", photoService.restoreAllTrash()));
+    }
+
     @DeleteMapping("/trash/{id}")
     public ResponseEntity<Void> permanentDeletePhoto(@PathVariable Long id) {
         photoService.permanentDeletePhoto(id);

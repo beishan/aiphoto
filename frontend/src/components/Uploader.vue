@@ -228,16 +228,16 @@ function getObjectUrl(file: File): string {
           <el-upload v-if="!uploading" multiple :auto-upload="false" :show-file-list="false" accept="image/*,video/*" :on-change="handleElementFile">
             <el-button link type="primary">添加</el-button>
           </el-upload>
-          <button v-if="failedCount > 0 && !uploading" class="btn-retry" @click="retryFailed">重试失败</button>
-          <button v-if="completedCount > 0 && !uploading" class="btn-clear" @click="clearCompleted">清除已完成</button>
-          <button v-if="uploading" class="btn-cancel" @click="cancelAll">取消</button>
-          <button
+          <el-button v-if="failedCount > 0 && !uploading" class="btn-retry" @click="retryFailed">重试失败</el-button>
+          <el-button v-if="completedCount > 0 && !uploading" class="btn-clear" @click="clearCompleted">清除已完成</el-button>
+          <el-button v-if="uploading" class="btn-cancel" @click="cancelAll">取消</el-button>
+          <el-button
             v-if="!uploading && activeCount > 0"
             class="btn-upload"
             @click="startUpload"
           >
             上传 ({{ activeCount }})
-          </button>
+          </el-button>
         </div>
       </div>
 
@@ -298,11 +298,11 @@ function getObjectUrl(file: File): string {
             </div>
 
             <!-- Actions -->
-            <button class="file-remove" @click="removeFile(item.id)">
+            <el-button class="file-remove" @click="removeFile(item.id)">
               <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                 <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z"/>
               </svg>
-            </button>
+            </el-button>
           </div>
         </TransitionGroup>
       </div>

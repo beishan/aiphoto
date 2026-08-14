@@ -180,7 +180,7 @@ async function handleReclassify() {
         <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zM13 3h8v8h-8V3zm0 10h8v8h-8v-8z" />
       </svg>
       <h3>暂无分类</h3>
-      <button class="create-btn" @click="showCreate = true">创建第一个分类</button>
+      <el-button class="create-btn" @click="showCreate = true">创建第一个分类</el-button>
     </div>
 
     <!-- Category grid -->
@@ -200,7 +200,7 @@ async function handleReclassify() {
           <span class="category-name">{{ category.name }}</span>
           <span class="category-count">{{ category.photoCount }} 张</span>
         </div>
-        <button
+        <el-button
           v-if="!category.isSystem"
           class="category-delete"
           @click="(e: Event) => handleDelete(category, e)"
@@ -208,24 +208,24 @@ async function handleReclassify() {
           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
             <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
           </svg>
-        </button>
+        </el-button>
       </div>
     </div>
 
     <!-- Create FAB -->
-    <button v-if="!categoryStore.loading && categoryStore.categories.length > 0" class="fab-create" @click="showCreate = true">
+    <el-button v-if="!categoryStore.loading && categoryStore.categories.length > 0" class="fab-create" @click="showCreate = true">
       <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
         <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
       </svg>
-    </button>
+    </el-button>
 
     <!-- Reclassify FAB -->
-    <button v-if="!categoryStore.loading && categoryStore.categories.length > 0" class="fab-reclassify" :disabled="reclassifying" @click="handleReclassify" :title="reclassifying ? '分类中...' : '智能分类'">
+    <el-button v-if="!categoryStore.loading && categoryStore.categories.length > 0" class="fab-reclassify" :disabled="reclassifying" @click="handleReclassify" :title="reclassifying ? '分类中...' : '智能分类'">
       <svg v-if="!reclassifying" viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
         <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
       </svg>
       <div v-else class="fab-spinner"></div>
-    </button>
+    </el-button>
 
     <el-dialog v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
       <el-form label-position="top">
@@ -234,7 +234,7 @@ async function handleReclassify() {
         </el-form-item>
         <el-form-item label="颜色">
           <div class="color-selector">
-            <button v-for="color in colorOptions" :key="color" class="color-btn" :class="{ active: newCategoryColor === color }" :style="{ background: color }" @click="newCategoryColor = color" />
+            <el-button v-for="color in colorOptions" :key="color" class="color-btn" :class="{ active: newCategoryColor === color }" :style="{ background: color }" @click="newCategoryColor = color" />
           </div>
         </el-form-item>
       </el-form>
@@ -265,9 +265,9 @@ async function handleReclassify() {
             </div>
 
             <div v-if="!pickerDone" class="picker-load-more">
-              <button class="load-more-btn" @click="loadMorePickerPhotos" :disabled="pickerLoading">
+              <el-button class="load-more-btn" @click="loadMorePickerPhotos" :disabled="pickerLoading">
                 {{ pickerLoading ? '加载中...' : '加载更多' }}
-              </button>
+              </el-button>
             </div>
 
       <template #footer>

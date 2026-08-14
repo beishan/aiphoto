@@ -321,36 +321,36 @@ async function handleToggleFavorite(photoId: number) {
     <div ref="scrollContainer" class="gallery-scroll" @scroll="handleScroll">
       <!-- Selection toolbar -->
       <div v-if="selectMode" class="selection-toolbar">
-        <button class="toolbar-btn" @click="toggleSelectMode">
+        <el-button class="toolbar-btn" @click="toggleSelectMode">
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
-        </button>
+        </el-button>
         <span class="toolbar-title">已选择 {{ selectedIds.size }} 项</span>
         <div class="toolbar-actions">
-          <button class="toolbar-btn text-btn" @click="selectAll">全选</button>
-          <button class="toolbar-btn text-btn" @click="deselectAll">取消全选</button>
-          <button class="toolbar-btn action-btn" @click="batchToggleFavorite" :disabled="selectedIds.size === 0" title="收藏">
+          <el-button class="toolbar-btn text-btn" @click="selectAll">全选</el-button>
+          <el-button class="toolbar-btn text-btn" @click="deselectAll">取消全选</el-button>
+          <el-button class="toolbar-btn action-btn" @click="batchToggleFavorite" :disabled="selectedIds.size === 0" title="收藏">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
             </svg>
-          </button>
+          </el-button>
           <div class="picker-wrapper">
-            <button class="toolbar-btn action-btn" @click="openAlbumPicker" :disabled="selectedIds.size === 0" title="添加到相册">
+            <el-button class="toolbar-btn action-btn" @click="openAlbumPicker" :disabled="selectedIds.size === 0" title="添加到相册">
               <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
               </svg>
-            </button>
+            </el-button>
             <!-- Album picker dropdown -->
             <Transition name="fade">
               <div v-if="showAlbumPicker" class="picker-dropdown" @click.self="showAlbumPicker = false">
                 <div class="picker-panel">
                   <div class="picker-header">选择相册</div>
                   <div class="picker-list">
-                    <button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
+                    <el-button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
                       <span class="picker-item-name">{{ album.name }}</span>
                       <span class="picker-item-count">{{ album.photoCount }} 张</span>
-                    </button>
+                    </el-button>
                     <div v-if="albums.length === 0" class="picker-empty">暂无相册</div>
                   </div>
                 </div>
@@ -358,35 +358,35 @@ async function handleToggleFavorite(photoId: number) {
             </Transition>
           </div>
           <div class="picker-wrapper">
-            <button class="toolbar-btn action-btn" @click="showRatingPicker = !showRatingPicker" :disabled="selectedIds.size === 0" title="评分">
+            <el-button class="toolbar-btn action-btn" @click="showRatingPicker = !showRatingPicker" :disabled="selectedIds.size === 0" title="评分">
               <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                 <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
               </svg>
-            </button>
+            </el-button>
             <!-- Rating picker dropdown -->
             <Transition name="fade">
               <div v-if="showRatingPicker" class="picker-dropdown" @click.self="showRatingPicker = false">
                 <div class="picker-panel rating-panel">
                   <div class="picker-header">设置评分</div>
                   <div class="rating-options">
-                    <button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
+                    <el-button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
                       <span class="rating-stars">
                         <svg v-for="s in 5" :key="s" viewBox="0 0 24 24" :fill="s <= r ? '#ffcc00' : 'none'" :stroke="s <= r ? '#ffcc00' : 'currentColor'" stroke-width="2" width="16" height="16">
                           <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
                         </svg>
                       </span>
-                    </button>
-                    <button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</button>
+                    </el-button>
+                    <el-button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</el-button>
                   </div>
                 </div>
               </div>
             </Transition>
           </div>
-          <button class="toolbar-btn delete-btn" @click="batchDelete" :disabled="selectedIds.size === 0">
+          <el-button class="toolbar-btn delete-btn" @click="batchDelete" :disabled="selectedIds.size === 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
             </svg>
-          </button>
+          </el-button>
         </div>
       </div>
 
@@ -431,7 +431,7 @@ async function handleToggleFavorite(photoId: number) {
 
     <!-- Timeline rail -->
     <div v-if="timelineItems.length > 0 && !selectMode" class="timeline-rail">
-      <button
+      <el-button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"
         class="timeline-item"
@@ -442,36 +442,36 @@ async function handleToggleFavorite(photoId: number) {
       >
         <span class="timeline-dot"></span>
         <span class="timeline-label">{{ item.label }}</span>
-      </button>
+      </el-button>
     </div>
 
     <!-- Zoom controls -->
     <div v-if="!selectMode" class="zoom-controls">
-      <button class="zoom-btn" @click="zoomIn" :disabled="zoomLevel === 0" title="放大">
+      <el-button class="zoom-btn" @click="zoomIn" :disabled="zoomLevel === 0" title="放大">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
         </svg>
-      </button>
-      <button class="zoom-btn" @click="zoomOut" :disabled="zoomLevel === 4" title="缩小">
+      </el-button>
+      <el-button class="zoom-btn" @click="zoomOut" :disabled="zoomLevel === 4" title="缩小">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M5 12a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z" />
         </svg>
-      </button>
+      </el-button>
     </div>
 
     <!-- Upload FAB -->
-    <button v-if="!selectMode" class="fab-upload" @click="showUploader = true">
+    <el-button v-if="!selectMode" class="fab-upload" @click="showUploader = true">
       <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
         <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
       </svg>
-    </button>
+    </el-button>
 
     <!-- Select mode FAB -->
-    <button v-if="!selectMode && photoStore.photos.length > 0" class="fab-select" @click="toggleSelectMode">
+    <el-button v-if="!selectMode && photoStore.photos.length > 0" class="fab-select" @click="toggleSelectMode">
       <svg viewBox="0 0 24 24" fill="currentColor">
         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="none" stroke="currentColor" stroke-width="2"/>
       </svg>
-    </button>
+    </el-button>
 
     <el-dialog v-model="showUploader" title="上传照片" width="min(720px, calc(100vw - 24px))" class="mv-dialog uploader-dialog" destroy-on-close>
       <Uploader @uploaded="handleUploaded" @done="showUploader = false" />

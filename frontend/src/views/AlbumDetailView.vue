@@ -110,24 +110,24 @@ function onPhotoClick(photo: Photo, index: number) {
   <div class="album-detail">
     <!-- Header -->
     <div class="detail-header">
-      <button class="back-btn" @click="router.push('/albums')">
+      <el-button class="back-btn" @click="router.push('/albums')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info">
         <h2>{{ album?.name || '加载中...' }}</h2>
         <span class="photo-count">{{ album?.photoCount || 0 }} 张照片</span>
       </div>
-      <button v-if="album?.type === 'TRAINING'" class="train-btn" @click="handleTrain">
+      <el-button v-if="album?.type === 'TRAINING'" class="train-btn" @click="handleTrain">
         训练
-      </button>
-      <button v-if="photos.length > 0" class="cover-btn" :class="{ active: pickingCover }" @click="pickingCover = !pickingCover">
+      </el-button>
+      <el-button v-if="photos.length > 0" class="cover-btn" :class="{ active: pickingCover }" @click="pickingCover = !pickingCover">
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
           <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
         </svg>
         {{ pickingCover ? '取消' : '封面' }}
-      </button>
+      </el-button>
     </div>
 
     <!-- Description -->
@@ -141,8 +141,8 @@ function onPhotoClick(photo: Photo, index: number) {
           :rows="3"
         />
         <div class="description-actions">
-          <button class="btn-cancel" @click="cancelEditDescription">取消</button>
-          <button class="btn-save" @click="saveDescription">保存</button>
+          <el-button class="btn-cancel" @click="cancelEditDescription">取消</el-button>
+          <el-button class="btn-save" @click="saveDescription">保存</el-button>
         </div>
       </div>
       <div v-else class="description-display" @click="startEditDescription">
@@ -180,7 +180,7 @@ function onPhotoClick(photo: Photo, index: number) {
         @click="onPhotoClick(photo, index)"
       >
         <template #actions>
-          <button
+          <el-button
             class="set-cover-btn"
             title="设为封面"
             @click.stop="handleSetCover(photo.id)"
@@ -188,7 +188,7 @@ function onPhotoClick(photo: Photo, index: number) {
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
               <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
             </svg>
-          </button>
+          </el-button>
         </template>
       </PhotoCard>
     </div>

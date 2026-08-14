@@ -4,6 +4,7 @@ import com.memoryvault.entity.Photo;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -82,6 +83,10 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
 
     @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NOT NULL")
     Optional<Photo> findTrashById(@Param("id") Long id);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Photo p SET p.deletedAt = NULL WHERE p.deletedAt IS NOT NULL")
+    int restoreAllFromTrash();
 
     long countByDeletedAtIsNotNull();
 }
