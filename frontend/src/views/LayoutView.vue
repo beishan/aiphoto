@@ -572,6 +572,13 @@ function getDockItemStyle(index: number) {
 
 .dock-icon-tile.custom{overflow:visible;border:0;border-radius:0;background:none;box-shadow:none}.dock-icon-tile.custom .dock-icon-glass,.dock-icon-tile.custom::after{display:none}.dock-icon-tile.custom .dock-icon{width:var(--dock-icon-size);height:var(--dock-icon-size);filter:none}.dock-icon-tile.minimal{border:1px solid var(--separator);overflow:hidden;background:var(--bg-card);box-shadow:0 5px 12px rgba(0,0,0,.14)}.dock-icon-tile.minimal .dock-icon-glass,.dock-icon-tile.minimal::after{display:none}.dock-icon-tile.minimal .dock-icon{color:var(--text-primary);filter:none}.trash-tile{background:none}.dock-trash-entry{position:relative;display:flex}.trash-count{position:absolute;top:-5px;right:-4px;z-index:4;display:grid;min-width:18px;height:18px;padding:0 4px;place-items:center;border:2px solid rgba(255,255,255,.9);border-radius:999px;background:var(--danger);color:#fff;font-size:9px;font-weight:800}.trash-popup{position:absolute;right:-84px;bottom:calc(100% + 22px);z-index:220;width:min(440px,calc(100vw - 24px));padding:14px;border:1px solid var(--glass-border);border-radius:20px;background:var(--glass-bg);box-shadow:0 28px 70px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(185%)}.trash-popup::after{position:absolute;right:104px;top:100%;border:9px solid transparent;border-top-color:var(--bg-card);content:''}.trash-popup>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--separator)}.trash-popup>header>div{display:grid;gap:3px}.trash-popup>header strong{color:var(--text-primary);font-size:14px}.trash-popup>header small{color:var(--text-secondary);font-size:10px}
 
+.trash-popup {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 130px);
+  padding: 18px;
+  border-radius: 24px;
+}
+
 .dock-icon {
   position: relative;
   z-index: 1;

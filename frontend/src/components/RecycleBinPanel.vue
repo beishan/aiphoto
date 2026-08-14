@@ -446,7 +446,11 @@ onMounted(loadTrash)
 }
 
 .compact .trash-list {
-  max-height: 330px;
+  max-height: min(520px, calc(100vh - 250px));
+}
+
+.compact .is-card {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 @media (max-width: 620px) {
@@ -473,7 +477,8 @@ onMounted(loadTrash)
     width: 100%;
   }
 
-  .is-card {
+  .is-card,
+  .compact .is-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
