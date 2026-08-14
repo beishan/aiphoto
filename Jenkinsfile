@@ -128,6 +128,8 @@ pipeline {
             }
             echo 'MemoryVault 构建或部署失败，已尝试自动回滚。'
         }
-        always { cleanWs() }
+        // Declarative Pipeline 的 always 会先于 success/failure 执行；
+        // cleanup 固定最后执行，避免提前删除部署清理和回滚所需的脚本与状态文件。
+        cleanup { cleanWs() }
     }
 }
