@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${1:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${2:-}"
-DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-memoryvault-deploy-state}"
+DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-aiphoto-deploy-state}"
 TEMP_STATE_FILE=""
 
 cleanup() {

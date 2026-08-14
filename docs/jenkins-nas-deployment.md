@@ -17,7 +17,7 @@ Pipeline 会自动执行：检出 `main`、后端测试、构建前端/后端/AI
 
 | 服务 | 端口 |
 |---|---:|
-| MemoryVault Web | 8391 |
+| aiphoto Web | 8391 |
 | Spring Boot API | 8392 |
 
 PostgreSQL 和 AI API 仅在 Docker 内部网络开放。
@@ -44,11 +44,11 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 
 ```text
 /vol1/photos
-/vol1/docker/memoryvault/ai-models/insightface/models
-/vol1/docker/memoryvault/ai-models/ultralytics
-/vol1/docker/memoryvault/ai-models/clip
-/vol1/docker/memoryvault/ai-models/chinese-clip
-/vol1/docker/memoryvault/storage
+/vol1/docker/aiphoto/ai-models/insightface/models
+/vol1/docker/aiphoto/ai-models/ultralytics
+/vol1/docker/aiphoto/ai-models/clip
+/vol1/docker/aiphoto/ai-models/chinese-clip
+/vol1/docker/aiphoto/storage
 ```
 
 将现有 `ai-models` 目录的子目录内容放到对应位置。至少确保存在：
@@ -59,7 +59,7 @@ chinese-clip/clip_cn_vit-b-16.pt
 insightface/models/buffalo_l/
 ```
 
-照片库以只读方式挂载到后端 `/photos`，在 MemoryVault 的扫描目录中应填
+照片库以只读方式挂载到后端 `/photos`，在 aiphoto 的扫描目录中应填
 `/photos` 或其子目录。用于上传的照片和缩略图存在
 `STORAGE_DATA_PATH` 指定的 NAS 目录，不依赖 Jenkins 工作区。
 
@@ -69,7 +69,7 @@ insightface/models/buffalo_l/
 2. 替换全部密码。JWT 密钥可用
    `openssl rand -base64 48` 生成。
 3. Jenkins 中新建 `Secret file` 凭据，ID 必须是
-   `memoryvault-production-env`。
+   `aiphoto-production-env`。
 
 照片库、AI 模型根目录和本地存储目录可保留示例文件中的默认值，部署时会由
 Jenkins 构建参数中的同名值覆盖。
@@ -121,29 +121,29 @@ http://192.168.31.155:8392/actuator/health
 在仓库中指定生产环境文件：
 
 ```bash
-./scripts/deploy.sh health /path/to/memoryvault-production.env
-./scripts/deploy.sh logs /path/to/memoryvault-production.env
-./scripts/rollback.sh /path/to/memoryvault-production.env
+./scripts/deploy.sh health /path/to/aiphoto-production.env
+./scripts/deploy.sh logs /path/to/aiphoto-production.env
+./scripts/rollback.sh /path/to/aiphoto-production.env
 ```
 
 每次发布前的 PostgreSQL custom-format 备份保存在
-`memoryvault-backups` Docker Volume，默认保留 10 份。上一版镜像信息保存在
-`memoryvault-deploy-state` Volume。手动回滚只替换前端、后端和 AI 镜像，
+`aiphoto-backups` Docker Volume，默认保留 10 份。上一版镜像信息保存在
+`aiphoto-deploy-state` Volume。手动回滚只替换前端、后端和 AI 镜像，
 不会删除 PostgreSQL、本地存储和照片数据。
 
 查看备份：
 
 ```bash
-docker run --rm -v memoryvault-backups:/backups alpine:3.20 ls -lh /backups
+docker run --rm -v aiphoto-backups:/backups alpine:3.20 ls -lh /backups
 ```
 
 故障排查优先使用：
 
 ```bash
-docker ps --filter name=memoryvault
-docker logs --tail=200 memoryvault-ai
-docker logs --tail=200 memoryvault-backend
-docker exec memoryvault-ai nvidia-smi
+docker ps --filter name=aiphoto
+docker logs --tail=200 aiphoto-ai
+docker logs --tail=200 aiphoto-backend
+docker exec aiphoto-ai nvidia-smi
 ```
 
 如 AI 容器一直 `unhealthy`，重点检查 NVIDIA Container Toolkit、模型目录结构和

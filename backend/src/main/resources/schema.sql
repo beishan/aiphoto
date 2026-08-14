@@ -1,4 +1,4 @@
--- MemoryVault Database Schema
+-- aiphoto Database Schema
 -- PostgreSQL 16 + pgvector
 
 -- Enable pgvector extension

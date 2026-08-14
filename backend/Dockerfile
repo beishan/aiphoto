@@ -18,6 +18,11 @@ RUN mvn clean package -DskipTests -B
 # Stage 2: Run
 FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
 
+ARG APP_VERSION=0.2.0
+ENV APP_VERSION=${APP_VERSION}
+LABEL org.opencontainers.image.title="aiphoto Backend" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
 # Install FFmpeg for video thumbnail generation
 RUN apk add --no-cache ffmpeg
 

@@ -1,8 +1,8 @@
-# MemoryVault - AI 智能相册
+# aiphoto - AI 智能相册
 
 ## 项目概述
 
-MemoryVault 是一个面向家庭/个人的私有化部署 AI 相册系统，运行于 NAS Docker 环境，支持 NVIDIA GPU 加速。
+aiphoto 是一个面向家庭/个人的私有化部署 AI 相册系统，运行于 NAS Docker 环境，支持 NVIDIA GPU 加速。
 
 **核心特性：**
 - 数据不出门：所有照片、视频、人脸数据存储在自家 NAS
@@ -23,7 +23,7 @@ MemoryVault 是一个面向家庭/个人的私有化部署 AI 相册系统，运
 ## 项目结构
 
 ```
-ai-photo/
+aiphoto/
 ├── docker-compose.yml          # Docker 服务编排
 ├── .env                        # 环境变量
 ├── nginx/nginx.conf            # Nginx 反代理配置
@@ -31,7 +31,7 @@ ai-photo/
 ├── backend/                    # Java Spring Boot 后端
 │   ├── pom.xml
 │   ├── Dockerfile
-│   └── src/main/java/com/memoryvault/
+│   └── src/main/java/com/aiphoto/
 │       ├── controller/         # REST API 控制器
 │       ├── service/            # 业务逻辑层
 │       ├── repository/         # JPA Repository
@@ -190,7 +190,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 # 数据库密码
-DB_PASSWORD=memoryvault
+DB_PASSWORD=aiphoto
 
 # JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key

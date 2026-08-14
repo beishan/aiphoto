@@ -1,8 +1,8 @@
-# MemoryVault - AI 智能相册
+# aiphoto - AI 智能相册
 
 ## 项目概述
 
-MemoryVault 是一个面向家庭/个人的私有化部署 AI 相册系统，运行于 NAS Docker 环境，支持 NVIDIA GPU 加速。
+aiphoto 是一个面向家庭/个人的私有化部署 AI 相册系统，运行于 NAS Docker 环境，支持 NVIDIA GPU 加速。
 
 **核心特性：**
 - 数据不出门：所有照片、视频、人脸数据存储在自家 NAS
@@ -23,7 +23,7 @@ MemoryVault 是一个面向家庭/个人的私有化部署 AI 相册系统，运
 ## 项目结构
 
 ```
-ai-photo/
+aiphoto/
 ├── docker-compose.yml          # Docker 服务编排
 ├── .env                        # 环境变量
 ├── nginx/nginx.conf            # Nginx 反代理配置
@@ -31,7 +31,7 @@ ai-photo/
 ├── backend/                    # Java Spring Boot 后端
 │   ├── pom.xml
 │   ├── Dockerfile
-│   └── src/main/java/com/memoryvault/
+│   └── src/main/java/com/aiphoto/
 │       ├── controller/         # REST API 控制器
 │       ├── service/            # 业务逻辑层
 │       ├── repository/         # JPA Repository
@@ -168,6 +168,12 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ## 开发规范
 
+### 版本管理
+- 根目录 `VERSION` 是应用版本号的唯一基准，使用 `主版本号.次版本号.修订号` 格式。
+- 每次实现需求或修改应用行为时必须同步更新版本号；修订号或次版本号由 Codex 根据改动范围决定。
+- 如需递增主版本号，Codex 必须先询问用户并获得确认。
+- Jenkins/Docker 镜像标签、后端系统信息及各服务构建元数据必须使用同一个版本号。
+
 ### 代码风格
 - **Java**: 遵循 Google Java Style Guide
 - **Vue/TypeScript**: 使用 Composition API + `<script setup>`
@@ -190,7 +196,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 # 数据库密码
-DB_PASSWORD=memoryvault
+DB_PASSWORD=aiphoto
 
 # JWT 密钥（生产环境必须修改）
 JWT_SECRET=your-secret-key

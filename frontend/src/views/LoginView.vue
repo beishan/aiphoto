@@ -73,7 +73,7 @@ async function handleSubmit() {
             <path d="M2 5a3 3 0 013-3h14a3 3 0 013 3v10a3 3 0 01-3 3H5a3 3 0 01-3-3V5zm5.5 2a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM4 15l4.5-6 3.5 4.5L14 11l4 6H4z" />
           </svg>
         </div>
-        <h1 class="app-name">MemoryVault</h1>
+        <h1 class="app-name">aiphoto</h1>
         <p class="app-desc">你的私人 AI 相册</p>
       </div>
 

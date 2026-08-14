@@ -20,10 +20,10 @@ pipeline {
     }
 
     environment {
-        APP_NAME = 'memoryvault'
-        COMPOSE_PROJECT_NAME = 'memoryvault'
-        PRODUCTION_ENV_CREDENTIAL_ID = 'memoryvault-production-env'
-        PREVIOUS_IMAGES_FILE = '.memoryvault-previous-images'
+        APP_NAME = 'aiphoto'
+        COMPOSE_PROJECT_NAME = 'aiphoto'
+        PRODUCTION_ENV_CREDENTIAL_ID = 'aiphoto-production-env'
+        PREVIOUS_IMAGES_FILE = '.aiphoto-previous-images'
         // 保留当前版和上一版，确保仍可自动回滚。
         IMAGE_RETENTION_COUNT = '2'
     }
@@ -33,23 +33,28 @@ pipeline {
             steps {
                 git branch: 'main', url: 'git@github.com:beishan/aiphoto.git'
                 script {
+                    def appVersion = readFile('VERSION').trim()
+                    if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
+                        error("VERSION 必须使用语义化版本号（例如 0.2.0），当前值：${appVersion}")
+                    }
                     def shortCommit = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
                     def subject = sh(script: 'git log -1 --pretty=%s', returnStdout: true).trim().replaceAll(/\s+/, ' ')
                     def title = subject.length() > 48 ? "${subject.take(48)}…" : subject
-                    env.RELEASE_TAG = "${env.BUILD_NUMBER}-${shortCommit}"
-                    env.BACKEND_IMAGE = "memoryvault-backend:${env.RELEASE_TAG}"
-                    env.FRONTEND_IMAGE = "memoryvault-frontend:${env.RELEASE_TAG}"
-                    env.AI_IMAGE = "memoryvault-ai:${env.RELEASE_TAG}"
-                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${title ?: shortCommit}"
-                    currentBuild.description = "提交 ${shortCommit}"
+                    env.APP_VERSION = appVersion
+                    env.RELEASE_TAG = "${appVersion}-${env.BUILD_NUMBER}-${shortCommit}"
+                    env.BACKEND_IMAGE = "aiphoto-backend:${env.RELEASE_TAG}"
+                    env.FRONTEND_IMAGE = "aiphoto-frontend:${env.RELEASE_TAG}"
+                    env.AI_IMAGE = "aiphoto-ai:${env.RELEASE_TAG}"
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} v${appVersion} ${title ?: shortCommit}"
+                    currentBuild.description = "版本 ${appVersion} · 提交 ${shortCommit}"
                 }
             }
         }
 
         stage('Validate') {
             steps {
-                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                    sh './scripts/deploy.sh validate "$MEMORYVAULT_ENV_FILE"'
+                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                    sh './scripts/deploy.sh validate "$AIPHOTO_ENV_FILE"'
                 }
             }
         }
@@ -57,29 +62,29 @@ pipeline {
         stage('Backend Test') {
             when { expression { !params.SKIP_TESTS } }
             steps {
-                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                    sh './scripts/deploy.sh test "$MEMORYVAULT_ENV_FILE"'
+                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                    sh './scripts/deploy.sh test "$AIPHOTO_ENV_FILE"'
                 }
             }
             post {
                 always {
-                    sh 'docker image rm "memoryvault-backend-test:${RELEASE_TAG}" >/dev/null 2>&1 || true'
+                    sh 'docker image rm "aiphoto-backend-test:${RELEASE_TAG}" >/dev/null 2>&1 || true'
                 }
             }
         }
 
         stage('Build Images') {
             steps {
-                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                    sh './scripts/deploy.sh build "$MEMORYVAULT_ENV_FILE"'
+                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                    sh './scripts/deploy.sh build "$AIPHOTO_ENV_FILE"'
                 }
             }
         }
 
         stage('Deploy') {
             steps {
-                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                    sh './scripts/deploy.sh deploy "$MEMORYVAULT_ENV_FILE" "$PREVIOUS_IMAGES_FILE"'
+                withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                    sh './scripts/deploy.sh deploy "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE"'
                 }
             }
         }
@@ -113,20 +118,20 @@ pipeline {
 
     post {
         success {
-            withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                sh './scripts/deploy.sh cleanup "$MEMORYVAULT_ENV_FILE" || true'
+            withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                sh './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" || true'
             }
-            echo "MemoryVault ${env.RELEASE_TAG} 构建和部署成功。"
+            echo "aiphoto ${env.RELEASE_TAG} 构建和部署成功。"
         }
         failure {
             script {
                 if (fileExists(env.PREVIOUS_IMAGES_FILE)) {
-                    withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'MEMORYVAULT_ENV_FILE')]) {
-                        sh './scripts/rollback.sh "$MEMORYVAULT_ENV_FILE" "$PREVIOUS_IMAGES_FILE" || true'
+                    withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
+                        sh './scripts/rollback.sh "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE" || true'
                     }
                 }
             }
-            echo 'MemoryVault 构建或部署失败，已尝试自动回滚。'
+            echo 'aiphoto 构建或部署失败，已尝试自动回滚。'
         }
         // Declarative Pipeline 的 always 会先于 success/failure 执行；
         // cleanup 固定最后执行，避免提前删除部署清理和回滚所需的脚本与状态文件。

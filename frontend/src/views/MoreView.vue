@@ -49,7 +49,7 @@ const iconPaths: Record<string, string> = {
 
     <!-- App info -->
     <div class="app-info">
-      <p class="app-name">MemoryVault</p>
+      <p class="app-name">aiphoto</p>
       <p class="app-version">AI 智能相册</p>
     </div>
 

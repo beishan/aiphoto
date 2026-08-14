@@ -99,7 +99,7 @@ onMounted(loadStatus)
     <div class="favicon-heading">
       <div>
         <h2>网站图标</h2>
-        <p>设置浏览器标签页和收藏夹中显示的 MemoryVault 图标。</p>
+        <p>设置浏览器标签页和收藏夹中显示的 aiphoto 图标。</p>
       </div>
       <span class="favicon-status">{{ status.hasCustom ? '自定义' : '默认' }}</span>
     </div>

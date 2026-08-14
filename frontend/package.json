@@ -1,6 +1,6 @@
 {
-  "name": "memoryvault-frontend",
-  "version": "1.0.0",
+  "name": "aiphoto-frontend",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {

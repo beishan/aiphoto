@@ -252,7 +252,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
       <div class="color-layout">
         <div class="live-preview accent-preview" :style="{ '--preview-accent': accent }">
           <span class="preview-label">实时预览</span>
-          <div class="accent-window"><span class="accent-window-title">MemoryVault</span><el-button type="primary" size="small">主要操作</el-button><div class="accent-lines"><i></i><i></i><i></i></div></div>
+          <div class="accent-window"><span class="accent-window-title">aiphoto</span><el-button type="primary" size="small">主要操作</el-button><div class="accent-lines"><i></i><i></i><i></i></div></div>
         </div>
         <div class="color-controls">
           <div class="control-title"><strong>自定义颜色</strong><span>{{ currentThemeName }}</span></div>
@@ -277,7 +277,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
       </div>
       <div class="background-layout">
         <div class="live-preview surface-preview" :style="{ background: previewBackground }">
-          <div class="surface-window" :style="{ background: previewSurface }"><div class="surface-nav" :style="{ background: previewNav }"><b>MemoryVault</b><i></i><i></i></div><div class="surface-body"><span><b>让回忆更有温度</b><i></i></span><div><i></i><i></i><i></i></div></div></div>
+          <div class="surface-window" :style="{ background: previewSurface }"><div class="surface-nav" :style="{ background: previewNav }"><b>aiphoto</b><i></i><i></i></div><div class="surface-body"><span><b>让回忆更有温度</b><i></i></span><div><i></i><i></i><i></i></div></div></div>
           <span class="preview-label">实时预览</span>
         </div>
         <div class="surface-controls">

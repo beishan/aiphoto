@@ -68,7 +68,7 @@ const pageTitle = computed(() => {
   if (path === '/dedup') return '去重检测'
   if (path === '/settings') return '设置'
   if (path === '/folders') return '文件夹'
-  return 'MemoryVault'
+  return 'aiphoto'
 })
 
 function navigateTo(path: string) {

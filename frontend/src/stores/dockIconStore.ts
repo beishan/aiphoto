@@ -5,7 +5,7 @@ import type { DockIconName } from '@/components/DockIcon.vue'
 
 const ICON_NAMES: DockIconName[] = ['photo', 'timeline', 'tags', 'albums', 'baby', 'search', 'settings', 'trashEmpty', 'trashFull']
 const emptyUrls = () => Object.fromEntries(ICON_NAMES.map(name => [name, ''])) as Record<DockIconName, string>
-const CACHE_PREFIX = 'memoryvault:dock-icons:'
+const CACHE_PREFIX = 'aiphoto:dock-icons:'
 
 function currentUserCacheKey(): string | null {
   try {

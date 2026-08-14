@@ -1128,7 +1128,7 @@ async function loadSystemInfo() {
           <!-- App info -->
           <div class="panel-card">
             <div class="info-grid">
-              <div class="info-item"><span class="info-label">应用版本</span><span>{{ systemInfo.appName }} {{ systemInfo.appVersion }}</span></div>
+              <div class="info-item"><span class="info-label">系统版本</span><span>{{ systemInfo.appName }} v{{ systemInfo.appVersion }}</span></div>
               <div class="info-item"><span class="info-label">操作系统</span><span>{{ systemInfo.osName }} {{ systemInfo.osVersion }} ({{ systemInfo.osArch }})</span></div>
               <div class="info-item"><span class="info-label">Java 版本</span><span>{{ systemInfo.javaVersion }}</span></div>
               <div class="info-item"><span class="info-label">CPU 核心</span><span>{{ systemInfo.availableProcessors }} 核</span></div>

@@ -1,7 +1,11 @@
 services:
   frontend:
-    build: ./frontend
-    container_name: memoryvault-frontend
+    image: aiphoto-frontend:${APP_VERSION:-0.2.0}
+    build:
+      context: ./frontend
+      args:
+        APP_VERSION: ${APP_VERSION:-0.2.0}
+    container_name: aiphoto-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
     volumes:
@@ -11,11 +15,16 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./backend
-    container_name: memoryvault-backend
+    image: aiphoto-backend:${APP_VERSION:-0.2.0}
+    build:
+      context: ./backend
+      args:
+        APP_VERSION: ${APP_VERSION:-0.2.0}
+    container_name: aiphoto-backend
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
+      - APP_VERSION=${APP_VERSION:-0.2.0}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
       - SPRING_DATASOURCE_USERNAME=memoryvault
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-memoryvault}
@@ -33,8 +42,12 @@ services:
     restart: unless-stopped
 
   ai-service:
-    build: ./ai-service
-    container_name: memoryvault-ai
+    image: aiphoto-ai:${APP_VERSION:-0.2.0}
+    build:
+      context: ./ai-service
+      args:
+        APP_VERSION: ${APP_VERSION:-0.2.0}
+    container_name: aiphoto-ai
     ports:
       - "${AI_SERVICE_PORT:-8000}:8000"
     volumes:
@@ -48,6 +61,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     environment:
+      - APP_VERSION=${APP_VERSION:-0.2.0}
       - AI_MODEL_ROOT=/models
       # CPU/Docker Desktop defaults to one resident model to avoid memory exhaustion.
       # Set this to 3 on a NAS with sufficient NVIDIA GPU memory.
@@ -59,7 +73,7 @@ services:
 
   postgres:
     image: docker.m.daocloud.io/pgvector/pgvector:pg16
-    container_name: memoryvault-postgres
+    container_name: aiphoto-postgres
     environment:
       - POSTGRES_DB=memoryvault
       - POSTGRES_USER=memoryvault

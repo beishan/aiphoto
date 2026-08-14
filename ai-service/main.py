@@ -1,6 +1,7 @@
-"""MemoryVault AI Service - FastAPI application for AI inference."""
+"""aiphoto AI Service - FastAPI application for AI inference."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
@@ -27,9 +28,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="MemoryVault AI Service",
+    title="aiphoto AI Service",
     description="AI inference service for Chinese-CLIP, InsightFace, YOLOv8, and BLIP-2",
-    version="1.0.0",
+    version=os.getenv("APP_VERSION", "0.2.0"),
     lifespan=lifespan,
 )
 

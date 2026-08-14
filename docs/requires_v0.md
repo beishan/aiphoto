@@ -1,4 +1,4 @@
-# MemoryVault — AI 智能相册应用完整实现方案
+# aiphoto — AI 智能相册应用完整实现方案
 
 > Java Spring Boot 3 + Vue 3 + Python AI 微服务 | NAS Docker 部署 | NVIDIA RTX 2060 GPU 加速
 
@@ -25,7 +25,7 @@
 
 ## 1. 项目定位与命名
 
-**项目名：MemoryVault**（记忆保险库）
+**项目名：aiphoto**（记忆保险库）
 
 面向家庭 / 个人的私有化部署 AI 相册系统，运行于 NAS Docker 环境，支持 NVIDIA GPU 加速。核心价值主张：
 
@@ -320,10 +320,10 @@ CREATE INDEX ON photos (file_hash_phash);
 | NAS 目录 | 容器路径 | 说明 |
 |---------|---------|------|
 | `/volume1/photos` | `/data/photos` | 包含已有照片和视频的目录，只读 |
-| `/volume1/memoryvault/thumbs` | `/data/thumbs` | 缩略图缓存，读写 |
-| `/volume1/memoryvault/models` | `/data/models` | AI 模型文件，只读 |
-| `/volume1/memoryvault/postgres` | `/var/lib/postgresql/data` | PG 数据目录，读写 |
-| `/volume1/memoryvault/storage` | `/data` | 上传照片和缩略图，读写 |
+| `/volume1/aiphoto/thumbs` | `/data/thumbs` | 缩略图缓存，读写 |
+| `/volume1/aiphoto/models` | `/data/models` | AI 模型文件，只读 |
+| `/volume1/aiphoto/postgres` | `/var/lib/postgresql/data` | PG 数据目录，读写 |
+| `/volume1/aiphoto/storage` | `/data` | 上传照片和缩略图，读写 |
 
 ### 7.3 docker-compose.yml 关键片段
 
@@ -342,26 +342,26 @@ services:
 
   backend:
     build: ./backend
-    image: memoryvault-backend:latest
+    image: aiphoto-backend:0.2.0
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/aiphoto
       - AI_SERVICE_URL=http://ai-service:8000
       - STORAGE_PHOTOS_DIR=/data/photos
       - STORAGE_THUMBS_DIR=/data/thumbs
     volumes:
-      - /volume1/memoryvault/storage:/data
+      - /volume1/aiphoto/storage:/data
     depends_on:
       - postgres
 
   ai-service:
     build: ./ai-service
-    image: memoryvault-ai:latest
+    image: aiphoto-ai:0.2.0
     ports:
       - "8000:8000"
     volumes:
-      - /volume1/memoryvault/models:/data/models:ro
+      - /volume1/aiphoto/models:/data/models:ro
     deploy:
       resources:
         reservations:
@@ -376,11 +376,11 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      - POSTGRES_DB=memoryvault
-      - POSTGRES_USER=memoryvault
+      - POSTGRES_DB=aiphoto
+      - POSTGRES_USER=aiphoto
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
-      - /volume1/memoryvault/postgres:/var/lib/postgresql/data
+      - /volume1/aiphoto/postgres:/var/lib/postgresql/data
     shm_size: 256m
 
 ```
@@ -426,7 +426,7 @@ server {
 ## 8. 项目目录结构
 
 ```
-memoryvault/
+aiphoto/
 ├── docker-compose.yml          # Docker 服务编排配置
 ├── .env                        # 环境变量（密码、端口等）
 ├── nginx/
@@ -434,8 +434,8 @@ memoryvault/
 │
 ├── backend/                    # Java Spring Boot 项目
 │   ├── pom.xml
-│   └── src/main/java/com/memoryvault/
-│       ├── MemoryVaultApplication.java
+│   └── src/main/java/com/aiphoto/
+│       ├── AiphotoApplication.java
 │       ├── controller/         # REST API 控制器
 │       │   ├── PhotoController.java
 │       │   ├── AlbumController.java
@@ -622,7 +622,7 @@ memoryvault/
 
 ## 附录：AI 模型下载说明
 
-首次部署时需要下载以下模型文件到 `/volume1/memoryvault/models/` 目录：
+首次部署时需要下载以下模型文件到 `/volume1/aiphoto/models/` 目录：
 
 ```bash
 # CLIP 模型（约 600 MB）
@@ -643,4 +643,4 @@ memoryvault/
 
 ---
 
-*MemoryVault — 记忆保险库 | 为家庭打造永久投影仪*
+*aiphoto — 记忆保险库 | 为家庭打造永久投影仪*

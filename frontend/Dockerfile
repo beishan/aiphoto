@@ -12,6 +12,10 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM docker.m.daocloud.io/library/nginx:alpine
 
+ARG APP_VERSION=0.2.0
+LABEL org.opencontainers.image.title="aiphoto Frontend" \
+      org.opencontainers.image.version="${APP_VERSION}"
+
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 

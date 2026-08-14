@@ -6,15 +6,16 @@ x-logging: &default-logging
 
 services:
   postgres:
-    image: memoryvault-postgres:pg16
+    image: aiphoto-postgres:pg16
     build:
       context: ../backend
       dockerfile: ../docker/postgres.Dockerfile
       labels:
-        com.memoryvault.managed: "true"
-    container_name: memoryvault-postgres
+        com.aiphoto.managed: "true"
+    container_name: aiphoto-postgres
     restart: unless-stopped
     environment:
+      # 保留原数据库和用户标识，以便直接复用 NAS 上已有数据。
       POSTGRES_DB: memoryvault
       POSTGRES_USER: memoryvault
       POSTGRES_PASSWORD: ${DB_PASSWORD:?please configure DB_PASSWORD}
@@ -29,18 +30,21 @@ services:
       retries: 12
       start_period: 10s
     logging: *default-logging
-    networks: [memoryvault-network]
+    networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-memoryvault-ai:latest}
+    image: ${AI_IMAGE:-aiphoto-ai:0.2.0}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       labels:
-        com.memoryvault.managed: "true"
-    container_name: memoryvault-ai
+        com.aiphoto.managed: "true"
+    container_name: aiphoto-ai
     restart: unless-stopped
     environment:
+      APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       TZ: ${TZ:-Asia/Shanghai}
       CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-0}
       AI_MODEL_ROOT: /models
@@ -59,18 +63,21 @@ services:
       retries: 20
       start_period: 120s
     logging: *default-logging
-    networks: [memoryvault-network]
+    networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-memoryvault-backend:latest}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.2.0}
     build:
       context: ../backend
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       labels:
-        com.memoryvault.managed: "true"
-    container_name: memoryvault-backend
+        com.aiphoto.managed: "true"
+    container_name: aiphoto-backend
     restart: unless-stopped
     environment:
+      APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       TZ: ${TZ:-Asia/Shanghai}
       JAVA_TOOL_OPTIONS: -Duser.timezone=${TZ:-Asia/Shanghai}
       JAVA_OPTS: ${JAVA_OPTS:--Xms512m -Xmx2g}
@@ -111,16 +118,18 @@ services:
       retries: 18
       start_period: 60s
     logging: *default-logging
-    networks: [memoryvault-network]
+    networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-memoryvault-frontend:latest}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.2.0}
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
       labels:
-        com.memoryvault.managed: "true"
-    container_name: memoryvault-frontend
+        com.aiphoto.managed: "true"
+    container_name: aiphoto-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8391}:80"
@@ -132,14 +141,15 @@ services:
       timeout: 5s
       retries: 8
     logging: *default-logging
-    networks: [memoryvault-network]
+    networks: [aiphoto-network]
 
 volumes:
+  # 沿用原命名卷，避免品牌升级时创建空数据库。
   postgres_data: {name: memoryvault-postgres-data}
-  backups_data: {name: memoryvault-backups}
-  deploy_state: {name: memoryvault-deploy-state}
+  backups_data: {name: aiphoto-backups}
+  deploy_state: {name: aiphoto-deploy-state}
 
 networks:
-  memoryvault-network:
-    name: memoryvault-network
+  aiphoto-network:
+    name: aiphoto-network
     driver: bridge

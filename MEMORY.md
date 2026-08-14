@@ -1,4 +1,4 @@
-# MemoryVault Project Memory
+# aiphoto Project Memory
 
 ## Architecture Decisions
 

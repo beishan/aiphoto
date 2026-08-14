@@ -8,10 +8,10 @@ COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
 COMPOSE_GPU_FILE="${PROJECT_DIR}/docker/docker-compose.gpu.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
-STATE_FILE="${3:-${PROJECT_DIR}/.memoryvault-previous-images}"
-COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-memoryvault}"
-BACKUP_VOLUME="${BACKUP_VOLUME:-memoryvault-backups}"
-DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-memoryvault-deploy-state}"
+STATE_FILE="${3:-${PROJECT_DIR}/.aiphoto-previous-images}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aiphoto}"
+BACKUP_VOLUME="${BACKUP_VOLUME:-aiphoto-backups}"
+DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-aiphoto-deploy-state}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
@@ -56,7 +56,7 @@ gpu_enabled() {
 validate_configuration() {
     local key value
     local required=(
-        DB_PASSWORD JWT_SECRET PHOTO_LIBRARY_PATH AI_MODELS_PATH STORAGE_DATA_PATH
+        APP_VERSION DB_PASSWORD JWT_SECRET PHOTO_LIBRARY_PATH AI_MODELS_PATH STORAGE_DATA_PATH
     )
 
     for key in "${required[@]}"; do
@@ -83,6 +83,12 @@ validate_configuration() {
 
     if [[ ! "${IMAGE_RETENTION_COUNT}" =~ ^[1-9][0-9]*$ ]]; then
         echo "错误：IMAGE_RETENTION_COUNT 必须是大于 0 的整数。" >&2
+        return 1
+    fi
+
+    value="$(effective_value APP_VERSION)"
+    if [[ ! "${value}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "错误：APP_VERSION 必须使用语义化版本号（例如 0.2.0）：${value}" >&2
         return 1
     fi
 
@@ -118,9 +124,14 @@ container_health() {
 
 record_previous_images() {
     local backend_image frontend_image ai_image
-    backend_image="$(container_image memoryvault-backend)"
-    frontend_image="$(container_image memoryvault-frontend)"
-    ai_image="$(container_image memoryvault-ai)"
+    backend_image="$(container_image aiphoto-backend)"
+    frontend_image="$(container_image aiphoto-frontend)"
+    ai_image="$(container_image aiphoto-ai)"
+
+    # 首次品牌升级时，从旧容器读取上一版镜像，继续支持自动回滚。
+    [[ -n "${backend_image}" ]] || backend_image="$(container_image memoryvault-backend)"
+    [[ -n "${frontend_image}" ]] || frontend_image="$(container_image memoryvault-frontend)"
+    [[ -n "${ai_image}" ]] || ai_image="$(container_image memoryvault-ai)"
 
     {
         printf 'BACKEND_IMAGE=%q\n' "${backend_image}"
@@ -135,13 +146,16 @@ record_previous_images() {
 }
 
 backup_database() {
-    local backup_name postgres_status
-    if ! docker inspect memoryvault-postgres >/dev/null 2>&1; then
+    local backup_name postgres_container=aiphoto-postgres postgres_status
+    if ! docker inspect "${postgres_container}" >/dev/null 2>&1; then
+        postgres_container=memoryvault-postgres
+    fi
+    if ! docker inspect "${postgres_container}" >/dev/null 2>&1; then
         echo "PostgreSQL 容器尚未运行，跳过首次部署前备份。"
         return 0
     fi
 
-    postgres_status="$(docker inspect --format '{{.State.Status}}' memoryvault-postgres 2>/dev/null || true)"
+    postgres_status="$(docker inspect --format '{{.State.Status}}' "${postgres_container}" 2>/dev/null || true)"
     if [[ "${postgres_status}" == "created" ]]; then
         echo "PostgreSQL 容器只已创建但尚未启动，跳过首次部署前备份。"
         return 0
@@ -151,21 +165,41 @@ backup_database() {
         return 1
     fi
 
-    backup_name="memoryvault-$(date '+%Y%m%d-%H%M%S').dump"
+    backup_name="aiphoto-$(date '+%Y%m%d-%H%M%S').dump"
     docker volume create "${BACKUP_VOLUME}" >/dev/null
     echo "正在备份 PostgreSQL：${backup_name}"
-    docker exec memoryvault-postgres pg_dump -U memoryvault -d memoryvault -Fc |
+    docker exec "${postgres_container}" pg_dump -U memoryvault -d memoryvault -Fc |
         docker run --rm -i -v "${BACKUP_VOLUME}:/backups" alpine:3.20 \
             sh -c "cat > '/backups/${backup_name}'"
 
     docker run --rm -v "${BACKUP_VOLUME}:/backups" alpine:3.20 \
-        sh -c "ls -1t /backups/memoryvault-*.dump 2>/dev/null | awk 'NR > ${BACKUP_RETENTION_COUNT}' | while IFS= read -r file; do rm -f \"\$file\"; done"
+        sh -c "ls -1t /backups/aiphoto-*.dump 2>/dev/null | awk 'NR > ${BACKUP_RETENTION_COUNT}' | while IFS= read -r file; do rm -f \"\$file\"; done"
+}
+
+stop_legacy_containers() {
+    local container_name
+    for container_name in memoryvault-frontend memoryvault-backend memoryvault-ai memoryvault-postgres; do
+        if [[ "$(docker inspect --format '{{.State.Running}}' "${container_name}" 2>/dev/null || true)" == true ]]; then
+            echo "停止旧名称容器：${container_name}"
+            docker stop "${container_name}" >/dev/null
+        fi
+    done
+}
+
+remove_legacy_containers() {
+    local container_name
+    for container_name in memoryvault-frontend memoryvault-backend memoryvault-ai memoryvault-postgres; do
+        if docker inspect "${container_name}" >/dev/null 2>&1; then
+            echo "移除已迁移的旧名称容器：${container_name}"
+            docker rm "${container_name}" >/dev/null
+        fi
+    done
 }
 
 wait_for_containers() {
     local attempt container_name status all_healthy
     local containers=(
-        memoryvault-postgres memoryvault-ai memoryvault-backend memoryvault-frontend
+        aiphoto-postgres aiphoto-ai aiphoto-backend aiphoto-frontend
     )
 
     for ((attempt = 1; attempt <= HEALTH_RETRIES; attempt++)); do
@@ -186,9 +220,9 @@ persist_release_state() {
     local current_state_file
     current_state_file="$(mktemp)"
     {
-        printf 'BACKEND_IMAGE=%q\n' "$(container_image memoryvault-backend)"
-        printf 'FRONTEND_IMAGE=%q\n' "$(container_image memoryvault-frontend)"
-        printf 'AI_IMAGE=%q\n' "$(container_image memoryvault-ai)"
+        printf 'BACKEND_IMAGE=%q\n' "$(container_image aiphoto-backend)"
+        printf 'FRONTEND_IMAGE=%q\n' "$(container_image aiphoto-frontend)"
+        printf 'AI_IMAGE=%q\n' "$(container_image aiphoto-ai)"
     } > "${current_state_file}"
 
     docker volume create "${DEPLOY_STATE_VOLUME}" >/dev/null
@@ -249,20 +283,21 @@ cleanup_repository_images() {
 }
 
 cleanup_dangling_images() {
-    echo "清理 MemoryVault 悬空镜像。"
+    echo "清理 aiphoto 悬空镜像。"
     docker image prune --force \
-        --filter 'label=com.memoryvault.managed=true' >/dev/null 2>&1 || true
+        --filter 'label=com.aiphoto.managed=true' >/dev/null 2>&1 || true
 }
 
 deploy_release() {
     record_previous_images
     backup_database
+    stop_legacy_containers
     if gpu_enabled; then
         echo "AI 服务将使用 NVIDIA GPU 模式。"
     else
         echo "AI 服务将使用 CPU 模式。"
     fi
-    echo "正在更新 MemoryVault 服务。"
+    echo "正在更新 aiphoto 服务。"
     if ! compose up -d --remove-orphans; then
         compose logs --no-color --tail=300 || true
         rollback_from_state || true
@@ -274,7 +309,8 @@ deploy_release() {
         return 1
     fi
     persist_release_state
-    echo "MemoryVault 新版本部署成功。"
+    remove_legacy_containers
+    echo "aiphoto 新版本部署成功。"
 }
 
 validate_configuration
@@ -286,7 +322,7 @@ case "${ACTION}" in
         ;;
     test)
         docker build --file "${PROJECT_DIR}/backend/Dockerfile" --target test \
-            --tag "memoryvault-backend-test:${RELEASE_TAG:-local}" "${PROJECT_DIR}/backend"
+            --tag "aiphoto-backend-test:${RELEASE_TAG:-local}" "${PROJECT_DIR}/backend"
         ;;
     build)
         compose build postgres backend frontend ai-service
@@ -298,9 +334,9 @@ case "${ACTION}" in
         wait_for_containers
         ;;
     cleanup)
-        cleanup_repository_images memoryvault-backend "$(container_image memoryvault-backend)"
-        cleanup_repository_images memoryvault-frontend "$(container_image memoryvault-frontend)"
-        cleanup_repository_images memoryvault-ai "$(container_image memoryvault-ai)"
+        cleanup_repository_images aiphoto-backend "$(container_image aiphoto-backend)"
+        cleanup_repository_images aiphoto-frontend "$(container_image aiphoto-frontend)"
+        cleanup_repository_images aiphoto-ai "$(container_image aiphoto-ai)"
         cleanup_dangling_images
         ;;
     rollback)
