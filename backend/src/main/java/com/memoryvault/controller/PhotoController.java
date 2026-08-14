@@ -134,6 +134,26 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("restored", photoService.restoreAllTrash()));
     }
 
+    @PostMapping("/trash/batch-restore")
+    public ResponseEntity<Map<String, Integer>> restoreTrashByIds(@RequestBody List<Long> ids) {
+        return ResponseEntity.ok(Map.of("restored", photoService.restoreTrashByIds(ids)));
+    }
+
+    @DeleteMapping("/trash/batch")
+    public ResponseEntity<Map<String, Integer>> permanentDeleteTrashByIds(@RequestBody List<Long> ids) {
+        int success = 0;
+        int fail = 0;
+        for (Long id : ids) {
+            try {
+                photoService.permanentDeletePhoto(id);
+                success++;
+            } catch (Exception exception) {
+                fail++;
+            }
+        }
+        return ResponseEntity.ok(Map.of("success", success, "fail", fail));
+    }
+
     @DeleteMapping("/trash/{id}")
     public ResponseEntity<Void> permanentDeletePhoto(@PathVariable Long id) {
         photoService.permanentDeletePhoto(id);

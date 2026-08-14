@@ -88,5 +88,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("UPDATE Photo p SET p.deletedAt = NULL WHERE p.deletedAt IS NOT NULL")
     int restoreAllFromTrash();
 
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Photo p SET p.deletedAt = NULL WHERE p.deletedAt IS NOT NULL AND p.id IN :ids")
+    int restoreTrashByIds(@Param("ids") List<Long> ids);
+
     long countByDeletedAtIsNotNull();
 }

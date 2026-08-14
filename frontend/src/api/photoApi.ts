@@ -72,8 +72,20 @@ export const photoApi = {
     return response
   },
 
+  async restoreTrashByIds(ids: number[]) {
+    const response = await http.post<{ restored: number }>('/photos/trash/batch-restore', ids)
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
   async permanentDelete(id: number) {
     const response = await http.delete(`/photos/trash/${id}`)
+    window.dispatchEvent(new Event('trash-changed'))
+    return response
+  },
+
+  async permanentDeleteTrashByIds(ids: number[]) {
+    const response = await http.delete<{ success: number; fail: number }>('/photos/trash/batch', { data: ids })
     window.dispatchEvent(new Event('trash-changed'))
     return response
   },
