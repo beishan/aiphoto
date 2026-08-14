@@ -1,6 +1,6 @@
 FROM docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
 
-ARG APP_VERSION=0.2.1
+ARG APP_VERSION=0.2.2
 ENV APP_VERSION=${APP_VERSION}
 LABEL org.opencontainers.image.title="aiphoto AI Service" \
       org.opencontainers.image.version="${APP_VERSION}"

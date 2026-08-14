@@ -574,9 +574,19 @@ function getDockItemStyle(index: number) {
 
 .trash-popup {
   width: min(680px, calc(100vw - 32px));
+  min-height: min(480px, calc(100vh - 130px));
   max-height: calc(100vh - 130px);
+  overflow: auto;
   padding: 18px;
+  border-color: color-mix(in srgb, var(--text-primary) 16%, transparent);
   border-radius: 24px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, var(--text-primary) 12%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .42);
+  backdrop-filter: none;
+}
+
+.trash-popup::after {
+  border-top-color: color-mix(in srgb, var(--bg-primary) 88%, var(--text-primary) 12%);
 }
 
 .dock-icon {

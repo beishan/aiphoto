@@ -36,7 +36,7 @@ pipeline {
                 script {
                     def appVersion = readFile('VERSION').trim()
                     if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
-                        error("VERSION 必须使用语义化版本号（例如 0.2.1），当前值：${appVersion}")
+                        error("VERSION 必须使用语义化版本号（例如 0.2.2），当前值：${appVersion}")
                     }
                     def shortCommit = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
                     def subject = sh(script: 'git log -1 --pretty=%s', returnStdout: true).trim().replaceAll(/\s+/, ' ')

@@ -342,7 +342,7 @@ services:
 
   backend:
     build: ./backend
-    image: aiphoto-backend:0.2.1
+    image: aiphoto-backend:0.2.2
     ports:
       - "8080:8080"
     environment:
@@ -357,7 +357,7 @@ services:
 
   ai-service:
     build: ./ai-service
-    image: aiphoto-ai:0.2.1
+    image: aiphoto-ai:0.2.2
     ports:
       - "8000:8000"
     volumes:

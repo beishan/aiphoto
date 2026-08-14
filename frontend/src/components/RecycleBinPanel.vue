@@ -188,7 +188,7 @@ onMounted(loadTrash)
 
 <style scoped>
 .recycle-panel {
-  min-height: 180px;
+  min-height: 380px;
 }
 
 .trash-toolbar {
@@ -254,21 +254,21 @@ onMounted(loadTrash)
 }
 
 .trash-bulk-actions :deep(.el-button--primary.is-plain) {
-  --el-button-text-color: var(--accent);
-  --el-button-bg-color: color-mix(in srgb, var(--accent) 8%, transparent);
-  --el-button-border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-  --el-button-hover-text-color: var(--accent);
-  --el-button-hover-bg-color: color-mix(in srgb, var(--accent) 14%, transparent);
-  --el-button-hover-border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  --el-button-text-color: #fff;
+  --el-button-bg-color: var(--accent);
+  --el-button-border-color: var(--accent);
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: color-mix(in srgb, var(--accent) 84%, #000);
+  --el-button-hover-border-color: color-mix(in srgb, var(--accent) 84%, #000);
 }
 
 .trash-bulk-actions :deep(.el-button--danger.is-plain) {
-  --el-button-text-color: var(--danger);
-  --el-button-bg-color: color-mix(in srgb, var(--danger) 7%, transparent);
-  --el-button-border-color: color-mix(in srgb, var(--danger) 22%, transparent);
-  --el-button-hover-text-color: var(--danger);
-  --el-button-hover-bg-color: color-mix(in srgb, var(--danger) 13%, transparent);
-  --el-button-hover-border-color: color-mix(in srgb, var(--danger) 36%, transparent);
+  --el-button-text-color: #fff;
+  --el-button-bg-color: var(--danger);
+  --el-button-border-color: var(--danger);
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: color-mix(in srgb, var(--danger) 84%, #000);
+  --el-button-hover-border-color: color-mix(in srgb, var(--danger) 84%, #000);
 }
 
 .trash-bulk-actions :deep(.el-button.is-text) {
@@ -374,6 +374,7 @@ onMounted(loadTrash)
 }
 
 .trash-actions :deep(.el-button) {
+  min-width: 42px;
   height: 25px;
   margin-left: 0;
   padding: 0 6px;
@@ -382,11 +383,13 @@ onMounted(loadTrash)
 }
 
 .trash-actions :deep(.el-button--primary.is-text) {
-  color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }
 
 .trash-actions :deep(.el-button--danger.is-text) {
-  color: var(--danger);
+  background: var(--danger);
+  color: #fff;
 }
 
 .is-card {
@@ -434,10 +437,19 @@ onMounted(loadTrash)
   min-width: 0;
   height: 24px;
   padding: 0 6px;
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  border: 1px solid rgba(255, 255, 255, .7);
   box-shadow: none;
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
+}
+
+.is-card .trash-actions :deep(.el-button--primary.is-text) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.is-card .trash-actions :deep(.el-button--danger.is-text) {
+  background: var(--danger);
+  color: #fff;
 }
 
 .recycle-panel :deep(.el-pagination) {
@@ -454,6 +466,10 @@ onMounted(loadTrash)
 }
 
 @media (max-width: 620px) {
+  .recycle-panel {
+    min-height: 420px;
+  }
+
   .trash-toolbar {
     align-items: stretch;
     flex-direction: column;

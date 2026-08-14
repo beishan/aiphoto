@@ -33,7 +33,7 @@ spring:
       max-request-size: ${MODEL_UPLOAD_MAX_SIZE:8GB}
 
 app:
-  version: ${APP_VERSION:0.2.1}
+  version: ${APP_VERSION:0.2.2}
   ai-service-url: ${AI_SERVICE_URL:http://localhost:8000}
   ai-model-root: ${AI_MODEL_ROOT:/models}
   storage:
