@@ -173,11 +173,11 @@ const timelineItems = computed<TimelineItem[]>(() => {
   <div class="detail-view">
     <!-- Header with back button -->
     <div class="detail-header glass">
-      <el-button class="back-btn" @click="goBack">
+      <button class="back-btn" @click="goBack">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
         </svg>
-      </el-button>
+      </button>
       <div class="header-info">
         <h2>{{ category?.name || '分类' }}</h2>
         <span class="header-count">{{ totalElements }} 张照片</span>
@@ -223,7 +223,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
     <!-- Timeline rail -->
     <div v-if="timelineItems.length > 0" class="timeline-rail">
-      <el-button
+      <button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"
         class="timeline-item"
@@ -232,7 +232,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
       >
         <span class="timeline-dot"></span>
         <span class="timeline-label">{{ item.label }}</span>
-      </el-button>
+      </button>
     </div>
 
     <PhotoViewer

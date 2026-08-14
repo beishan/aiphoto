@@ -67,7 +67,7 @@ const albumTypeIcons: Record<string, string> = {
         <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
       </svg>
       <h3>暂无相册</h3>
-      <el-button class="create-btn" @click="showCreate = true">创建第一个相册</el-button>
+      <button class="create-btn" @click="showCreate = true">创建第一个相册</button>
     </div>
 
     <!-- Album grid -->
@@ -89,21 +89,21 @@ const albumTypeIcons: Record<string, string> = {
             <span class="album-name">{{ album.name }}</span>
             <span class="album-meta">{{ album.photoCount }} 张 {{ albumTypeLabels[album.type] }}</span>
           </div>
-          <el-button class="album-delete" @click="(e: MouseEvent) => handleDelete(album, e)">
+          <button class="album-delete" @click="(e) => handleDelete(album, e)">
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
-          </el-button>
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Create FAB -->
-    <el-button v-if="albumStore.albums.length > 0" class="fab-create" @click="showCreate = true">
+    <button v-if="albumStore.albums.length > 0" class="fab-create" @click="showCreate = true">
       <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
         <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
       </svg>
-    </el-button>
+    </button>
 
     <el-dialog v-model="showCreate" title="新建相册" width="460px" destroy-on-close class="mv-dialog">
       <el-form label-position="top">

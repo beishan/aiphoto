@@ -172,25 +172,25 @@ function getBboxStyle(bboxJson: string) {
     <!-- Header -->
     <div class="people-header">
       <div class="header-left">
-        <el-button class="refresh-btn" @click="handleRefresh" :disabled="refreshing" title="刷新">
+        <button class="refresh-btn" @click="handleRefresh" :disabled="refreshing" title="刷新">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" :class="{ spinning: refreshing }">
             <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
-        </el-button>
+        </button>
       </div>
       <div class="header-right">
-        <el-button v-if="people.length > 1" class="action-btn" @click="openMergeDialog" title="合并人物">
+        <button v-if="people.length > 1" class="action-btn" @click="openMergeDialog" title="合并人物">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M15 8c0-1.42-.5-2.73-1.33-3.76.42-.14.86-.24 1.33-.24 2.21 0 4 1.79 4 4s-1.79 4-4 4c-.47 0-.91-.1-1.33-.24C14.5 10.73 15 9.42 15 8zm5 8c-1.42 0-2.73.5-3.76 1.33.14.42.24.86.24 1.33 0 2.21-1.79 4-4 4s-4-1.79-4-4c0-.47.1-.91.24-1.33C7.5 16.5 6.58 17 5 17c-2.21 0-4-1.79-4-4s1.79-4 4-4c.47 0 .91.1 1.33.24C7.27 6.5 8.58 6 10 6c2.21 0 4 1.79 4 4s-1.79 4-4 4c-.47 0-.91-.1-1.33-.24C9.27 14.73 10.58 15.2 12 15.2c2.21 0 4-1.79 4-4 0-.47-.1-.91-.24-1.33C17.27 11.5 18.58 12 20 12c2.21 0 4-1.79 4-4s-1.79-4-4-4c-.47 0-.91.1-1.33.24C18.73 3.27 17.42 2.8 16 2.8c-2.21 0-4 1.79-4 4s1.79 4 4 4c.47 0 .91-.1 1.33-.24"/>
           </svg>
           合并
-        </el-button>
-        <el-button v-if="people.length > 1" class="action-btn" @click="handleRecluster" :disabled="reclustering">
+        </button>
+        <button v-if="people.length > 1" class="action-btn" @click="handleRecluster" :disabled="reclustering">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
           </svg>
           {{ reclustering ? '合并中...' : '自动合并' }}
-        </el-button>
+        </button>
       </div>
     </div>
 
@@ -248,11 +248,11 @@ function getBboxStyle(bboxJson: string) {
                 <img v-if="person.coverPhotoUrl" :src="person.coverPhotoUrl" alt="" />
                 <span v-else class="avatar-fallback">{{ person.name?.[0] || '?' }}</span>
               </div>
-              <el-button class="person-delete-btn" @click="confirmDelete($event, person)" title="删除">
+              <button class="person-delete-btn" @click="confirmDelete($event, person)" title="删除">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                   <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                 </svg>
-              </el-button>
+              </button>
             </div>
             <span class="person-name">{{ person.name || '未命名' }}</span>
             <span class="person-count">{{ person.photoCount }} 张</span>
@@ -291,7 +291,7 @@ function getBboxStyle(bboxJson: string) {
             <div class="modal-body">
               <p class="assign-hint">选择此人脸所属的人物：</p>
               <div class="assign-list">
-                <el-button
+                <button
                   v-for="person in people"
                   :key="person.id"
                   class="assign-item"
@@ -303,7 +303,7 @@ function getBboxStyle(bboxJson: string) {
                   </div>
                   <span class="assign-name">{{ person.name || '未命名' }}</span>
                   <span class="assign-count">{{ person.photoCount }} 张</span>
-                </el-button>
+                </button>
                 <div v-if="people.length === 0" class="assign-empty">
                   暂无已命名人物，请先创建人物
                 </div>

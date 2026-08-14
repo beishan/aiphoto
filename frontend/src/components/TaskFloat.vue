@@ -47,7 +47,7 @@ function getTypeLabel(type: string) {
   <div class="task-float-wrapper">
     <el-popover v-model:visible="expanded" placement="bottom-start" :width="320" trigger="click" popper-class="mv-system-popover">
       <template #reference>
-        <el-button class="task-float-btn" :class="{ active: taskStore.hasActiveTasks }" aria-label="系统任务通知">
+        <button class="task-float-btn" :class="{ active: taskStore.hasActiveTasks }" aria-label="系统任务通知">
           <!-- Idle: list icon -->
           <svg v-if="!taskStore.hasActiveTasks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" width="20" height="20">
             <rect x="4" y="3" width="16" height="18" rx="2"/>
@@ -63,17 +63,17 @@ function getTypeLabel(type: string) {
             <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
           </svg>
           <span v-if="taskStore.activeCount > 0" class="task-badge">{{ taskStore.activeCount }}</span>
-        </el-button>
+        </button>
       </template>
 
       <div class="task-panel">
         <div class="panel-header">
           <span class="panel-title">任务进度</span>
-          <el-button class="panel-close" @click="expanded = false">
+          <button class="panel-close" @click="expanded = false">
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
               <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
             </svg>
-          </el-button>
+          </button>
         </div>
 
         <div v-if="allTasks.length === 0" class="panel-empty">

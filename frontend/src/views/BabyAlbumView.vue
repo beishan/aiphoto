@@ -47,11 +47,11 @@ function openViewer(photos: Photo[], index: number) {
   <div class="baby-view">
     <!-- Back to albums -->
     <div class="baby-header">
-      <el-button class="back-btn" @click="router.push('/albums')">
+      <button class="back-btn" @click="router.push('/albums')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </el-button>
+      </button>
       <h2>宝宝相册</h2>
       <el-select
         v-if="albums.length > 0"
@@ -70,7 +70,7 @@ function openViewer(photos: Photo[], index: number) {
       </svg>
       <h3>暂无宝宝相册</h3>
       <p>请先创建一个宝宝类型的相册</p>
-      <el-button class="create-btn" @click="router.push('/albums')">去创建</el-button>
+      <button class="create-btn" @click="router.push('/albums')">去创建</button>
     </div>
 
     <!-- Timeline -->

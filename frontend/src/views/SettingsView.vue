@@ -682,7 +682,7 @@ async function loadSystemInfo() {
         <nav class="settings-nav" aria-label="设置导航">
           <div v-for="group in navGroups" :key="group.label" class="settings-nav-group">
             <div class="settings-nav-title">{{ group.label }}</div>
-            <el-button
+            <button
               v-for="item in group.items"
               :key="item.key"
               type="button"
@@ -693,7 +693,7 @@ async function loadSystemInfo() {
             >
               <span class="settings-nav-icon">{{ item.icon }}</span>
               <span>{{ item.label }}</span>
-            </el-button>
+            </button>
           </div>
         </nav>
 
@@ -780,10 +780,10 @@ async function loadSystemInfo() {
                 <span class="folder-status" :class="f.scanStatus.toLowerCase()">{{ f.scanStatus }}</span>
               </div>
               <div class="folder-actions">
-                <el-button class="action-link" @click="toggleFolderEnabled(f.id)">{{ f.enabled ? '禁用' : '启用' }}</el-button>
-                <el-button class="action-link" @click="toggleFolderHidden(f.id)">{{ f.hidden ? '显示' : '隐藏' }}</el-button>
-                <el-button class="action-link" @click="scanFolder(f.id)">扫描</el-button>
-                <el-button class="action-link danger" @click="deleteFolder(f.id, f.name)">删除</el-button>
+                <button class="action-link" @click="toggleFolderEnabled(f.id)">{{ f.enabled ? '禁用' : '启用' }}</button>
+                <button class="action-link" @click="toggleFolderHidden(f.id)">{{ f.hidden ? '显示' : '隐藏' }}</button>
+                <button class="action-link" @click="scanFolder(f.id)">扫描</button>
+                <button class="action-link danger" @click="deleteFolder(f.id, f.name)">删除</button>
               </div>
             </div>
             <div class="folder-info-grid">
@@ -813,12 +813,12 @@ async function loadSystemInfo() {
 
           <!-- Tab switcher -->
           <div class="model-tab-bar">
-            <el-button class="model-tab" :class="{ active: modelViewMode === 'local' }" @click="modelViewMode = 'local'">本地模型</el-button>
-            <el-button class="model-tab" :class="{ active: modelViewMode === 'online' }" @click="modelViewMode = 'online'">在线下载</el-button>
-            <el-button class="model-tab" :class="{ active: modelViewMode === 'downloads' }" @click="modelViewMode = 'downloads'">
+            <button class="model-tab" :class="{ active: modelViewMode === 'local' }" @click="modelViewMode = 'local'">本地模型</button>
+            <button class="model-tab" :class="{ active: modelViewMode === 'online' }" @click="modelViewMode = 'online'">在线下载</button>
+            <button class="model-tab" :class="{ active: modelViewMode === 'downloads' }" @click="modelViewMode = 'downloads'">
               下载任务
               <span v-if="downloadTasks.length > 0" class="tab-count-badge">{{ downloadTasks.length }}</span>
-            </el-button>
+            </button>
           </div>
 
           <!-- Local Models Tab -->
@@ -886,9 +886,9 @@ async function loadSystemInfo() {
                     <span>{{ formatSize(getActiveDownloadForModel(om.id)!.downloadedSize) }} / {{ formatSize(getActiveDownloadForModel(om.id)!.totalSize) }}</span>
                   </div>
                   <div class="download-progress-actions">
-                    <el-button v-if="getActiveDownloadForModel(om.id)!.status === 'DOWNLOADING' || getActiveDownloadForModel(om.id)!.status === 'PENDING'" class="action-link" @click="pauseDownload(getActiveDownloadForModel(om.id)!.taskId)">暂停</el-button>
-                    <el-button v-if="getActiveDownloadForModel(om.id)!.status === 'PAUSED'" class="action-link" @click="resumeDownload(getActiveDownloadForModel(om.id)!.taskId)">继续</el-button>
-                    <el-button class="action-link danger" @click="cancelDownload(getActiveDownloadForModel(om.id)!.taskId)">取消</el-button>
+                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'DOWNLOADING' || getActiveDownloadForModel(om.id)!.status === 'PENDING'" class="action-link" @click="pauseDownload(getActiveDownloadForModel(om.id)!.taskId)">暂停</button>
+                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'PAUSED'" class="action-link" @click="resumeDownload(getActiveDownloadForModel(om.id)!.taskId)">继续</button>
+                    <button class="action-link danger" @click="cancelDownload(getActiveDownloadForModel(om.id)!.taskId)">取消</button>
                   </div>
                 </div>
                 <!-- Download button -->
@@ -922,11 +922,11 @@ async function loadSystemInfo() {
               </div>
               <div v-if="task.errorMessage" class="download-error-msg">{{ task.errorMessage }}</div>
               <div class="download-task-actions">
-                <el-button v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="action-link" @click="pauseDownload(task.taskId)">暂停</el-button>
-                <el-button v-if="task.status === 'PAUSED'" class="action-link" @click="resumeDownload(task.taskId)">继续</el-button>
-                <el-button v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="action-link" @click="retryDownload(task.taskId)">重试</el-button>
-                <el-button v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="action-link danger" @click="cancelDownload(task.taskId)">取消</el-button>
-                <el-button v-if="task.status === 'COMPLETED'" class="action-link" @click="setCurrentModel(task.taskId)">设为当前模型</el-button>
+                <button v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="action-link" @click="pauseDownload(task.taskId)">暂停</button>
+                <button v-if="task.status === 'PAUSED'" class="action-link" @click="resumeDownload(task.taskId)">继续</button>
+                <button v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="action-link" @click="retryDownload(task.taskId)">重试</button>
+                <button v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="action-link danger" @click="cancelDownload(task.taskId)">取消</button>
+                <button v-if="task.status === 'COMPLETED'" class="action-link" @click="setCurrentModel(task.taskId)">设为当前模型</button>
               </div>
             </div>
           </div>
@@ -945,17 +945,17 @@ async function loadSystemInfo() {
               <span v-if="t.description" class="tag-desc-text">{{ t.description }}</span>
               <span class="tag-photo-count">{{ t.photoCount }} 张</span>
               <div class="tag-color-picker">
-                <el-button
+                <button
                   v-for="c in presetColors"
                   :key="c"
                   class="color-swatch"
                   :class="{ active: t.color === c }"
                   :style="{ background: c }"
                   @click="updateTagColor(t, c)"
-                ></el-button>
+                ></button>
               </div>
-              <el-button class="action-link" @click="openEditTagDialog(t)">编辑</el-button>
-              <el-button class="action-link danger" @click="deleteTag(t.id, t.name, t.photoCount)">删除</el-button>
+              <button class="action-link" @click="openEditTagDialog(t)">编辑</button>
+              <button class="action-link danger" @click="deleteTag(t.id, t.name, t.photoCount)">删除</button>
             </div>
             <div v-if="tags.length === 0" class="empty-text">暂无标签</div>
           </div>
@@ -1025,10 +1025,10 @@ async function loadSystemInfo() {
           </div>
           <!-- Filter tabs -->
           <div class="task-filter-bar">
-            <el-button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="taskFilter = 'all'">全部</el-button>
-            <el-button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="taskFilter = 'running'">运行中</el-button>
-            <el-button class="task-filter-btn" :class="{ active: taskFilter === 'completed' }" @click="taskFilter = 'completed'">已完成</el-button>
-            <el-button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="taskFilter = 'failed'">失败</el-button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="taskFilter = 'all'">全部</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="taskFilter = 'running'">运行中</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'completed' }" @click="taskFilter = 'completed'">已完成</button>
+            <button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="taskFilter = 'failed'">失败</button>
           </div>
           <div v-if="filteredTasks.length === 0" class="empty-text">暂无任务记录</div>
           <div v-for="t in filteredTasks" :key="t.id" class="panel-card task-log-card">
@@ -1207,7 +1207,7 @@ async function loadSystemInfo() {
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="newTag.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="newTag.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
-        <el-form-item label="颜色"><el-color-picker v-model="newTag.color" /><div class="color-picker-row"><el-button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: newTag.color === c }" :style="{ background: c }" @click="newTag.color = c"></el-button></div></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="newTag.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: newTag.color === c }" :style="{ background: c }" @click="newTag.color = c"></button></div></el-form-item>
       </el-form>
       <template #footer><el-button @click="showTagDialog = false">取消</el-button><el-button type="primary" @click="createTag">创建</el-button></template>
     </el-dialog>
@@ -1255,7 +1255,7 @@ async function loadSystemInfo() {
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="editTagData.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="editTagData.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
-        <el-form-item label="颜色"><el-color-picker v-model="editTagData.color" /><div class="color-picker-row"><el-button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: editTagData.color === c }" :style="{ background: c }" @click="editTagData.color = c"></el-button></div></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="editTagData.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: editTagData.color === c }" :style="{ background: c }" @click="editTagData.color = c"></button></div></el-form-item>
       </el-form>
       <template #footer><el-button @click="showEditTagDialog = false">取消</el-button><el-button type="primary" @click="saveEditedTag">保存</el-button></template>
     </el-dialog>

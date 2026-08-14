@@ -238,7 +238,7 @@ onBeforeUnmount(clearImage)
               <h2 id="crop-dialog-title">{{ title }}</h2>
               <p>{{ tip }}</p>
             </div>
-            <el-button class="crop-close" native-type="button" aria-label="关闭图片编辑器" :disabled="uploading" @click="closeDialog">×</el-button>
+            <button class="crop-close" type="button" aria-label="关闭图片编辑器" :disabled="uploading" @click="closeDialog">×</button>
           </header>
 
           <div class="crop-body">
@@ -274,12 +274,12 @@ onBeforeUnmount(clearImage)
               <div class="zoom-control">
                 <div class="zoom-label"><label for="image-zoom">缩放</label><output for="image-zoom">{{ zoomPercent }}%</output></div>
                 <div class="zoom-row">
-                  <el-button native-type="button" aria-label="缩小图片" :disabled="zoom <= MIN_ZOOM" @click="adjustZoom(-0.1)">−</el-button>
+                  <button type="button" aria-label="缩小图片" :disabled="zoom <= MIN_ZOOM" @click="adjustZoom(-0.1)">−</button>
                   <input id="image-zoom" v-model.number="zoom" type="range" :min="MIN_ZOOM" :max="MAX_ZOOM" step="0.01" @input="updateZoom" />
-                  <el-button native-type="button" aria-label="放大图片" :disabled="zoom >= MAX_ZOOM" @click="adjustZoom(0.1)">+</el-button>
+                  <button type="button" aria-label="放大图片" :disabled="zoom >= MAX_ZOOM" @click="adjustZoom(0.1)">+</button>
                 </div>
               </div>
-              <el-button class="reset-crop" native-type="button" @click="resetCrop">居中并重置缩放</el-button>
+              <button class="reset-crop" type="button" @click="resetCrop">居中并重置缩放</button>
             </aside>
           </div>
 

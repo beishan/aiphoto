@@ -106,11 +106,11 @@ const groupedNodes = computed(() => {
     <div class="timeline-layout" :class="{ 'is-empty': !loading && timelineNodes.length === 0 }">
       <!-- Left timeline axis -->
       <aside class="timeline-axis">
-        <el-button class="scroll-top-btn" @click="scrollToTop" title="返回顶部">
+        <button class="scroll-top-btn" @click="scrollToTop" title="返回顶部">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
           </svg>
-        </el-button>
+        </button>
         <div class="axis-line"></div>
         <div
           v-for="(nodes, year) in groupedNodes"

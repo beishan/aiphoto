@@ -81,43 +81,43 @@ function formatSize(bytes: number | null) {
 <template>
   <div class="dedup-view">
     <div class="page-header">
-      <el-button class="back-btn" @click="router.push('/more')">
+      <button class="back-btn" @click="router.push('/more')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </el-button>
+      </button>
       <h1 class="page-title">去重检测</h1>
     </div>
 
     <!-- Scan button -->
     <div class="scan-section">
-      <el-button class="scan-btn" @click="scan" :disabled="loading">
+      <button class="scan-btn" @click="scan" :disabled="loading">
         <svg v-if="!loading" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
         </svg>
         <div v-else class="scan-spinner"></div>
         {{ loading ? '扫描中...' : '扫描重复照片' }}
-      </el-button>
+      </button>
     </div>
 
     <!-- Tabs -->
     <div v-if="scanned && !loading" class="dedup-tabs">
-      <el-button
+      <button
         class="tab-btn"
         :class="{ active: activeTab === 'exact' }"
         @click="activeTab = 'exact'"
       >
         精确重复
         <span class="tab-badge" v-if="exactGroups.length">{{ exactGroups.length }}</span>
-      </el-button>
-      <el-button
+      </button>
+      <button
         class="tab-btn"
         :class="{ active: activeTab === 'similar' }"
         @click="activeTab = 'similar'"
       >
         相似照片
         <span class="tab-badge" v-if="similarGroups.length">{{ similarGroups.length }}</span>
-      </el-button>
+      </button>
     </div>
 
     <!-- Results -->
@@ -145,11 +145,11 @@ function formatSize(bytes: number | null) {
               @click="openGroup(group, pi)"
             >
               <img :src="photo.thumbnailUrl || undefined" :alt="photo.originalFilename || ''" />
-              <el-button class="delete-btn" @click.stop="deletePhoto(gi, pi)" title="删除">
+              <button class="delete-btn" @click.stop="deletePhoto(gi, pi)" title="删除">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                   <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
                 </svg>
-              </el-button>
+              </button>
             </div>
           </div>
         </div>

@@ -72,27 +72,6 @@
   --text-on-page-bg: var(--text-primary);
   --text-on-page-bg-secondary: var(--text-secondary);
   --text-on-page-bg-shadow: none;
-  --el-color-primary: var(--accent);
-  --el-color-success: var(--success);
-  --el-color-warning: var(--warning);
-  --el-color-danger: var(--danger);
-  --el-bg-color: var(--bg-secondary);
-  --el-bg-color-page: var(--bg-primary);
-  --el-bg-color-overlay: var(--surface-elevated);
-  --el-fill-color-blank: var(--bg-card);
-  --el-fill-color: var(--bg-tertiary);
-  --el-fill-color-light: #242426;
-  --el-fill-color-lighter: #202022;
-  --el-fill-color-extra-light: #1e1e20;
-  --el-fill-color-dark: #343437;
-  --el-border-color: var(--border);
-  --el-border-color-light: var(--separator);
-  --el-border-color-lighter: #303033;
-  --el-text-color-primary: var(--text-primary);
-  --el-text-color-regular: #e5e5ea;
-  --el-text-color-secondary: var(--text-secondary);
-  --el-text-color-placeholder: var(--text-tertiary);
-  --el-mask-color: rgba(0, 0, 0, .72);
 }
 
 /* Light theme */
@@ -132,27 +111,6 @@
   --text-on-page-bg: var(--text-primary);
   --text-on-page-bg-secondary: var(--text-secondary);
   --text-on-page-bg-shadow: none;
-  --el-color-primary: var(--accent);
-  --el-color-success: var(--success);
-  --el-color-warning: var(--warning);
-  --el-color-danger: var(--danger);
-  --el-bg-color: var(--bg-secondary);
-  --el-bg-color-page: var(--bg-primary);
-  --el-bg-color-overlay: var(--surface-elevated);
-  --el-fill-color-blank: var(--bg-card);
-  --el-fill-color: var(--bg-tertiary);
-  --el-fill-color-light: #f2f2f7;
-  --el-fill-color-lighter: #f7f7fa;
-  --el-fill-color-extra-light: #fafafd;
-  --el-fill-color-dark: #d8d8dc;
-  --el-border-color: var(--border);
-  --el-border-color-light: var(--separator);
-  --el-border-color-lighter: #dedee3;
-  --el-text-color-primary: var(--text-primary);
-  --el-text-color-regular: #303033;
-  --el-text-color-secondary: var(--text-secondary);
-  --el-text-color-placeholder: var(--text-tertiary);
-  --el-mask-color: rgba(0, 0, 0, .48);
 }
 
 /* MACOS26 - Liquid Glass system theme */
@@ -196,27 +154,6 @@
   --text-on-page-bg: var(--text-primary);
   --text-on-page-bg-secondary: var(--text-secondary);
   --text-on-page-bg-shadow: 0 1px 1px rgba(255, 255, 255, .65);
-  --el-color-primary: var(--accent);
-  --el-color-success: var(--success);
-  --el-color-warning: var(--warning);
-  --el-color-danger: var(--danger);
-  --el-bg-color: rgba(255, 255, 255, .58);
-  --el-bg-color-page: var(--bg-primary);
-  --el-bg-color-overlay: rgba(248, 252, 255, .88);
-  --el-fill-color-blank: rgba(255, 255, 255, .62);
-  --el-fill-color: rgba(255, 255, 255, .48);
-  --el-fill-color-light: rgba(255, 255, 255, .38);
-  --el-fill-color-lighter: rgba(255, 255, 255, .3);
-  --el-fill-color-extra-light: rgba(255, 255, 255, .24);
-  --el-fill-color-dark: rgba(96, 116, 150, .2);
-  --el-border-color: rgba(91, 111, 148, .28);
-  --el-border-color-light: var(--separator);
-  --el-border-color-lighter: rgba(91, 111, 148, .14);
-  --el-text-color-primary: var(--text-primary);
-  --el-text-color-regular: #27354b;
-  --el-text-color-secondary: var(--text-secondary);
-  --el-text-color-placeholder: var(--text-tertiary);
-  --el-mask-color: rgba(38, 54, 78, .28);
 }
 
 * {
@@ -297,41 +234,13 @@ code, pre {
   opacity: 0;
 }
 
-/* Native reset shared by native and Element Plus button roots. */
-button:not(.el-button) {
+/* iOS-style button reset */
+button {
   font-family: inherit;
   cursor: pointer;
   border: none;
   background: none;
   color: inherit;
-}
-
-.el-button {
-  font-family: inherit;
-  font-weight: 600;
-}
-
-/* ElButton wraps its default slot. Flatten that wrapper so the established
-   icon/card/grid button layouts keep their original geometry after migration. */
-.el-button > span {
-  display: contents !important;
-}
-
-.el-button:not([class*="el-button--"]):not(.is-link):not(.is-text) {
-  --el-button-text-color: var(--text-primary);
-  --el-button-bg-color: var(--bg-card);
-  --el-button-border-color: var(--separator);
-  --el-button-hover-text-color: var(--accent);
-  --el-button-hover-bg-color: var(--bg-tertiary);
-  --el-button-hover-border-color: var(--accent);
-  --el-button-active-text-color: var(--accent);
-  --el-button-active-bg-color: var(--bg-tertiary);
-  --el-button-active-border-color: var(--accent);
-}
-
-.el-button.is-link,
-.el-button.is-text {
-  font-weight: 650;
 }
 
 /* Photo grid compact - columns controlled by GalleryView */

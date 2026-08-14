@@ -90,16 +90,16 @@ function openViewer(photos: Photo[], index: number) {
         <el-option value="count" label="按照片数" />
       </el-select>
       <div class="view-toggle">
-        <el-button class="view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
+        <button class="view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zM13 3h8v8h-8V3zm0 10h8v8h-8v-8z" />
           </svg>
-        </el-button>
-        <el-button class="view-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">
+        </button>
+        <button class="view-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h18v2H3v-2z" />
           </svg>
-        </el-button>
+        </button>
       </div>
     </div>
 
