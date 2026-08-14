@@ -22,7 +22,8 @@ pipeline {
     environment {
         APP_NAME = 'aiphoto'
         COMPOSE_PROJECT_NAME = 'aiphoto'
-        PRODUCTION_ENV_CREDENTIAL_ID = 'aiphoto-production-env'
+        // Jenkins 外部凭据沿用原 ID，避免品牌升级要求人工迁移密钥。
+        PRODUCTION_ENV_CREDENTIAL_ID = 'memoryvault-production-env'
         PREVIOUS_IMAGES_FILE = '.aiphoto-previous-images'
         // 保留当前版和上一版，确保仍可自动回滚。
         IMAGE_RETENTION_COUNT = '2'
@@ -35,7 +36,7 @@ pipeline {
                 script {
                     def appVersion = readFile('VERSION').trim()
                     if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
-                        error("VERSION 必须使用语义化版本号（例如 0.2.0），当前值：${appVersion}")
+                        error("VERSION 必须使用语义化版本号（例如 0.2.1），当前值：${appVersion}")
                     }
                     def shortCommit = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
                     def subject = sh(script: 'git log -1 --pretty=%s', returnStdout: true).trim().replaceAll(/\s+/, ' ')

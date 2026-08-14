@@ -12,7 +12,7 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM docker.m.daocloud.io/library/nginx:alpine
 
-ARG APP_VERSION=0.2.0
+ARG APP_VERSION=0.2.1
 LABEL org.opencontainers.image.title="aiphoto Frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 

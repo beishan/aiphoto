@@ -1,10 +1,10 @@
 services:
   frontend:
-    image: aiphoto-frontend:${APP_VERSION:-0.2.0}
+    image: aiphoto-frontend:${APP_VERSION:-0.2.1}
     build:
       context: ./frontend
       args:
-        APP_VERSION: ${APP_VERSION:-0.2.0}
+        APP_VERSION: ${APP_VERSION:-0.2.1}
     container_name: aiphoto-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
@@ -15,16 +15,16 @@ services:
     restart: unless-stopped
 
   backend:
-    image: aiphoto-backend:${APP_VERSION:-0.2.0}
+    image: aiphoto-backend:${APP_VERSION:-0.2.1}
     build:
       context: ./backend
       args:
-        APP_VERSION: ${APP_VERSION:-0.2.0}
+        APP_VERSION: ${APP_VERSION:-0.2.1}
     container_name: aiphoto-backend
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
-      - APP_VERSION=${APP_VERSION:-0.2.0}
+      - APP_VERSION=${APP_VERSION:-0.2.1}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
       - SPRING_DATASOURCE_USERNAME=memoryvault
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-memoryvault}
@@ -42,11 +42,11 @@ services:
     restart: unless-stopped
 
   ai-service:
-    image: aiphoto-ai:${APP_VERSION:-0.2.0}
+    image: aiphoto-ai:${APP_VERSION:-0.2.1}
     build:
       context: ./ai-service
       args:
-        APP_VERSION: ${APP_VERSION:-0.2.0}
+        APP_VERSION: ${APP_VERSION:-0.2.1}
     container_name: aiphoto-ai
     ports:
       - "${AI_SERVICE_PORT:-8000}:8000"
@@ -61,7 +61,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     environment:
-      - APP_VERSION=${APP_VERSION:-0.2.0}
+      - APP_VERSION=${APP_VERSION:-0.2.1}
       - AI_MODEL_ROOT=/models
       # CPU/Docker Desktop defaults to one resident model to avoid memory exhaustion.
       # Set this to 3 on a NAS with sufficient NVIDIA GPU memory.

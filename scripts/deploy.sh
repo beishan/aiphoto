@@ -88,7 +88,7 @@ validate_configuration() {
 
     value="$(effective_value APP_VERSION)"
     if [[ ! "${value}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "错误：APP_VERSION 必须使用语义化版本号（例如 0.2.0）：${value}" >&2
+        echo "错误：APP_VERSION 必须使用语义化版本号（例如 0.2.1）：${value}" >&2
         return 1
     fi
 

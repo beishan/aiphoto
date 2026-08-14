@@ -69,7 +69,7 @@ insightface/models/buffalo_l/
 2. 替换全部密码。JWT 密钥可用
    `openssl rand -base64 48` 生成。
 3. Jenkins 中新建 `Secret file` 凭据，ID 必须是
-   `aiphoto-production-env`。
+   `memoryvault-production-env`（兼容既有 Jenkins 凭据，无需重新上传密钥）。
 
 照片库、AI 模型根目录和本地存储目录可保留示例文件中的默认值，部署时会由
 Jenkins 构建参数中的同名值覆盖。
