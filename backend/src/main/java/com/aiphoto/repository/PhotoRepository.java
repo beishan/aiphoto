@@ -52,6 +52,12 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.fileHashMd5 = :hash")
     Optional<Photo> findByFileHashMd5(@Param("hash") String hash);
 
+    @Query("SELECT p FROM Photo p WHERE p.fileHashMd5 IN :hashes")
+    List<Photo> findByFileHashMd5InIncludingTrash(@Param("hashes") List<String> hashes);
+
+    @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:hash))", nativeQuery = true)
+    void lockFileHash(@Param("hash") String hash);
+
     @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND embedding <=> CAST(:query_vector AS vector) < :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
     List<Photo> findByVectorSimilarity(@Param("query_vector") String queryVector, @Param("threshold") double threshold, @Param("limit") int limit);
 
@@ -80,6 +86,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
 
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NOT NULL ORDER BY p.deletedAt DESC")
     Page<Photo> findTrash(Pageable pageable);
+
+    @Query("SELECT p.id FROM Photo p WHERE p.deletedAt IS NOT NULL ORDER BY p.deletedAt DESC")
+    List<Long> findTrashIds();
 
     @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NOT NULL")
     Optional<Photo> findTrashById(@Param("id") Long id);

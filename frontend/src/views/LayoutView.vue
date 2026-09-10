@@ -35,6 +35,7 @@ const tabs: Array<{ path: string; name: string; label: string; dockIcon: DockIco
   { path: '/albums', name: 'Albums', label: '相册', dockIcon: 'albums' },
   { path: '/baby', name: 'Baby', label: '宝宝', dockIcon: 'baby' },
   { path: '/search', name: 'Search', label: '搜索', dockIcon: 'search' },
+  { path: '/crawler', name: 'Crawler', label: '网络采集', dockIcon: 'crawler' },
   { path: '/settings', name: 'Settings', label: '设置', dockIcon: 'settings' },
 ]
 
@@ -64,6 +65,7 @@ const pageTitle = computed(() => {
   if (path.startsWith('/categories')) return '分类'
   if (path.startsWith('/people')) return '人物'
   if (path === '/search') return '搜索'
+  if (path === '/crawler') return '网络采集'
   if (path === '/favorites') return '喜欢'
   if (path === '/dedup') return '去重检测'
   if (path === '/settings') return '设置'

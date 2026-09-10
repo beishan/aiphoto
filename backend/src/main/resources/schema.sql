@@ -258,6 +258,197 @@ CREATE INDEX IF NOT EXISTS idx_tags_sort_order ON tags (sort_order);
 -- Migration: Add category column to tags table (idempotent)
 ALTER TABLE tags ADD COLUMN IF NOT EXISTS category VARCHAR(50);
 
+-- Web crawler rules and staging area
+CREATE TABLE IF NOT EXISTS crawler_settings (
+    id BIGINT PRIMARY KEY,
+    direct_fallback BOOLEAN NOT NULL DEFAULT TRUE,
+    connect_timeout_seconds INTEGER NOT NULL DEFAULT 10,
+    request_timeout_seconds INTEGER NOT NULL DEFAULT 30,
+    min_request_interval_millis BIGINT NOT NULL DEFAULT 1000,
+    max_retries INTEGER NOT NULL DEFAULT 2,
+    retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000;
+INSERT INTO crawler_settings (
+    id, direct_fallback, connect_timeout_seconds,
+    request_timeout_seconds, min_request_interval_millis
+) VALUES (1, TRUE, 10, 30, 1000)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS crawler_proxies (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    host VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL,
+    username VARCHAR(255),
+    password TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crawler_proxies_enabled_priority
+    ON crawler_proxies(enabled, priority, id);
+
+CREATE TABLE IF NOT EXISTS crawl_rules (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    start_url VARCHAR(2048) NOT NULL,
+    detail_selector VARCHAR(500) NOT NULL,
+    detail_url_includes VARCHAR(1000),
+    detail_url_excludes VARCHAR(1000),
+    next_selector VARCHAR(500),
+    image_selector VARCHAR(500) NOT NULL DEFAULT 'img',
+    image_attributes VARCHAR(200) DEFAULT 'data-original,data-src,srcset,src',
+    image_url_includes VARCHAR(1000),
+    image_url_excludes VARCHAR(1000),
+    detail_next_selector VARCHAR(500),
+    max_pages_per_detail INTEGER NOT NULL DEFAULT 20,
+    allowed_hosts VARCHAR(1000) NOT NULL,
+    max_list_pages INTEGER NOT NULL DEFAULT 100,
+    max_detail_pages INTEGER NOT NULL DEFAULT 1000,
+    max_images INTEGER NOT NULL DEFAULT 5000,
+    max_file_bytes BIGINT NOT NULL DEFAULT 20971520,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS detail_url_includes VARCHAR(1000);
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS detail_url_excludes VARCHAR(1000);
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS image_url_includes VARCHAR(1000);
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS image_url_excludes VARCHAR(1000);
+
+CREATE TABLE IF NOT EXISTS crawl_jobs (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rule_id BIGINT NOT NULL REFERENCES crawl_rules(id) ON DELETE RESTRICT,
+    rule_snapshot TEXT NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    phase VARCHAR(30) NOT NULL DEFAULT 'DISCOVERY',
+    status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+    list_processed INTEGER NOT NULL DEFAULT 0,
+    pages_found INTEGER NOT NULL DEFAULT 0,
+    pages_processed INTEGER NOT NULL DEFAULT 0,
+    images_downloaded INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    lease_owner VARCHAR(100),
+    lease_until TIMESTAMP,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP
+);
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(100);
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_crawl_jobs_runnable ON crawl_jobs(status, lease_until, created_at);
+
+CREATE TABLE IF NOT EXISTS crawl_pages (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    url VARCHAR(4096) NOT NULL,
+    normalized_url VARCHAR(4096) NOT NULL,
+    url_hash VARCHAR(64) NOT NULL,
+    included BOOLEAN NOT NULL DEFAULT TRUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(job_id, url_hash)
+);
+ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE TABLE IF NOT EXISTS crawl_assets (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    page_id BIGINT NOT NULL REFERENCES crawl_pages(id) ON DELETE CASCADE,
+    source_page_url VARCHAR(4096) NOT NULL,
+    image_url VARCHAR(4096) NOT NULL,
+    normalized_url VARCHAR(4096) NOT NULL,
+    url_hash VARCHAR(64) NOT NULL,
+    local_path VARCHAR(1024),
+    thumbnail_path VARCHAR(1024),
+    original_filename VARCHAR(255),
+    content_type VARCHAR(100),
+    file_hash_md5 VARCHAR(64),
+    file_hash_phash VARCHAR(16),
+    similarity_group_id BIGINT,
+    similarity_count INTEGER NOT NULL DEFAULT 0,
+    file_size BIGINT,
+    width INTEGER,
+    height INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    imported_photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
+    note TEXT,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(job_id, url_hash)
+);
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS file_hash_phash VARCHAR(16);
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_group_id BIGINT;
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS note TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_crawl_jobs_owner_created ON crawl_jobs(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crawl_pages_job_status ON crawl_pages(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_job_status ON crawl_assets(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_md5 ON crawl_assets(file_hash_md5);
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_similarity
+    ON crawl_assets(job_id, similarity_group_id) WHERE similarity_group_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS crawl_import_batches (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    job_id BIGINT NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    idempotency_key VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+    requested_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    album_id BIGINT REFERENCES albums(id) ON DELETE SET NULL,
+    asset_ids_json TEXT NOT NULL,
+    tag_ids_json TEXT,
+    lease_owner VARCHAR(100),
+    lease_until TIMESTAMP,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP,
+    UNIQUE(owner_id, idempotency_key)
+);
+ALTER TABLE crawl_import_batches ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(100);
+ALTER TABLE crawl_import_batches ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
+ALTER TABLE crawl_import_batches ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE crawl_import_batches ALTER COLUMN status SET DEFAULT 'QUEUED';
+CREATE INDEX IF NOT EXISTS idx_crawl_import_batches_runnable
+    ON crawl_import_batches(status, lease_until, created_at);
+
+CREATE TABLE IF NOT EXISTS crawl_import_items (
+    id BIGSERIAL PRIMARY KEY,
+    batch_id BIGINT NOT NULL REFERENCES crawl_import_batches(id) ON DELETE CASCADE,
+    asset_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(batch_id, asset_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crawl_import_batches_job_created
+    ON crawl_import_batches(job_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crawl_import_items_batch_status
+    ON crawl_import_items(batch_id, status, id);
+
+CREATE TABLE IF NOT EXISTS photo_sources (
+    id BIGSERIAL PRIMARY KEY,
+    photo_id BIGINT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+    page_url VARCHAR(4096) NOT NULL,
+    image_url VARCHAR(4096) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_photo_sources_photo ON photo_sources(photo_id);
+
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, role) VALUES
     ('admin', '$2a$10$ZIEvrdNQ8X8Nr88UCEypDOVaKM5KIt.0w.UPJaQqpiwwhIB5UtqzW', 'ADMIN')

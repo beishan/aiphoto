@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue'
 import http from '@/api/http'
 import type { DockIconName } from '@/components/DockIcon.vue'
 
-const ICON_NAMES: DockIconName[] = ['photo', 'timeline', 'tags', 'albums', 'baby', 'search', 'settings', 'trashEmpty', 'trashFull']
+const ICON_NAMES: DockIconName[] = ['photo', 'timeline', 'tags', 'albums', 'baby', 'search', 'crawler', 'settings', 'trashEmpty', 'trashFull']
 const emptyUrls = () => Object.fromEntries(ICON_NAMES.map(name => [name, ''])) as Record<DockIconName, string>
 const CACHE_PREFIX = 'aiphoto:dock-icons:'
 

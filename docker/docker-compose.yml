@@ -33,7 +33,7 @@ services:
     networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-aiphoto-ai:0.2.2}
+    image: ${AI_IMAGE:-aiphoto-ai:0.4.4}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
@@ -66,7 +66,7 @@ services:
     networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-aiphoto-backend:0.2.2}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.4.4}
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -88,7 +88,9 @@ services:
       AI_MODEL_ROOT: /models
       STORAGE_PHOTOS_DIR: /data/photos
       STORAGE_THUMBS_DIR: /data/thumbs
+      STORAGE_CRAWL_DIR: /data/crawl
       JWT_SECRET: ${JWT_SECRET:?please configure JWT_SECRET}
+      CRAWLER_PROXY_SECRET: ${CRAWLER_PROXY_SECRET:-}
     ports:
       - "${BACKEND_PORT:-8392}:8080"
     volumes:
@@ -121,7 +123,7 @@ services:
     networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.2.2}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.4.4}
     build:
       context: ../frontend
       dockerfile: Dockerfile

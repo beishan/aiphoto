@@ -136,7 +136,8 @@ async function clearAll() {
   clearingAll.value = true
   try {
     const { data } = await photoApi.clearTrash()
-    ElMessage.success(`已永久删除 ${data.deleted} 个项目`)
+    if (data.fail) ElMessage.warning(`清空完成：成功删除 ${data.success} 个项目，${data.fail} 个删除失败`)
+    else ElMessage.success(`已永久删除 ${data.success} 个项目`)
     page.value = 1
     emit('changed')
     await loadTrash()

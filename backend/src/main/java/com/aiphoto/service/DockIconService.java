@@ -22,7 +22,7 @@ public class DockIconService {
     private static final long MAX_SIZE = 5L * 1024 * 1024;
     private static final List<String> ICON_NAMES = List.of(
             "photo", "timeline", "tags", "albums", "baby", "search", "settings",
-            "trashEmpty", "trashFull");
+            "crawler", "trashEmpty", "trashFull");
     private static final Set<String> ICON_NAME_SET = Set.copyOf(ICON_NAMES);
     private static final Map<String, String> SUPPORTED_TYPES = Map.of(
             "image/jpeg", ".jpg", "image/png", ".png", "image/webp", ".webp");

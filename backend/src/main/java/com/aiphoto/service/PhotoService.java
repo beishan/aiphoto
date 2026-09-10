@@ -33,6 +33,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -74,6 +75,7 @@ public class PhotoService {
         String originalFilename = file.getOriginalFilename();
 
         // Check for duplicates
+        photoRepository.lockFileHash(hashMd5);
         if (photoRepository.findByFileHashMd5(hashMd5).isPresent()) {
             throw new DuplicateFileException("Duplicate file detected");
         }
@@ -258,7 +260,7 @@ public class PhotoService {
         return ids.isEmpty() ? 0 : photoRepository.restoreTrashByIds(ids);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void permanentDeletePhoto(Long id) {
         Photo photo = photoRepository.findTrashById(id)
                 .orElseThrow(() -> new RuntimeException("Photo not found in trash"));
@@ -291,15 +293,6 @@ public class PhotoService {
             log.warn("Failed to delete storage objects for photo {}: {}", id, e.getMessage());
         }
         photoRepository.delete(photo);
-    }
-
-    @Transactional
-    public int clearTrash() {
-        List<Photo> photos = photoRepository.findTrash(Pageable.unpaged()).getContent();
-        for (Photo photo : photos) {
-            permanentDeletePhoto(photo.getId());
-        }
-        return photos.size();
     }
 
     public Page<PhotoDTO> getFavorites(Pageable pageable) {

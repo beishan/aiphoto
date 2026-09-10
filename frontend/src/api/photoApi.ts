@@ -91,7 +91,7 @@ export const photoApi = {
   },
 
   async clearTrash() {
-    const response = await http.delete<{ deleted: number }>('/photos/trash')
+    const response = await http.delete<{ success: number; fail: number }>('/photos/trash')
     window.dispatchEvent(new Event('trash-changed'))
     return response
   },

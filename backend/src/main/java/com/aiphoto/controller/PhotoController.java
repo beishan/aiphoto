@@ -11,6 +11,7 @@ import com.aiphoto.repository.PhotoRepository;
 import com.aiphoto.repository.UserRepository;
 import com.aiphoto.async.PhotoIndexingService;
 import com.aiphoto.service.PhotoService;
+import com.aiphoto.service.TrashCleanupService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,6 +34,7 @@ public class PhotoController {
     private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final PhotoIndexingService photoIndexingService;
+    private final TrashCleanupService trashCleanupService;
 
     @GetMapping
     public ResponseEntity<Page<PhotoDTO>> listPhotos(
@@ -162,7 +164,8 @@ public class PhotoController {
 
     @DeleteMapping("/trash")
     public ResponseEntity<Map<String, Integer>> clearTrash() {
-        return ResponseEntity.ok(Map.of("deleted", photoService.clearTrash()));
+        TrashCleanupService.TrashCleanupResult result = trashCleanupService.clearTrash();
+        return ResponseEntity.ok(Map.of("success", result.success(), "fail", result.fail()));
     }
 
     @PostMapping("/batch-favorite")

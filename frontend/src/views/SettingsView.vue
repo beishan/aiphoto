@@ -12,6 +12,7 @@ import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
+import CrawlerSettingsPanel from '@/components/CrawlerSettingsPanel.vue'
 
 const settingStore = useSettingStore()
 const message = ElMessage
@@ -31,6 +32,7 @@ const navItems = [
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
+  { key: 'crawler', label: '爬虫设置', icon: '🕸️' },
   { key: 'tags', label: '标签管理', icon: '🏷️' },
   { key: 'photos', label: '照片与视频', icon: '🖼️' },
   { key: 'timeline', label: '时间线设置', icon: '📅' },
@@ -49,7 +51,7 @@ const navGroups = computed(() => [
   { label: '个人', keys: ['profile'] },
   { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon'] : ['general'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
-  { label: '智能服务', keys: ['models', 'tasks'] },
+  { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
   { label: '管理', keys: isCurrentUserAdmin ? ['users', 'storage'] : ['storage'] },
   { label: '系统', keys: ['system'] },
 ].map(group => ({
@@ -711,6 +713,10 @@ async function loadSystemInfo() {
 
         <div v-if="activeSection === 'favicon'" class="content-panel">
           <SiteFaviconSettingsPanel />
+        </div>
+
+        <div v-if="activeSection === 'crawler'" class="content-panel">
+          <CrawlerSettingsPanel />
         </div>
 
         <!-- ====== 用户管理 ====== -->

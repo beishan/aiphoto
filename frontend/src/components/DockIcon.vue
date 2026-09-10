@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
-import { Clock, Collection, Delete, DeleteFilled, PictureFilled, PriceTag, Search, Setting, UserFilled } from '@element-plus/icons-vue'
+import { Clock, Collection, Connection, Delete, DeleteFilled, PictureFilled, PriceTag, Search, Setting, UserFilled } from '@element-plus/icons-vue'
 
-export type DockIconName = 'photo' | 'timeline' | 'tags' | 'albums' | 'baby' | 'search' | 'settings' | 'trashEmpty' | 'trashFull'
+export type DockIconName = 'photo' | 'timeline' | 'tags' | 'albums' | 'baby' | 'search' | 'crawler' | 'settings' | 'trashEmpty' | 'trashFull'
 export type DockIconStyle = 'minimal' | 'macos26' | 'custom'
 
 const props = defineProps<{ name: DockIconName; variant: DockIconStyle; customSrc?: string }>()
@@ -13,6 +13,7 @@ const icons: Record<DockIconName, Component> = {
   albums: Collection,
   baby: UserFilled,
   search: Search,
+  crawler: Connection,
   settings: Setting,
   trashEmpty: Delete,
   trashFull: DeleteFilled,

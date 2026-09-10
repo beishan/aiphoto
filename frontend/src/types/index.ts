@@ -141,3 +141,72 @@ export interface ScanFolder {
   errorMessage: string | null
   createdAt: string
 }
+
+export interface CrawlRule {
+  id?: number
+  name: string
+  startUrl: string
+  detailSelector: string
+  detailUrlIncludes: string
+  detailUrlExcludes: string
+  nextSelector: string
+  imageSelector: string
+  imageAttributes: string
+  imageUrlIncludes: string
+  imageUrlExcludes: string
+  detailNextSelector: string
+  maxPagesPerDetail: number
+  allowedHosts: string
+  maxListPages: number
+  maxDetailPages: number
+  maxImages: number
+  maxFileBytes: number
+}
+
+export interface CrawlJob {
+  id: number
+  ruleId: number
+  name: string
+  phase: 'DISCOVERY' | 'AWAITING_CONFIRMATION' | 'DOWNLOAD' | 'REVIEW'
+  status: 'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED'
+  listProcessed: number
+  pagesFound: number
+  pagesProcessed: number
+  imagesDownloaded: number
+  failCount: number
+  attemptCount: number
+  errorMessage: string | null
+  createdAt: string
+}
+
+export interface CrawlPage {
+  id: number
+  jobId: number
+  url: string
+  included: boolean
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED'
+  errorMessage: string | null
+}
+
+export interface CrawlAsset {
+  id: number
+  jobId: number
+  sourcePageUrl: string
+  imageUrl: string
+  originalFilename: string
+  contentType: string
+  fileHashMd5: string
+  fileHashPhash: string | null
+  fileSize: number
+  width: number | null
+  height: number | null
+  status: 'PENDING' | 'DOWNLOADED' | 'FAILED' | 'DELETED' | 'DUPLICATE' | 'IMPORTED'
+  importedPhotoId: number | null
+  note: string | null
+  errorMessage: string | null
+  exactDuplicateCount: number
+  libraryDuplicate: boolean
+  libraryTrashDuplicate: boolean
+  similarityGroupId: number | null
+  similarityCount: number
+}

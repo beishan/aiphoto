@@ -90,6 +90,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DedupView.vue'),
       },
       {
+        path: 'crawler',
+        name: 'Crawler',
+        component: () => import('@/views/CrawlerView.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),

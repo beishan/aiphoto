@@ -63,6 +63,37 @@ export interface DownloadTask {
   endTime: string | null
 }
 
+export interface CrawlerProxy {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string | null
+  hasPassword: boolean
+  enabled: boolean
+  priority: number
+}
+
+export interface CrawlerSettings {
+  directFallback: boolean
+  connectTimeoutSeconds: number
+  requestTimeoutSeconds: number
+  minRequestIntervalMillis: number
+  maxRetries: number
+  retryBaseDelayMillis: number
+  proxies: CrawlerProxy[]
+}
+
+export interface CrawlerProxyRequest {
+  name: string
+  host: string
+  port: number
+  username: string
+  password: string
+  clearPassword: boolean
+  enabled: boolean
+}
+
 export const settingApi = {
   getAll() {
     return http.get<Record<string, string>>('/settings')
@@ -147,5 +178,29 @@ export const settingApi = {
 
   getSystemInfo() {
     return http.get<Record<string, unknown>>('/settings/system-info')
+  },
+
+  getCrawlerSettings() {
+    return http.get<CrawlerSettings>('/settings/crawler')
+  },
+
+  updateCrawlerSettings(settings: Omit<CrawlerSettings, 'proxies'>) {
+    return http.put<CrawlerSettings>('/settings/crawler', settings)
+  },
+
+  createCrawlerProxy(proxy: CrawlerProxyRequest) {
+    return http.post<CrawlerProxy>('/settings/crawler/proxies', proxy)
+  },
+
+  updateCrawlerProxy(id: number, proxy: CrawlerProxyRequest) {
+    return http.put<CrawlerProxy>(`/settings/crawler/proxies/${id}`, proxy)
+  },
+
+  reorderCrawlerProxies(ids: number[]) {
+    return http.put<CrawlerProxy[]>('/settings/crawler/proxies/order', ids)
+  },
+
+  deleteCrawlerProxy(id: number) {
+    return http.delete(`/settings/crawler/proxies/${id}`)
   },
 }
