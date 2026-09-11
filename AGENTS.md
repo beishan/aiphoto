@@ -173,6 +173,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - 每次实现需求或修改应用行为时必须同步更新版本号；修订号或次版本号由 Codex 根据改动范围决定。
 - 如需递增主版本号，Codex 必须先询问用户并获得确认。
 - Jenkins/Docker 镜像标签、后端系统信息及各服务构建元数据必须使用同一个版本号。
+- 每次完成需求开发时必须同步更新根目录 `DEVELOPMENT_LOG.md`，记录版本、日期、需求内容、主要改动和验证结果。
 
 ### 代码风格
 - **Java**: 遵循 Google Java Style Guide
