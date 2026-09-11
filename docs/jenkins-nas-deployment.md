@@ -111,6 +111,10 @@ Pipeline 中可在每次“Build with Parameters”时填写：
 中上传并配置。没有旧
 PostgreSQL 时跳过备份，没有上一版镜像时不能回滚，都属于正常现象。
 
+AI 服务的 Python 依赖层不受应用版本号变化影响，并使用固定的 BuildKit pip
+缓存。日常发版在 `ai-service/requirements.txt` 和基础镜像未变化时会直接复用
+依赖层；首次采用该缓存结构、主动清理 Docker 构建缓存或修改依赖后仍会重新安装。
+
 ```text
 http://192.168.31.155:8391/
 http://192.168.31.155:8392/actuator/health

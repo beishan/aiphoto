@@ -1,10 +1,5 @@
 FROM docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
 
-ARG APP_VERSION=0.5.0
-ENV APP_VERSION=${APP_VERSION}
-LABEL org.opencontainers.image.title="aiphoto AI Service" \
-      org.opencontainers.image.version="${APP_VERSION}"
-
 WORKDIR /app
 
 # Use Chinese mirrors
@@ -23,9 +18,16 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /models
 
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,id=aiphoto-ai-pip,target=/root/.cache/pip,sharing=locked \
     pip install -i https://mirrors.aliyun.com/pypi/simple/ \
     --trusted-host mirrors.aliyun.com -r requirements.txt
+
+# Keep release metadata after the expensive dependency layer. Changing only the
+# application version must not invalidate downloaded and installed Python packages.
+ARG APP_VERSION=0.5.1
+ENV APP_VERSION=${APP_VERSION}
+LABEL org.opencontainers.image.title="aiphoto AI Service" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 COPY . .
 
