@@ -142,10 +142,22 @@ export interface ScanFolder {
   createdAt: string
 }
 
-export interface CrawlRule {
+export interface CrawlSite {
   id?: number
   name: string
   startUrl: string
+  allowedHosts: string
+  maxListPages: number
+  maxDetailPages: number
+  maxImages: number
+  maxFileBytes: number
+}
+
+export interface CrawlRule {
+  id?: number
+  siteId: number
+  name: string
+  enabled: boolean
   detailSelector: string
   detailUrlIncludes: string
   detailUrlExcludes: string
@@ -156,11 +168,6 @@ export interface CrawlRule {
   imageUrlExcludes: string
   detailNextSelector: string
   maxPagesPerDetail: number
-  allowedHosts: string
-  maxListPages: number
-  maxDetailPages: number
-  maxImages: number
-  maxFileBytes: number
 }
 
 export interface CrawlJob {

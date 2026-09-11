@@ -292,10 +292,27 @@ CREATE TABLE IF NOT EXISTS crawler_proxies (
 CREATE INDEX IF NOT EXISTS idx_crawler_proxies_enabled_priority
     ON crawler_proxies(enabled, priority, id);
 
-CREATE TABLE IF NOT EXISTS crawl_rules (
+CREATE TABLE IF NOT EXISTS crawl_sites (
     id BIGSERIAL PRIMARY KEY,
     owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(200) NOT NULL,
+    start_url VARCHAR(2048) NOT NULL,
+    allowed_hosts VARCHAR(1000) NOT NULL,
+    max_list_pages INTEGER NOT NULL DEFAULT 100,
+    max_detail_pages INTEGER NOT NULL DEFAULT 1000,
+    max_images INTEGER NOT NULL DEFAULT 5000,
+    max_file_bytes BIGINT NOT NULL DEFAULT 20971520,
+    migrated_rule_id BIGINT UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS crawl_rules (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    site_id BIGINT REFERENCES crawl_sites(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
     start_url VARCHAR(2048) NOT NULL,
     detail_selector VARCHAR(500) NOT NULL,
     detail_url_includes VARCHAR(1000),
@@ -319,6 +336,26 @@ ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS detail_url_includes VARCHAR(100
 ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS detail_url_excludes VARCHAR(1000);
 ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS image_url_includes VARCHAR(1000);
 ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS image_url_excludes VARCHAR(1000);
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS site_id BIGINT REFERENCES crawl_sites(id) ON DELETE CASCADE;
+ALTER TABLE crawl_rules ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT FALSE;
+INSERT INTO crawl_sites (owner_id, name, start_url, allowed_hosts, max_list_pages,
+    max_detail_pages, max_images, max_file_bytes, migrated_rule_id, created_at, updated_at)
+SELECT owner_id, name, start_url, allowed_hosts, max_list_pages, max_detail_pages,
+    max_images, max_file_bytes, id, created_at, updated_at
+FROM crawl_rules WHERE site_id IS NULL
+ON CONFLICT (migrated_rule_id) DO NOTHING;
+UPDATE crawl_rules r SET site_id = s.id
+FROM crawl_sites s WHERE r.site_id IS NULL AND s.migrated_rule_id = r.id;
+UPDATE crawl_rules r SET enabled = TRUE
+FROM crawl_sites s WHERE r.id = s.migrated_rule_id AND r.site_id = s.id;
+UPDATE crawl_sites SET migrated_rule_id = NULL WHERE migrated_rule_id IS NOT NULL;
+ALTER TABLE crawl_rules ALTER COLUMN site_id SET NOT NULL;
+ALTER TABLE crawl_rules ALTER COLUMN start_url DROP NOT NULL;
+ALTER TABLE crawl_rules ALTER COLUMN allowed_hosts DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_crawl_rules_one_enabled_per_site
+    ON crawl_rules(site_id) WHERE enabled = TRUE;
+CREATE INDEX IF NOT EXISTS idx_crawl_sites_owner_updated ON crawl_sites(owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crawl_rules_site_updated ON crawl_rules(site_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS crawl_jobs (
     id BIGSERIAL PRIMARY KEY,

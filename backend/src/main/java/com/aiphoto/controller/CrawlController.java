@@ -7,6 +7,7 @@ import com.aiphoto.entity.CrawlImportItem;
 import com.aiphoto.entity.CrawlJob;
 import com.aiphoto.entity.CrawlPage;
 import com.aiphoto.entity.CrawlRule;
+import com.aiphoto.entity.CrawlSite;
 import com.aiphoto.entity.User;
 import com.aiphoto.repository.UserRepository;
 import com.aiphoto.service.CrawlImportService;
@@ -36,9 +37,28 @@ public class CrawlController {
     private final CrawlSimilarityService similarityService;
     private final UserRepository userRepository;
 
-    @GetMapping("/rules")
-    public List<CrawlRule> listRules(Authentication authentication) {
-        return crawlService.listRules(userId(authentication));
+    @GetMapping("/sites")
+    public List<CrawlSite> listSites(Authentication authentication) {
+        return crawlService.listSites(userId(authentication));
+    }
+
+    @PostMapping("/sites")
+    public CrawlSite saveSite(@RequestBody CrawlSite site, Authentication authentication) {
+        site.setId(null);
+        return crawlService.saveSite(site, userId(authentication));
+    }
+
+    @PutMapping("/sites/{id}")
+    public CrawlSite updateSite(
+            @PathVariable Long id, @RequestBody CrawlSite site, Authentication authentication) {
+        site.setId(id);
+        return crawlService.saveSite(site, userId(authentication));
+    }
+
+    @GetMapping("/sites/{siteId}/rules")
+    public List<CrawlRule> listRules(
+            @PathVariable Long siteId, Authentication authentication) {
+        return crawlService.listRules(siteId, userId(authentication));
     }
 
     @PostMapping("/rules")

@@ -5,9 +5,11 @@ import { crawlApi } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
-import type { Album, CrawlAsset, CrawlJob, CrawlPage, CrawlRule, Tag } from '@/types'
+import type { Album, CrawlAsset, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
 
+const sites = ref<CrawlSite[]>([])
 const rules = ref<CrawlRule[]>([])
+const activeSiteId = ref<number | null>(null)
 const jobs = ref<CrawlJob[]>([])
 const pages = ref<CrawlPage[]>([])
 const assets = ref<CrawlAsset[]>([])
@@ -41,12 +43,15 @@ const importItemStatus = ref('')
 const pendingImport = ref<{ signature: string; key: string } | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+const siteForm = reactive<CrawlSite>({
+  name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+})
+
 const form = reactive<CrawlRule>({
-  name: '', startUrl: '', detailSelector: '', detailUrlIncludes: '', detailUrlExcludes: '',
+  siteId: 0, name: '', enabled: false, detailSelector: '', detailUrlIncludes: '', detailUrlExcludes: '',
   nextSelector: '', imageSelector: 'img', imageAttributes: 'data-original,data-src,srcset,src',
-  imageUrlIncludes: '', imageUrlExcludes: '', allowedHosts: '', maxListPages: 100,
-  detailNextSelector: '', maxPagesPerDetail: 20, maxDetailPages: 1000, maxImages: 5000,
-  maxFileBytes: 20 * 1024 * 1024,
+  imageUrlIncludes: '', imageUrlExcludes: '', detailNextSelector: '', maxPagesPerDetail: 20,
 })
 
 const activeJob = computed(() => jobs.value.find(job => job.id === activeJobId.value) || null)
@@ -58,7 +63,18 @@ const duplicateHashes = computed(() => {
     .map(asset => asset.fileHashMd5))
 })
 
-async function loadRules() { rules.value = (await crawlApi.rules()).data }
+async function loadSites() {
+  sites.value = (await crawlApi.sites()).data
+  if (!activeSiteId.value && sites.value.length) await selectSite(sites.value[0])
+}
+async function loadRules(preferredRuleId?: number) {
+  if (!activeSiteId.value) { rules.value = []; return }
+  rules.value = (await crawlApi.rules(activeSiteId.value)).data
+  const selected = rules.value.find(rule => rule.id === preferredRuleId)
+    || rules.value.find(rule => rule.enabled) || rules.value[0]
+  if (selected) useRule(selected)
+  else newRule()
+}
 async function loadJobs() {
   jobs.value = (await crawlApi.jobs()).data
   if (!activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
@@ -100,16 +116,18 @@ async function loadPreviews() {
 }
 
 async function saveRule(showMessage = true) {
-  if (!form.name || !form.startUrl || !form.detailSelector) {
-    ElMessage.warning('请填写名称、起始 URL 和图片页选择器')
+  if (!activeSiteId.value) {
+    ElMessage.warning('请先保存网站基础配置')
     return null
   }
-  if (!form.allowedHosts) {
-    try { form.allowedHosts = new URL(form.startUrl).hostname } catch { /* backend validates */ }
+  if (!form.name || !form.detailSelector) {
+    ElMessage.warning('请填写规则名称和图片页选择器')
+    return null
   }
+  form.siteId = activeSiteId.value
   const { data } = await crawlApi.saveRule({ ...form })
   Object.assign(form, data)
-  await loadRules()
+  await loadRules(data.id)
   if (showMessage) ElMessage.success('规则已保存')
   return data
 }
@@ -122,7 +140,6 @@ async function testRule() {
     previewUrls.value = data.detailUrls
     previewImageUrls.value = data.imageUrls
     previewImageError.value = data.imagePreviewError || ''
-    await loadRules()
     data.detailUrls.length ? ElMessage.success(`测试命中 ${data.detailUrls.length} 个图片页链接，首页提取 ${data.imageUrls.length} 张图片`)
       : ElMessage.warning('当前页面没有命中图片页链接')
   } catch (error: any) { ElMessage.error(error?.response?.data?.message || error?.message || '规则测试失败') }
@@ -134,6 +151,57 @@ function useRule(rule: CrawlRule) {
   previewUrls.value = []
   previewImageUrls.value = []
   previewImageError.value = ''
+}
+
+function newRule() {
+  Object.assign(form, {
+    id: undefined, siteId: activeSiteId.value || 0, name: '', enabled: rules.value.length === 0,
+    detailSelector: '', detailUrlIncludes: '', detailUrlExcludes: '', nextSelector: '',
+    imageSelector: 'img', imageAttributes: 'data-original,data-src,srcset,src',
+    imageUrlIncludes: '', imageUrlExcludes: '', detailNextSelector: '', maxPagesPerDetail: 20,
+  })
+  previewUrls.value = []
+  previewImageUrls.value = []
+  previewImageError.value = ''
+}
+
+async function selectSite(site: CrawlSite) {
+  activeSiteId.value = site.id || null
+  Object.assign(siteForm, site)
+  await loadRules()
+}
+
+function newSite() {
+  activeSiteId.value = null
+  Object.assign(siteForm, {
+    id: undefined, name: '', startUrl: '', allowedHosts: '', maxListPages: 100,
+    maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+  })
+  rules.value = []
+  newRule()
+}
+
+async function saveSite() {
+  if (!siteForm.name || !siteForm.startUrl) {
+    ElMessage.warning('请填写网站名称和起始 URL')
+    return
+  }
+  if (!siteForm.allowedHosts) {
+    try { siteForm.allowedHosts = new URL(siteForm.startUrl).hostname } catch { /* backend validates */ }
+  }
+  const { data } = await crawlApi.saveSite({ ...siteForm })
+  Object.assign(siteForm, data)
+  activeSiteId.value = data.id || null
+  await loadSites()
+  await loadRules()
+  ElMessage.success('网站基础配置已保存')
+}
+
+async function activateRule(rule: CrawlRule) {
+  const { data } = await crawlApi.saveRule({ ...rule, enabled: true })
+  await loadRules(data.id)
+  useRule(data)
+  ElMessage.success(`“${data.name}”已设为当前生效规则`)
 }
 
 async function startDiscovery() {
@@ -345,7 +413,7 @@ function changeAssetPage(page: number) {
   void loadJobDetail()
 }
 onMounted(async () => {
-  const [,, albumResult, tagResult] = await Promise.all([loadRules(), loadJobs(), albumApi.list(), tagApi.list()])
+  const [,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), albumApi.list(), tagApi.list()])
   albums.value = albumResult.data
   tags.value = tagResult.data
   await loadJobDetail()
@@ -363,22 +431,33 @@ onUnmounted(() => {
 
 <template>
   <div class="crawler-page">
-    <section class="panel rule-panel">
-      <header><div><h2>网站与采集规则</h2><p>先测试规则，再发现全部图片页；下载内容只进入待整理区。</p></div></header>
-      <div class="rule-layout">
+    <section class="panel site-panel">
+      <header><div><h2>采集网站</h2><p>网站基础配置独立保存，新增网站后可为它维护多条解析规则。</p></div><el-button @click="newSite">新增网站</el-button></header>
+      <div class="site-layout">
+        <aside class="sites"><button v-for="site in sites" :key="site.id" :class="{ active: activeSiteId === site.id }" @click="selectSite(site)"><strong>{{ site.name }}</strong><small>{{ site.startUrl }}</small></button><el-empty v-if="!sites.length" description="暂无网站" :image-size="48" /></aside>
         <div class="fields">
-          <el-input v-model="form.name" placeholder="规则名称" />
-          <el-input v-model="form.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" />
+          <div class="two"><el-input v-model="siteForm.name" placeholder="网站名称" /><el-input v-model="siteForm.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" /></div>
+          <el-input v-model="siteForm.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
+          <div class="limits"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" /><span>列表页上限</span><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" /><span>图片页上限</span><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" /><span>图片上限</span></div>
+          <div class="actions"><el-button type="primary" @click="saveSite">保存网站基础配置</el-button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel rule-panel">
+      <header><div><h2>解析规则</h2><p>当前网站可保存多条规则，但同一时间只能有一条生效。</p></div><el-button :disabled="!activeSiteId" @click="newRule">新增规则</el-button></header>
+      <el-empty v-if="!activeSiteId" description="请先选择或新增一个网站" :image-size="60" />
+      <div v-else class="rule-layout">
+        <div class="fields">
+          <div class="two"><el-input v-model="form.name" placeholder="规则名称" /><el-switch v-model="form.enabled" inline-prompt active-text="生效" inactive-text="停用" /></div>
           <div class="two"><el-input v-model="form.detailSelector" placeholder="图片页链接 CSS 选择器" /><el-input v-model="form.nextSelector" placeholder="下一页 CSS 选择器（可空）" /></div>
           <div class="two"><el-input v-model="form.detailUrlIncludes" placeholder="图片页 URL 必须包含（逗号分隔，任一命中）" /><el-input v-model="form.detailUrlExcludes" placeholder="图片页 URL 排除片段（逗号分隔）" /></div>
           <div class="two"><el-input v-model="form.imageSelector" placeholder="详情页图片选择器" /><el-input v-model="form.imageAttributes" placeholder="图片属性优先级" /></div>
           <div class="two"><el-input v-model="form.imageUrlIncludes" placeholder="图片 URL 必须包含（逗号分隔，任一命中）" /><el-input v-model="form.imageUrlExcludes" placeholder="图片 URL 排除片段，如 thumb,avatar" /></div>
           <div class="two"><el-input v-model="form.detailNextSelector" placeholder="详情下一页选择器（可空）" /><div class="limit-field"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" /><span>每个详情页组上限</span></div></div>
-          <el-input v-model="form.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
-          <div class="limits"><el-input-number v-model="form.maxListPages" :min="1" :max="1000" /><span>列表页上限</span><el-input-number v-model="form.maxDetailPages" :min="1" :max="20000" /><span>图片页上限</span><el-input-number v-model="form.maxImages" :min="1" :max="50000" /><span>图片上限</span></div>
-          <div class="actions"><el-button :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button @click="saveRule()">保存规则</el-button><el-button type="primary" :loading="busy === 'discover'" @click="startDiscovery">发现图片页</el-button></div>
+          <div class="actions"><el-button :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button @click="saveRule()">保存规则</el-button><el-button type="primary" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">用生效规则发现图片页</el-button></div>
         </div>
-        <aside><strong>已保存规则</strong><button v-for="rule in rules" :key="rule.id" @click="useRule(rule)">{{ rule.name }}<small>{{ rule.startUrl }}</small></button><el-empty v-if="!rules.length" description="暂无规则" :image-size="48" /></aside>
+        <aside><strong>当前网站的规则</strong><button v-for="rule in rules" :key="rule.id" :class="{ active: form.id === rule.id }" @click="useRule(rule)"><span class="rule-name">{{ rule.name }}<el-tag v-if="rule.enabled" size="small" type="success">生效中</el-tag></span><small v-if="rule.enabled">采集任务将使用此规则</small><small v-else @click.stop="activateRule(rule)">点击设为生效规则</small></button><el-empty v-if="!rules.length" description="暂无规则" :image-size="48" /></aside>
       </div>
       <div v-if="previewUrls.length" class="preview-list"><strong>规则预览（最多 20 条）</strong><a v-for="url in previewUrls" :key="url" :href="url" target="_blank" rel="noreferrer">{{ url }}</a></div>
       <el-alert v-if="previewImageError" class="preview-error" type="warning" :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
@@ -441,7 +520,7 @@ onUnmounted(() => {
 
 <style scoped>
 .status-filter{width:130px}.asset-pagination,.page-pagination{justify-content:center;margin-top:18px}.page-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;margin-top:14px}.page-list span.excluded{text-decoration:line-through;opacity:.55}.similarity-bar{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;align-items:center;gap:12px;margin-bottom:14px;padding:10px 12px;border-radius:12px;background:var(--bg-secondary);color:var(--text-secondary);font-size:11px}.import-batch{margin:0 0 14px;padding:12px;border-radius:12px;background:var(--bg-secondary)}.import-toolbar{margin-top:10px}.import-items{display:grid;gap:7px;max-height:210px;margin-top:10px;overflow:auto}.import-items>div{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:11px}.import-error{color:var(--danger,#f56c6c)}
-.crawler-page{display:grid;gap:18px;padding:24px 24px 112px}.panel{padding:20px;border:1px solid var(--separator);border-radius:20px;background:var(--bg-card);box-shadow:0 12px 35px rgba(0,0,0,.08)}header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}h2{margin:0;color:var(--text-primary);font-size:19px}p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.rule-layout,.task-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:18px}.task-layout{grid-template-columns:250px minmax(0,1fr)}.fields{display:grid;gap:11px}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.limit-field,.limits{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:11px}.limits{flex-wrap:wrap}.actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.organize-bar{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(160px,.5fr) minmax(180px,.7fr);gap:8px;margin-bottom:14px}aside,.jobs{display:grid;align-content:start;gap:7px;max-height:310px;overflow:auto}aside>strong{margin-bottom:5px;color:var(--text-primary);font-size:12px}aside button,.jobs button{display:grid;gap:3px;padding:10px;border:1px solid var(--separator);border-radius:11px;background:var(--bg-secondary);color:var(--text-primary);text-align:left;cursor:pointer}aside button.active,.jobs button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--bg-secondary))}aside button small,.jobs button small{overflow:hidden;color:var(--text-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.preview-list,.page-list{display:grid;gap:7px;max-height:220px;margin-top:16px;overflow:auto}.preview-list a,.page-list>div{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.page-list>div{display:flex;align-items:center;gap:7px}.stats{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:15px}.stats span{padding:8px 10px;border-radius:10px;background:var(--bg-secondary);color:var(--text-secondary);font-size:11px}.stats b{color:var(--text-primary);font-size:15px}.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.asset-grid article{position:relative;overflow:hidden;border:2px solid transparent;border-radius:14px;background:var(--bg-secondary);cursor:pointer}.asset-grid article.selected{border-color:var(--accent)}.asset-grid article.duplicate::after{position:absolute;top:8px;right:8px;padding:3px 6px;border-radius:8px;background:#ff9f0a;color:white;font-size:9px;content:'重复'}.asset-grid img,.placeholder{width:100%;height:145px;object-fit:cover}.placeholder{display:grid;place-items:center;color:var(--text-tertiary)}.asset-copy{display:grid;gap:5px;padding:10px}.asset-copy strong,.asset-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset-copy strong{color:var(--text-primary);font-size:12px}.asset-copy small{color:var(--text-secondary);font-size:10px}details{margin-top:18px;color:var(--text-secondary)}.deleted-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px}.deleted-list span{padding:6px 9px;border-radius:9px;background:var(--bg-secondary);font-size:11px}@media(max-width:760px){.crawler-page{padding:14px 14px 90px}.rule-layout,.task-layout{grid-template-columns:1fr}.two,.page-toolbar{grid-template-columns:1fr}.organize-bar{grid-template-columns:1fr}.limits{display:grid;grid-template-columns:1fr 1fr}header{display:grid}.actions{justify-content:flex-start}}
+.crawler-page{display:grid;gap:18px;padding:24px 24px 112px}.panel{padding:20px;border:1px solid var(--separator);border-radius:20px;background:var(--bg-card);box-shadow:0 12px 35px rgba(0,0,0,.08)}header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}h2{margin:0;color:var(--text-primary);font-size:19px}p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.site-layout,.rule-layout,.task-layout{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:18px}.site-layout,.task-layout{grid-template-columns:250px minmax(0,1fr)}.fields{display:grid;gap:11px}.two{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:10px}.limit-field,.limits{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:11px}.limits{flex-wrap:wrap}.actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.organize-bar{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(160px,.5fr) minmax(180px,.7fr);gap:8px;margin-bottom:14px}aside,.jobs{display:grid;align-content:start;gap:7px;max-height:310px;overflow:auto}aside>strong{margin-bottom:5px;color:var(--text-primary);font-size:12px}aside button,.jobs button{display:grid;gap:3px;padding:10px;border:1px solid var(--separator);border-radius:11px;background:var(--bg-secondary);color:var(--text-primary);text-align:left;cursor:pointer}aside button.active,.jobs button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,var(--bg-secondary))}aside button small,.jobs button small{overflow:hidden;color:var(--text-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.rule-name{display:flex;align-items:center;justify-content:space-between;gap:8px}.preview-list,.page-list{display:grid;gap:7px;max-height:220px;margin-top:16px;overflow:auto}.preview-list a,.page-list>div{overflow:hidden;color:var(--text-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.page-list>div{display:flex;align-items:center;gap:7px}.stats{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:15px}.stats span{padding:8px 10px;border-radius:10px;background:var(--bg-secondary);color:var(--text-secondary);font-size:11px}.stats b{color:var(--text-primary);font-size:15px}.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.asset-grid article{position:relative;overflow:hidden;border:2px solid transparent;border-radius:14px;background:var(--bg-secondary);cursor:pointer}.asset-grid article.selected{border-color:var(--accent)}.asset-grid article.duplicate::after{position:absolute;top:8px;right:8px;padding:3px 6px;border-radius:8px;background:#ff9f0a;color:white;font-size:9px;content:'重复'}.asset-grid img,.placeholder{width:100%;height:145px;object-fit:cover}.placeholder{display:grid;place-items:center;color:var(--text-tertiary)}.asset-copy{display:grid;gap:5px;padding:10px}.asset-copy strong,.asset-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset-copy strong{color:var(--text-primary);font-size:12px}.asset-copy small{color:var(--text-secondary);font-size:10px}details{margin-top:18px;color:var(--text-secondary)}.deleted-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px}.deleted-list span{padding:6px 9px;border-radius:9px;background:var(--bg-secondary);font-size:11px}@media(max-width:760px){.crawler-page{padding:14px 14px 90px}.site-layout,.rule-layout,.task-layout{grid-template-columns:1fr}.two,.page-toolbar{grid-template-columns:1fr}.organize-bar{grid-template-columns:1fr}.limits{display:grid;grid-template-columns:1fr 1fr}header{display:grid}.actions{justify-content:flex-start}}
 .asset-grid article.similar::before{position:absolute;top:8px;left:8px;padding:3px 6px;border-radius:8px;background:#6366f1;color:white;font-size:9px;content:'相似'}
 @media(max-width:760px){.similarity-bar{grid-template-columns:1fr}.similarity-bar small{grid-column:1}}
 </style>

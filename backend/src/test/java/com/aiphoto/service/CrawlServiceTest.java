@@ -9,11 +9,14 @@ import static org.mockito.Mockito.when;
 
 import com.aiphoto.entity.CrawlAsset;
 import com.aiphoto.entity.CrawlJob;
+import com.aiphoto.entity.CrawlRule;
+import com.aiphoto.entity.CrawlSite;
 import com.aiphoto.entity.Photo;
 import com.aiphoto.repository.CrawlAssetRepository;
 import com.aiphoto.repository.CrawlJobRepository;
 import com.aiphoto.repository.CrawlPageRepository;
 import com.aiphoto.repository.CrawlRuleRepository;
+import com.aiphoto.repository.CrawlSiteRepository;
 import com.aiphoto.repository.PhotoRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -30,6 +33,7 @@ import org.springframework.data.domain.PageRequest;
 class CrawlServiceTest {
 
     @Mock private CrawlRuleRepository ruleRepository;
+    @Mock private CrawlSiteRepository siteRepository;
     @Mock private CrawlJobRepository jobRepository;
     @Mock private CrawlPageRepository pageRepository;
     @Mock private CrawlAssetRepository assetRepository;
@@ -42,6 +46,7 @@ class CrawlServiceTest {
     void setUp() {
         crawlService = new CrawlService(
                 ruleRepository,
+                siteRepository,
                 jobRepository,
                 pageRepository,
                 assetRepository,
@@ -139,6 +144,45 @@ class CrawlServiceTest {
         assertThat(result.getExactDuplicateCount()).isEqualTo(3);
         assertThat(result.getLibraryDuplicate()).isFalse();
         assertThat(result.getLibraryTrashDuplicate()).isTrue();
+    }
+
+    @Test
+    void activatingRuleDeactivatesPreviousRuleAndUsesSiteConfiguration() {
+        CrawlSite site = new CrawlSite();
+        site.setId(3L);
+        site.setOwnerId(9L);
+        site.setName("示例站点");
+        site.setStartUrl("https://example.com/gallery");
+        site.setAllowedHosts("example.com,cdn.example.com");
+        CrawlRule input = new CrawlRule();
+        input.setSiteId(3L);
+        input.setName("高清图规则");
+        input.setEnabled(true);
+        input.setDetailSelector("a.detail");
+        when(siteRepository.findByIdAndOwnerId(3L, 9L)).thenReturn(Optional.of(site));
+        when(ruleRepository.save(org.mockito.ArgumentMatchers.any(CrawlRule.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CrawlRule saved = crawlService.saveRule(input, 9L);
+
+        verify(ruleRepository).deactivateAll(3L);
+        assertThat(saved.getEnabled()).isTrue();
+        assertThat(saved.getStartUrl()).isEqualTo("https://example.com/gallery");
+        assertThat(saved.getAllowedHosts()).isEqualTo("example.com,cdn.example.com");
+    }
+
+    @Test
+    void inactiveRuleCannotCreateJob() {
+        CrawlRule rule = new CrawlRule();
+        rule.setId(4L);
+        rule.setOwnerId(9L);
+        rule.setEnabled(false);
+        when(ruleRepository.findByIdAndOwnerId(4L, 9L)).thenReturn(Optional.of(rule));
+
+        assertThatThrownBy(() -> crawlService.createJob(4L, 9L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("生效");
+        verify(jobRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     private CrawlJob completedJob() {

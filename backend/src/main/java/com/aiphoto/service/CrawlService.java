@@ -4,10 +4,12 @@ import com.aiphoto.entity.CrawlAsset;
 import com.aiphoto.entity.CrawlJob;
 import com.aiphoto.entity.CrawlPage;
 import com.aiphoto.entity.CrawlRule;
+import com.aiphoto.entity.CrawlSite;
 import com.aiphoto.repository.CrawlAssetRepository;
 import com.aiphoto.repository.CrawlJobRepository;
 import com.aiphoto.repository.CrawlPageRepository;
 import com.aiphoto.repository.CrawlRuleRepository;
+import com.aiphoto.repository.CrawlSiteRepository;
 import com.aiphoto.repository.PhotoRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
@@ -32,6 +34,7 @@ public class CrawlService {
 
     private static final long MAX_HTML_BYTES = 5L * 1024 * 1024;
     private final CrawlRuleRepository ruleRepository;
+    private final CrawlSiteRepository siteRepository;
     private final CrawlJobRepository jobRepository;
     private final CrawlPageRepository pageRepository;
     private final CrawlAssetRepository assetRepository;
@@ -40,8 +43,41 @@ public class CrawlService {
     private final CrawlStagingStorageService stagingStorage;
     private final PhotoRepository photoRepository;
 
-    public List<CrawlRule> listRules(Long ownerId) {
-        return ruleRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId);
+    public List<CrawlSite> listSites(Long ownerId) {
+        return siteRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId);
+    }
+
+    @Transactional
+    public CrawlSite saveSite(CrawlSite input, Long ownerId) {
+        CrawlSite site = input.getId() == null ? new CrawlSite()
+                : getSite(input.getId(), ownerId);
+        String startUrl = requireText(input.getStartUrl(), "起始 URL");
+        URI start = validateStartUrl(startUrl);
+        site.setOwnerId(ownerId);
+        site.setName(requireText(input.getName(), "网站名称"));
+        site.setStartUrl(SafeHttpFetcher.normalize(startUrl));
+        String allowedHosts = input.getAllowedHosts() == null || input.getAllowedHosts().isBlank()
+                ? start.getHost().toLowerCase() : input.getAllowedHosts().trim().toLowerCase();
+        boolean startAllowed = java.util.Arrays.stream(allowedHosts.split(","))
+                .map(String::trim).anyMatch(start.getHost()::equalsIgnoreCase);
+        if (!startAllowed) throw new IllegalArgumentException("允许域名必须包含起始网站域名");
+        site.setAllowedHosts(allowedHosts);
+        site.setMaxListPages(clamp(input.getMaxListPages(), 1, 1000, 100));
+        site.setMaxDetailPages(clamp(input.getMaxDetailPages(), 1, 20000, 1000));
+        site.setMaxImages(clamp(input.getMaxImages(), 1, 50000, 5000));
+        site.setMaxFileBytes(input.getMaxFileBytes() == null
+                ? 20L * 1024 * 1024 : Math.max(1024, Math.min(input.getMaxFileBytes(), 100L * 1024 * 1024)));
+        return siteRepository.save(site);
+    }
+
+    public CrawlSite getSite(Long siteId, Long ownerId) {
+        return siteRepository.findByIdAndOwnerId(siteId, ownerId)
+                .orElseThrow(() -> new IllegalArgumentException("采集网站不存在"));
+    }
+
+    public List<CrawlRule> listRules(Long siteId, Long ownerId) {
+        getSite(siteId, ownerId);
+        return ruleRepository.findBySiteIdAndOwnerIdOrderByUpdatedAtDesc(siteId, ownerId);
     }
 
     @Transactional
@@ -49,7 +85,14 @@ public class CrawlService {
         CrawlRule rule = input.getId() == null ? new CrawlRule()
                 : ruleRepository.findByIdAndOwnerId(input.getId(), ownerId)
                         .orElseThrow(() -> new IllegalArgumentException("采集规则不存在"));
-        copyValidatedRule(input, rule, ownerId);
+        CrawlSite site = getSite(input.getSiteId(), ownerId);
+        if (rule.getId() != null && !java.util.Objects.equals(rule.getSiteId(), site.getId())) {
+            throw new IllegalArgumentException("解析规则不能移动到其他网站");
+        }
+        boolean activate = Boolean.TRUE.equals(input.getEnabled());
+        if (activate) ruleRepository.deactivateAll(site.getId());
+        copyValidatedRule(input, rule, site, ownerId);
+        rule.setEnabled(activate);
         return ruleRepository.save(rule);
     }
 
@@ -59,7 +102,8 @@ public class CrawlService {
             getRule(input.getId(), ownerId);
             rule.setId(input.getId());
         }
-        copyValidatedRule(input, rule, ownerId);
+        CrawlSite site = getSite(input.getSiteId(), ownerId);
+        copyValidatedRule(input, rule, site, ownerId);
         SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
                 rule.getStartUrl(), rule.getAllowedHosts(), MAX_HTML_BYTES);
         requireHtml(resource.contentType());
@@ -110,20 +154,14 @@ public class CrawlService {
         return images.stream().distinct().toList();
     }
 
-    private void copyValidatedRule(CrawlRule input, CrawlRule rule, Long ownerId) {
-        String startUrl = requireText(input.getStartUrl(), "起始 URL");
-        URI start = URI.create(startUrl);
-        if (start.getHost() == null || start.getUserInfo() != null
-                || !("http".equalsIgnoreCase(start.getScheme())
-                || "https".equalsIgnoreCase(start.getScheme()))) {
-            throw new IllegalArgumentException("起始 URL 必须是 HTTP/HTTPS 地址");
-        }
-        if (start.getPort() != -1 && start.getPort() != 80 && start.getPort() != 443) {
-            throw new IllegalArgumentException("起始 URL 只允许标准 HTTP/HTTPS 端口");
-        }
+    private void copyValidatedRule(
+            CrawlRule input, CrawlRule rule, CrawlSite site, Long ownerId) {
+        validateStartUrl(site.getStartUrl());
+        rule.setSiteId(site.getId());
+        applySiteConfig(rule, site);
+        rule.setEnabled(Boolean.TRUE.equals(input.getEnabled()));
         rule.setOwnerId(ownerId);
         rule.setName(requireText(input.getName(), "规则名称"));
-        rule.setStartUrl(SafeHttpFetcher.normalize(startUrl));
         rule.setDetailSelector(requireText(input.getDetailSelector(), "图片页选择器"));
         rule.setDetailUrlIncludes(cleanRules(input.getDetailUrlIncludes()));
         rule.setDetailUrlExcludes(cleanRules(input.getDetailUrlExcludes()));
@@ -137,26 +175,42 @@ public class CrawlService {
         rule.setDetailNextSelector(input.getDetailNextSelector() == null
                 ? "" : input.getDetailNextSelector().trim());
         rule.setMaxPagesPerDetail(clamp(input.getMaxPagesPerDetail(), 1, 100, 20));
-        String allowedHosts = input.getAllowedHosts() == null || input.getAllowedHosts().isBlank()
-                ? start.getHost().toLowerCase() : input.getAllowedHosts().trim().toLowerCase();
-        boolean startAllowed = java.util.Arrays.stream(allowedHosts.split(","))
-                .map(String::trim).anyMatch(start.getHost()::equalsIgnoreCase);
-        if (!startAllowed) throw new IllegalArgumentException("允许域名必须包含起始网站域名");
-        rule.setAllowedHosts(allowedHosts);
-        rule.setMaxListPages(clamp(input.getMaxListPages(), 1, 1000, 100));
-        rule.setMaxDetailPages(clamp(input.getMaxDetailPages(), 1, 20000, 1000));
-        rule.setMaxImages(clamp(input.getMaxImages(), 1, 50000, 5000));
-        rule.setMaxFileBytes(input.getMaxFileBytes() == null
-                ? 20L * 1024 * 1024 : Math.max(1024, Math.min(input.getMaxFileBytes(), 100L * 1024 * 1024)));
+    }
+
+    private URI validateStartUrl(String startUrl) {
+        URI start = URI.create(startUrl);
+        if (start.getHost() == null || start.getUserInfo() != null
+                || !("http".equalsIgnoreCase(start.getScheme())
+                || "https".equalsIgnoreCase(start.getScheme()))) {
+            throw new IllegalArgumentException("起始 URL 必须是 HTTP/HTTPS 地址");
+        }
+        if (start.getPort() != -1 && start.getPort() != 80 && start.getPort() != 443) {
+            throw new IllegalArgumentException("起始 URL 只允许标准 HTTP/HTTPS 端口");
+        }
+        return start;
+    }
+
+    private void applySiteConfig(CrawlRule rule, CrawlSite site) {
+        rule.setStartUrl(site.getStartUrl());
+        rule.setAllowedHosts(site.getAllowedHosts());
+        rule.setMaxListPages(site.getMaxListPages());
+        rule.setMaxDetailPages(site.getMaxDetailPages());
+        rule.setMaxImages(site.getMaxImages());
+        rule.setMaxFileBytes(site.getMaxFileBytes());
     }
 
     @Transactional
     public CrawlJob createJob(Long ruleId, Long ownerId) {
         CrawlRule rule = getRule(ruleId, ownerId);
+        if (!Boolean.TRUE.equals(rule.getEnabled())) {
+            throw new IllegalStateException("只能使用当前生效的解析规则创建任务");
+        }
+        CrawlSite site = getSite(rule.getSiteId(), ownerId);
+        applySiteConfig(rule, site);
         CrawlJob job = new CrawlJob();
         job.setOwnerId(ownerId);
         job.setRuleId(ruleId);
-        job.setName(rule.getName());
+        job.setName(site.getName() + " · " + rule.getName());
         try {
             job.setRuleSnapshot(objectMapper.writeValueAsString(rule));
         } catch (Exception exception) {

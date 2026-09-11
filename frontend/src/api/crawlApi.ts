@@ -1,5 +1,5 @@
 import http from './http'
-import type { CrawlAsset, CrawlJob, CrawlPage, CrawlRule, PageResponse } from '@/types'
+import type { CrawlAsset, CrawlJob, CrawlPage, CrawlRule, CrawlSite, PageResponse } from '@/types'
 
 export interface CrawlImportBatch {
   id: number
@@ -27,7 +27,11 @@ export interface CrawlImportItem {
 }
 
 export const crawlApi = {
-  rules: () => http.get<CrawlRule[]>('/crawl/rules'),
+  sites: () => http.get<CrawlSite[]>('/crawl/sites'),
+  saveSite: (site: CrawlSite) => site.id
+    ? http.put<CrawlSite>(`/crawl/sites/${site.id}`, site)
+    : http.post<CrawlSite>('/crawl/sites', site),
+  rules: (siteId: number) => http.get<CrawlRule[]>(`/crawl/sites/${siteId}/rules`),
   saveRule: (rule: CrawlRule) => rule.id
     ? http.put<CrawlRule>(`/crawl/rules/${rule.id}`, rule)
     : http.post<CrawlRule>('/crawl/rules', rule),
