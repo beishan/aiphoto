@@ -21,6 +21,8 @@ const previewImageUrls = ref<string[]>([])
 const previewImageError = ref('')
 const previewImages = reactive<Record<number, string>>({})
 const busy = ref('')
+const siteDialogVisible = ref(false)
+const siteSaveBusy = ref(false)
 const albums = ref<Album[]>([])
 const tags = ref<Tag[]>([])
 const targetAlbumId = ref<number | null>(null)
@@ -48,6 +50,11 @@ type TabKey = 'overview' | 'sites' | 'tasks' | 'review'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
+  name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+})
+
+const createSiteForm = reactive<CrawlSite>({
   name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
   maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
 })
@@ -243,14 +250,16 @@ async function selectSite(site: CrawlSite) {
   await loadRules()
 }
 
-function newSite() {
-  activeSiteId.value = null
-  Object.assign(siteForm, {
+function resetCreateSiteForm() {
+  Object.assign(createSiteForm, {
     id: undefined, name: '', startUrl: '', allowedHosts: '', maxListPages: 100,
     maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
   })
-  rules.value = []
-  newRule()
+}
+
+function openNewSiteDialog() {
+  resetCreateSiteForm()
+  siteDialogVisible.value = true
 }
 
 async function saveSite() {
@@ -267,6 +276,29 @@ async function saveSite() {
   await loadSites()
   await loadRules()
   ElMessage.success('网站基础配置已保存')
+}
+
+async function createSite() {
+  if (!createSiteForm.name || !createSiteForm.startUrl) {
+    ElMessage.warning('请填写网站名称和起始 URL')
+    return
+  }
+  if (!createSiteForm.allowedHosts) {
+    try { createSiteForm.allowedHosts = new URL(createSiteForm.startUrl).hostname } catch { /* backend validates */ }
+  }
+  siteSaveBusy.value = true
+  try {
+    const { data } = await crawlApi.saveSite({ ...createSiteForm })
+    siteDialogVisible.value = false
+    await loadSites()
+    const createdSite = sites.value.find(site => site.id === data.id) || data
+    await selectSite(createdSite)
+    ElMessage.success('网站已创建')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '网站创建失败')
+  } finally {
+    siteSaveBusy.value = false
+  }
 }
 
 async function activateRule(rule: CrawlRule) {
@@ -518,7 +550,7 @@ onUnmounted(() => {
         <h1>图片爬虫</h1>
         <p class="subtitle">从授权网站发现图片、人工确认下载范围，再整理并安全导入私人图库。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="newSite(); activeTab = 'sites'">新增采集网站</el-button>
+      <el-button type="primary" :icon="Plus" @click="activeTab = 'sites'; openNewSiteDialog()">新增采集网站</el-button>
     </header>
 
     <nav class="crawler-tabs" role="tablist" aria-label="图片采集中心栏目" @keydown="handleTabKey">
@@ -555,10 +587,10 @@ onUnmounted(() => {
 
     <template v-else-if="activeTab === 'sites'">
       <section class="panel site-panel" role="tabpanel">
-        <div class="section-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>网站基础配置独立保存，每个网站可以维护多条解析规则。</p></div><el-button :icon="Plus" @click="newSite">新增网站</el-button></div>
+        <div class="section-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>网站基础配置独立保存，每个网站可以维护多条解析规则。</p></div><el-button :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></div>
         <div class="site-layout">
           <aside class="sites"><button v-for="site in sites" :key="site.id" :class="{ active: activeSiteId === site.id }" @click="selectSite(site)"><span class="site-mark">{{ site.name.slice(0, 1) }}</span><span><strong>{{ site.name }}</strong><small>{{ site.startUrl }}</small></span></button><el-empty v-if="!sites.length" description="暂无网站" :image-size="48" /></aside>
-          <div class="fields site-form">
+          <div v-if="activeSiteId" class="fields site-form">
             <div class="form-block-title"><b>01</b><div><strong>网站身份与入口</strong><small>只允许访问配置的站点和图片 CDN 域名</small></div></div>
             <div class="two"><el-input v-model="siteForm.name" placeholder="网站名称" /><el-input v-model="siteForm.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" /></div>
             <el-input v-model="siteForm.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
@@ -566,6 +598,7 @@ onUnmounted(() => {
             <div class="limits"><label><span>列表页上限</span><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" /></label><label><span>图片页上限</span><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" /></label><label><span>图片上限</span><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" /></label></div>
             <div class="actions"><el-button type="primary" @click="saveSite">保存网站配置</el-button></div>
           </div>
+          <el-empty v-else description="选择一个网站查看配置，或点击新增网站" :image-size="60" />
         </div>
       </section>
 
@@ -649,6 +682,17 @@ onUnmounted(() => {
       <el-pagination v-if="assetTotal > assetPageSize" class="asset-pagination" layout="prev, pager, next, total" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
       </template>
     </section>
+
+    <el-dialog v-model="siteDialogVisible" title="新增采集网站" width="min(620px, calc(100vw - 28px))" destroy-on-close @closed="resetCreateSiteForm">
+      <div class="fields site-dialog-form">
+        <div class="form-block-title"><b>01</b><div><strong>网站身份与入口</strong><small>只允许访问配置的站点和图片 CDN 域名</small></div></div>
+        <div class="two"><el-input v-model="createSiteForm.name" autofocus placeholder="网站名称" /><el-input v-model="createSiteForm.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" /></div>
+        <el-input v-model="createSiteForm.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
+        <div class="form-block-title"><b>02</b><div><strong>单次任务安全上限</strong><small>避免错误规则产生无限翻页或超量下载</small></div></div>
+        <div class="limits"><label><span>列表页上限</span><el-input-number v-model="createSiteForm.maxListPages" :min="1" :max="1000" /></label><label><span>图片页上限</span><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" /></label><label><span>图片上限</span><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" /></label></div>
+      </div>
+      <template #footer><el-button @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
+    </el-dialog>
   </main>
 </template>
 
@@ -657,6 +701,7 @@ onUnmounted(() => {
 .crawler-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:5px 2px 8px}.crawler-hero h1{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:34px;letter-spacing:-.025em}.crawler-hero .subtitle{margin:7px 0 0;color:var(--text-secondary);font-size:13px}.eyebrow{margin:0;color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.17em}.crawler-tabs{position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding:4px;border:1px solid var(--separator);border-radius:15px;background:var(--bg-secondary);isolation:isolate}.crawler-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc((100% - 8px)/4)!important;border:1px solid var(--separator);border-radius:11px;background:var(--bg-card);box-shadow:0 5px 15px rgba(0,0,0,.09);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.crawler-segment{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 12px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.crawler-segment.active{color:var(--accent);font-weight:700}.crawler-segment b{min-width:21px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb,var(--accent) 13%,transparent);font-size:10px}.crawler-segment:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:11px}
 .panel{padding:24px;border:1px solid var(--separator);border-radius:22px;background:var(--bg-card);box-shadow:0 16px 42px rgba(0,0,0,.08)}.section-heading,.review-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}.section-heading h2,.review-panel>header h2{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:23px}.section-heading p:not(.eyebrow),.review-panel>header p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric-card{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:18px;border:1px solid var(--separator);border-radius:17px;background:var(--bg-secondary)}.metric-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:13px;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent);font-size:20px}.metric-card strong{font-size:25px;line-height:1}.metric-card p{margin:5px 0 0;color:var(--text-secondary);font-size:11px}.metric-card small{grid-column:1/-1;color:var(--text-tertiary);font-size:10px}.pipeline-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 27px;padding:16px;border:1px solid var(--separator);border-radius:17px;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 8%,var(--bg-secondary)),var(--bg-secondary))}.pipeline-strip article{display:flex;min-width:0;align-items:center;gap:10px}.pipeline-strip article>b{display:grid;flex:0 0 30px;height:30px;place-items:center;border-radius:10px;background:var(--bg-card);color:var(--accent);font-size:10px}.pipeline-strip article div{display:grid;gap:3px}.pipeline-strip article strong{font-size:12px}.pipeline-strip article small{color:var(--text-tertiary);font-size:9px}.pipeline-strip>i{color:var(--text-tertiary);font-style:normal}.task-name{display:grid;gap:4px}.task-name strong{font-size:12px}.task-name p{margin:0;color:var(--text-tertiary);font-size:10px}
 .site-layout,.rule-layout,.task-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px}.rule-layout{grid-template-columns:minmax(0,1fr) 260px}.fields{display:grid;gap:12px}.two{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:11px}.sites,.rules,.jobs{display:grid;align-content:start;gap:8px;max-height:420px;overflow:auto}.sites button,.rules button,.jobs button{display:grid;gap:5px;padding:11px;border:1px solid var(--separator);border-radius:13px;background:var(--bg-secondary);color:var(--text-primary);text-align:left;cursor:pointer;transition:border-color .18s ease,background .18s ease}.sites button.active,.rules button.active,.jobs button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg-secondary))}.sites button{grid-template-columns:38px minmax(0,1fr);align-items:center}.site-mark{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:16px;font-weight:800}.sites button>span:last-child,.jobs button>span{display:grid;min-width:0;gap:4px}.sites small,.rules small,.jobs small{overflow:hidden;color:var(--text-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.rules>strong{margin-bottom:4px;font-size:12px}.rule-name{display:flex;align-items:center;justify-content:space-between;gap:8px}.form-block-title{display:flex;align-items:center;gap:10px;margin-top:4px;padding-top:4px}.form-block-title>b{display:grid;width:31px;height:31px;place-items:center;border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10px}.form-block-title>div{display:grid;gap:2px}.form-block-title strong{font-size:12px}.form-block-title small{color:var(--text-tertiary);font-size:10px}.limits{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.limits label{display:grid;gap:6px;color:var(--text-secondary);font-size:10px}.limits :deep(.el-input-number){width:100%}.actions,.task-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.rule-block{margin-top:4px;padding-top:13px;border-top:1px solid var(--separator)}.rule-block strong{display:block;margin-top:4px;font-size:13px}.limit-field{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:10px}.preview-list,.page-list{display:grid;gap:7px;max-height:240px;margin-top:16px;overflow:auto}.preview-list{padding:13px;border-radius:13px;background:var(--bg-secondary)}.preview-list strong{font-size:11px}.preview-list a,.page-list>div{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.page-list>div{display:flex;align-items:center;gap:7px;padding:7px 3px;border-bottom:1px solid var(--separator)}.page-list span.excluded{text-decoration:line-through;opacity:.55}
+.site-dialog-form{padding:0 2px 8px}
 .task-summary{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}.task-summary h3{margin:3px 0 0;font-size:18px}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0}.stats span{display:grid;gap:4px;padding:10px;border-radius:11px;background:var(--bg-secondary);color:var(--text-secondary);font-size:9px}.stats b{color:var(--text-primary);font-size:16px}.task-actions{justify-content:flex-start;margin:14px 0}.page-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;margin-top:16px}.page-pagination,.asset-pagination{justify-content:center;margin-top:18px}.review-heading :deep(.el-select){width:min(320px,40vw)}.status-filter{width:130px}.similarity-bar{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;align-items:center;gap:12px;margin-bottom:14px;padding:11px 13px;border-radius:13px;background:var(--bg-secondary);color:var(--text-secondary);font-size:10px}.organize-bar{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(160px,.5fr) minmax(180px,.7fr);gap:8px;margin-bottom:14px}.import-batch{margin:0 0 14px;padding:13px;border-radius:13px;background:var(--bg-secondary);color:var(--text-secondary)}.import-toolbar{margin-top:10px}.import-items{display:grid;gap:7px;max-height:210px;margin-top:10px;overflow:auto}.import-items>div{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:10px}.import-error{color:var(--danger,#f56c6c)}
 .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.asset-grid article{position:relative;overflow:hidden;border:2px solid transparent;border-radius:15px;background:var(--bg-secondary);cursor:pointer}.asset-grid article.selected{border-color:var(--accent)}.asset-grid article.duplicate::after,.asset-grid article.similar::before{position:absolute;top:8px;z-index:1;padding:3px 6px;border-radius:8px;color:white;font-size:9px}.asset-grid article.duplicate::after{right:8px;background:#ff9f0a;content:'重复'}.asset-grid article.similar::before{left:8px;background:#6366f1;content:'相似'}.asset-grid img,.placeholder{width:100%;height:145px;object-fit:cover}.placeholder{display:grid;place-items:center;color:var(--text-tertiary)}.asset-copy{display:grid;gap:5px;padding:10px}.asset-copy strong,.asset-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset-copy strong{font-size:12px}.asset-copy small{color:var(--text-secondary);font-size:10px}details{margin-top:18px;color:var(--text-secondary)}.deleted-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px}.deleted-list span{padding:6px 9px;border-radius:9px;background:var(--bg-secondary);font-size:10px}
 @media(max-width:1050px){.metric-grid{grid-template-columns:repeat(2,1fr)}.pipeline-strip>i{display:none}.pipeline-strip{display:grid;grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(3,1fr)}}
