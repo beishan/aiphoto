@@ -173,11 +173,11 @@ const timelineItems = computed<TimelineItem[]>(() => {
   <div class="detail-view">
     <!-- Header with back button -->
     <div class="detail-header glass">
-      <button class="back-btn" @click="goBack">
+      <el-button class="back-btn" circle text aria-label="返回分类" @click="goBack">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info">
         <h2>{{ category?.name || '分类' }}</h2>
         <span class="header-count">{{ totalElements }} 张照片</span>
@@ -186,14 +186,12 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
     <div class="detail-scroll" @scroll="handleScroll">
       <!-- Empty state -->
-      <div v-if="!loading && photos.length === 0" class="empty-state">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
-        </svg>
-        <h3>暂无照片</h3>
-        <p v-if="category && !category.trained">请先选择模板照片训练此分类</p>
-        <p v-else>AI 还没有找到匹配的照片</p>
-      </div>
+      <el-empty
+        v-if="!loading && photos.length === 0"
+        class="empty-state"
+        :description="category && !category.trained ? '请先选择模板照片训练此分类' : 'AI 还没有找到匹配的照片'"
+        :image-size="92"
+      />
 
       <!-- Photo grid -->
       <template v-else>

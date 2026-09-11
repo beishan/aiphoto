@@ -98,5 +98,7 @@ provide('toggleTheme', toggleTheme)
 </script>
 
 <template>
-  <router-view />
+  <el-config-provider size="default">
+    <router-view />
+  </el-config-provider>
 </template>

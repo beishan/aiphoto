@@ -142,13 +142,7 @@ async function handleToggleFavorite(photoId: number) {
   <div class="gallery-wrapper">
     <div ref="scrollContainer" class="gallery-scroll" @scroll="handleScroll">
       <!-- Empty state -->
-      <div v-if="!loading && photos.length === 0" class="empty-state">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64" class="empty-icon">
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-        </svg>
-        <h3>还没有喜欢的照片</h3>
-        <p>点击照片上的爱心按钮收藏</p>
-      </div>
+      <el-empty v-if="!loading && photos.length === 0" class="empty-state" description="还没有喜欢的照片，点击照片上的爱心按钮收藏" :image-size="96" />
 
       <!-- Photo grid grouped by month -->
       <template v-else>

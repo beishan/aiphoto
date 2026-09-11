@@ -1,0 +1,445 @@
+/* Application-wide macOS 26 surface language.
+   Loaded after the base theme so every routed workspace shares one hierarchy. */
+:root {
+  --workspace-max-width: 1480px;
+  --workspace-gutter: clamp(14px, 2.2vw, 30px);
+  --workspace-radius: 22px;
+  --workspace-radius-sm: 15px;
+  --workspace-surface: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  --workspace-surface-soft: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+  --workspace-shadow: 0 16px 42px color-mix(in srgb, var(--shadow-color) 76%, transparent);
+  --workspace-hairline: color-mix(in srgb, var(--separator) 88%, transparent);
+}
+
+.app-shell {
+  background: transparent !important;
+}
+
+.app-shell .top-bar {
+  border-color: var(--workspace-hairline);
+  background: color-mix(in srgb, var(--glass-bg) 90%, transparent);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--shadow-color) 38%, transparent);
+}
+
+.app-shell .top-bar .page-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: -.015em;
+}
+
+.app-shell .theme-toggle.el-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+}
+
+.app-shell .theme-toggle.el-button:hover {
+  border-color: var(--workspace-hairline);
+  background: var(--workspace-surface-soft);
+  color: var(--accent);
+}
+
+.app-shell .main-content {
+  background: transparent;
+}
+
+.app-shell .main-content :is(
+  .gallery-wrapper,
+  .albums-view,
+  .baby-view,
+  .categories-view,
+  .dedup-view,
+  .folders-view,
+  .more-view,
+  .people-view,
+  .search-view,
+  .settings-view,
+  .tags-view,
+  .timeline-view,
+  .album-detail,
+  .tag-detail-view,
+  .detail-view
+) {
+  width: min(var(--workspace-max-width), 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.app-shell .main-content .gallery-wrapper {
+  width: min(var(--workspace-max-width), 100%);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.app-shell .main-content :is(
+  .albums-view,
+  .baby-view,
+  .categories-view,
+  .dedup-view,
+  .folders-view,
+  .more-view,
+  .people-view,
+  .search-view,
+  .settings-view,
+  .tags-view,
+  .timeline-view
+) {
+  padding-right: var(--workspace-gutter);
+  padding-left: var(--workspace-gutter);
+}
+
+.app-shell .main-content :is(.page-header, .detail-header, .baby-header, .controls-bar, .search-header, .selection-toolbar) {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: var(--workspace-radius-sm);
+  background: var(--workspace-surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--shadow-color) 52%, transparent);
+}
+
+.app-shell .main-content :is(.page-header, .detail-header, .baby-header) {
+  min-height: 66px;
+  padding: 14px 16px;
+}
+
+.app-shell .main-content :is(.page-header, .detail-header, .baby-header) :is(h1, h2) {
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-weight: 680;
+  letter-spacing: -.025em;
+}
+
+.app-shell .main-content :is(.page-desc, .page-subtitle, .header-count, .photo-count) {
+  color: var(--text-secondary);
+}
+
+.app-shell .main-content :is(
+  .album-card,
+  .category-card,
+  .person-card,
+  .tag-card,
+  .tag-list-item,
+  .group-card,
+  .panel-card,
+  .content-panel,
+  .info-section,
+  .stat-card,
+  .age-section,
+  .description-section,
+  .filter-section,
+  .search-section,
+  .scan-section,
+  .initial-state
+) ,
+.app-shell .main-content :is(.menu-section, .app-info, .faces-section, .actions-bar, .info-panel) {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: var(--workspace-radius-sm);
+  background: var(--workspace-surface);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--shadow-color) 48%, transparent);
+}
+
+.app-shell .main-content :is(.album-card, .category-card, .person-card, .tag-card, .tag-list-item, .group-card) {
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.app-shell .main-content :is(.album-card, .category-card, .person-card, .tag-card, .tag-list-item, .group-card):hover {
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--workspace-hairline));
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 78%, transparent);
+  transform: translateY(-3px);
+}
+
+.app-shell .main-content :is(.album-cover, .tag-cover, .person-avatar, .group-photo, .grid-item) {
+  overflow: hidden;
+  border-radius: 13px;
+}
+
+.app-shell .main-content :is(.album-cover img, .tag-cover img, .person-avatar img, .group-photo img, .grid-img, .preview-media) {
+  object-fit: cover;
+}
+
+.app-shell .main-content :is(.controls-bar, .selection-toolbar) {
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+.app-shell .main-content :is(
+  .back-btn,
+  .toolbar-btn,
+  .view-btn,
+  .zoom-btn,
+  .toggle-btn,
+  .action-btn,
+  .action-link,
+  .btn-cancel,
+  .cover-btn,
+  .train-btn,
+  .load-more-btn,
+  .scroll-top-btn
+) {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--workspace-hairline);
+  border-radius: 10px;
+  background: var(--workspace-surface-soft);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 48%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 590;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.app-shell .main-content :is(.back-btn, .zoom-btn, .view-btn, .scroll-top-btn) {
+  display: inline-grid;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.app-shell .main-content :is(.back-btn, .toolbar-btn, .view-btn, .zoom-btn, .toggle-btn, .action-btn, .action-link):hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--workspace-hairline));
+  background: color-mix(in srgb, var(--accent) 9%, var(--workspace-surface-soft));
+  color: var(--accent);
+}
+
+.app-shell .main-content :is(.create-btn, .scan-btn, .btn-save, .fab-create, .fab-upload, .fab-select, .fab-reclassify) {
+  border: 1px solid color-mix(in srgb, white 42%, transparent);
+  background: linear-gradient(145deg, var(--accent-hover), var(--accent) 58%, color-mix(in srgb, var(--accent) 74%, #5e5ce6));
+  box-shadow: 0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, .52);
+  color: white;
+  font-weight: 650;
+}
+
+.app-shell .main-content :is(.fab-create, .fab-upload, .fab-select, .fab-reclassify) {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.app-shell .main-content :is(button, .el-button):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.app-shell .main-content :is(button, .el-button):disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.app-shell .main-content :is(.empty-state, .loading-state, .initial-state) {
+  min-height: 280px;
+  padding: 34px;
+  place-content: center;
+  color: var(--text-secondary);
+}
+
+.app-shell .main-content .empty-state .empty-icon,
+.app-shell .main-content .initial-state .initial-icon {
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-tertiary));
+  filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--accent) 16%, transparent));
+}
+
+.app-shell .main-content .loading-spinner,
+.app-shell .main-content .scan-spinner,
+.app-shell .main-content .fab-spinner {
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-top-color: var(--accent);
+}
+
+.app-shell .main-content :is(.photo-grid-compact, .album-grid, .category-grid, .people-grid, .tags-grid) {
+  gap: clamp(6px, .9vw, 13px);
+}
+
+.app-shell .main-content .month-label,
+.app-shell .main-content .age-label,
+.app-shell .main-content .month-header {
+  color: var(--text-primary);
+  font-family: var(--font-heading);
+  font-weight: 670;
+  letter-spacing: -.018em;
+}
+
+.app-shell .main-content :is(.timeline-axis, .timeline-rail, .zoom-controls, .picker-panel, .user-popup-menu, .trash-popup) {
+  border: 1px solid var(--workspace-hairline);
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow);
+}
+
+.app-shell .main-content :is(.timeline-axis, .picker-panel) {
+  border-radius: var(--workspace-radius-sm);
+}
+
+.app-shell .main-content :is(.timeline-dot, .axis-dot) {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.app-shell .main-content .settings-layout {
+  gap: 16px;
+}
+
+.app-shell .main-content :is(.settings-sidebar, .settings-nav) {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-surface);
+  box-shadow: var(--workspace-shadow);
+}
+
+.app-shell .main-content :is(.settings-nav-item, .nav-item, .model-tab, .task-filter-btn, .quick-filter-btn, .tab-btn) {
+  border-radius: 10px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.app-shell .main-content :is(.settings-nav-item, .nav-item, .model-tab, .task-filter-btn, .quick-filter-btn, .tab-btn).active {
+  background: color-mix(in srgb, var(--accent) 13%, var(--workspace-surface-soft));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.app-shell .main-content :is(.content-panel, .panel-card, .info-section) {
+  overflow: hidden;
+}
+
+.app-shell .main-content :is(.ios-input, .filter-select) {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: 10px;
+  background: var(--workspace-surface-soft);
+  color: var(--text-primary);
+}
+
+.app-shell .main-content code {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: 8px;
+  background: var(--workspace-surface-soft);
+  color: var(--text-secondary);
+}
+
+.app-shell .main-content .photo-preview {
+  overflow: hidden;
+  border: 1px solid var(--workspace-hairline);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-surface-soft);
+  box-shadow: var(--workspace-shadow);
+}
+
+.app-shell .main-content .rating-badge {
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 999px;
+  background: rgba(20, 20, 24, .58);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+}
+
+.app-shell .dock {
+  border-color: color-mix(in srgb, var(--glass-border) 92%, transparent);
+  background: color-mix(in srgb, var(--glass-bg) 90%, transparent);
+}
+
+[data-theme="macos26"] .app-shell .top-bar,
+[data-theme="macos26"] .app-shell .dock,
+[data-theme="macos26"] .app-shell .main-content :is(
+  .page-header,
+  .detail-header,
+  .baby-header,
+  .controls-bar,
+  .selection-toolbar,
+  .album-card,
+  .category-card,
+  .person-card,
+  .tag-card,
+  .tag-list-item,
+  .group-card,
+  .panel-card,
+  .content-panel,
+  .info-section,
+  .stat-card,
+  .age-section,
+  .description-section,
+  .filter-section,
+  .search-section,
+  .scan-section,
+  .initial-state,
+  .settings-sidebar,
+  .settings-nav,
+  .timeline-axis,
+  .timeline-rail,
+  .zoom-controls,
+  .picker-panel,
+  .photo-preview
+) ,
+[data-theme="macos26"] .app-shell .main-content :is(.menu-section, .app-info, .faces-section, .actions-bar, .info-panel) {
+  border-color: rgba(255, 255, 255, .76);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .66), rgba(244, 249, 255, .38));
+  box-shadow: 0 18px 44px rgba(45, 61, 94, .16), inset 0 1px 0 rgba(255, 255, 255, .94), inset 0 -1px 0 rgba(76, 102, 138, .08);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+}
+
+.login-page .login-card {
+  border: 1px solid var(--workspace-hairline);
+  border-radius: var(--workspace-radius);
+  box-shadow: var(--workspace-shadow), inset 0 1px 0 rgba(255, 255, 255, .24);
+}
+
+[data-theme="macos26"] .login-page .login-card {
+  border-color: rgba(255, 255, 255, .8);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(244, 249, 255, .4));
+  box-shadow: 0 26px 64px rgba(45, 61, 94, .2), inset 0 1px 0 rgba(255, 255, 255, .98);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+}
+
+[data-theme="macos26"] .app-shell .main-content :is(.back-btn, .toolbar-btn, .view-btn, .zoom-btn, .toggle-btn, .action-btn, .action-link, .btn-cancel, .cover-btn, .train-btn, .load-more-btn, .scroll-top-btn) {
+  border-color: rgba(255, 255, 255, .72);
+  background: rgba(255, 255, 255, .48);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 6px 16px rgba(48, 66, 100, .08);
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="macos26"] .app-shell .top-bar,
+  [data-theme="macos26"] .app-shell .dock,
+  [data-theme="macos26"] .app-shell .main-content :is(.page-header, .detail-header, .controls-bar, .album-card, .category-card, .person-card, .tag-card, .panel-card, .content-panel, .settings-sidebar) {
+    background: rgba(247, 250, 255, .96);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell .main-content :is(
+    .albums-view,
+    .baby-view,
+    .categories-view,
+    .dedup-view,
+    .folders-view,
+    .more-view,
+    .people-view,
+    .search-view,
+    .settings-view,
+    .tags-view,
+    .timeline-view
+  ) {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .app-shell .main-content :is(.page-header, .detail-header, .baby-header) {
+    border-radius: 14px;
+  }
+
+  .app-shell .main-content :is(.album-card, .category-card, .person-card, .tag-card, .tag-list-item, .group-card):hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .main-content :is(.album-card, .category-card, .person-card, .tag-card, .tag-list-item, .group-card) {
+    transition: none;
+  }
+}

@@ -89,40 +89,23 @@ function openViewer(photos: Photo[], index: number) {
         <el-option value="name" label="按名称" />
         <el-option value="count" label="按照片数" />
       </el-select>
-      <div class="view-toggle">
-        <button class="view-btn" :class="{ active: viewMode === 'grid' }" @click="viewMode = 'grid'">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zM13 3h8v8h-8V3zm0 10h8v8h-8v-8z" />
-          </svg>
-        </button>
-        <button class="view-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h18v2H3v-2z" />
-          </svg>
-        </button>
-      </div>
+      <el-segmented v-model="viewMode" class="view-toggle" :options="[{ label: '网格', value: 'grid' }, { label: '列表', value: 'list' }]" />
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="loading-state">
-      <div class="loading-spinner"></div>
-    </div>
+    <div v-if="loading" class="loading-state"><el-skeleton :rows="5" animated /></div>
 
     <!-- Empty -->
-    <div v-else-if="tags.length === 0" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-        <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42z" />
-      </svg>
-      <h3>暂无标签</h3>
-      <p>在照片详情页中为照片添加标签</p>
-    </div>
+    <el-empty v-else-if="tags.length === 0" class="empty-state" description="暂无标签，在照片详情页中为照片添加标签" :image-size="92" />
 
     <!-- Grid view -->
     <div v-else-if="viewMode === 'grid'" class="tags-grid">
-      <div
+      <el-card
         v-for="tag in tags"
         :key="tag.id"
         class="tag-card"
+        shadow="hover"
+        :body-style="{ padding: '0' }"
         @click="goToTag(tag.id)"
       >
         <!-- Cover: 4-photo mosaic -->
@@ -157,15 +140,16 @@ function openViewer(photos: Photo[], index: number) {
           <span class="tag-name">{{ tag.name }}</span>
           <span class="tag-count">{{ tag.photoCount }} 张</span>
         </div>
-      </div>
+      </el-card>
     </div>
 
     <!-- List view -->
     <div v-else class="tags-list">
-      <div
+      <el-card
         v-for="tag in tags"
         :key="tag.id"
         class="tag-list-item"
+        shadow="never"
         @click="goToTag(tag.id)"
       >
         <div class="tag-color-dot" :style="{ background: tag.color || '#0a84ff' }"></div>
@@ -177,7 +161,7 @@ function openViewer(photos: Photo[], index: number) {
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" class="arrow-icon">
           <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" />
         </svg>
-      </div>
+      </el-card>
     </div>
 
     <PhotoViewer

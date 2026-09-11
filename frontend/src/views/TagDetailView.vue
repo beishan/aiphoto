@@ -60,11 +60,11 @@ watch(sortBy, updateSort)
 <template>
   <div class="tag-detail-view">
     <div class="detail-header">
-      <button class="back-btn" @click="router.push('/tags')">
+      <el-button class="back-btn" circle text aria-label="返回标签" @click="router.push('/tags')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info">
         <div class="tag-color-dot" v-if="tag" :style="{ background: tag.color || '#0a84ff' }"></div>
         <h1 class="tag-title">{{ tag?.name || '标签' }}</h1>
@@ -80,9 +80,7 @@ watch(sortBy, updateSort)
       <div class="loading-spinner"></div>
     </div>
 
-    <div v-else-if="sortedPhotos.length === 0" class="empty-state">
-      <p>此标签下暂无照片</p>
-    </div>
+    <el-empty v-else-if="sortedPhotos.length === 0" class="empty-state" description="此标签下暂无照片" :image-size="92" />
 
     <div v-else class="photo-grid-compact">
       <div

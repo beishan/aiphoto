@@ -106,11 +106,11 @@ const groupedNodes = computed(() => {
     <div class="timeline-layout" :class="{ 'is-empty': !loading && timelineNodes.length === 0 }">
       <!-- Left timeline axis -->
       <aside class="timeline-axis">
-        <button class="scroll-top-btn" @click="scrollToTop" title="返回顶部">
+        <el-button class="scroll-top-btn" circle text @click="scrollToTop" title="返回顶部">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
           </svg>
-        </button>
+        </el-button>
         <div class="axis-line"></div>
         <div
           v-for="(nodes, year) in groupedNodes"
@@ -135,18 +135,10 @@ const groupedNodes = computed(() => {
       <!-- Right photo content -->
       <div class="timeline-content" ref="scrollContainer">
         <!-- Loading -->
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-        </div>
+        <div v-if="loading" class="loading-state"><el-skeleton :rows="6" animated /></div>
 
         <!-- Empty -->
-        <div v-else-if="timelineNodes.length === 0" class="empty-state">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-            <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z" />
-          </svg>
-          <h3>时间线暂无照片</h3>
-          <p>在照片详情页中点击"添加到时间线"来展示照片</p>
-        </div>
+        <el-empty v-else-if="timelineNodes.length === 0" class="empty-state" description="时间线暂无照片，在照片详情页中添加照片" :image-size="92" />
 
         <!-- Timeline -->
         <div v-else>

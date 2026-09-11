@@ -8,6 +8,7 @@ import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import { useDockIconStore } from '@/stores/dockIconStore'
 import { photoApi } from '@/api/photoApi'
+import { MagicStick, Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -72,6 +73,8 @@ const pageTitle = computed(() => {
   if (path === '/folders') return '文件夹'
   return 'aiphoto'
 })
+
+const themeIcon = computed(() => theme.value === 'dark' ? Sunny : theme.value === 'light' ? MagicStick : Moon)
 
 function navigateTo(path: string) {
   router.push(path)
@@ -289,17 +292,7 @@ function getDockItemStyle(index: number) {
         <TaskFloat />
       </div>
       <h1 class="page-title">{{ pageTitle }}</h1>
-      <button class="theme-toggle" @click="toggleTheme" :title="themeTitle">
-        <svg v-if="theme === 'dark'" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M12 7a5 5 0 100 10 5 5 0 000-10zm0-3a1 1 0 01-1-1V1a1 1 0 112 0v2a1 1 0 01-1 1zm0 18a1 1 0 01-1-1v-2a1 1 0 112 0v2a1 1 0 01-1 1zm9-9a1 1 0 01-1 1h-2a1 1 0 110-2h2a1 1 0 011 1zM6 13H4a1 1 0 110-2h2a1 1 0 010 2zm12.07-6.07a1 1 0 010-1.41l1.42-1.42a1 1 0 111.41 1.41l-1.41 1.42a1 1 0 01-1.42 0zM4.93 19.07a1 1 0 010-1.41l1.42-1.42a1 1 0 111.41 1.41l-1.41 1.42a1 1 0 01-1.42 0zm14.14 0a1 1 0 01-1.41 0l-1.42-1.42a1 1 0 011.41-1.41l1.42 1.41a1 1 0 010 1.42zM4.93 4.93a1 1 0 01-1.42 0L2.1 3.51a1 1 0 011.41-1.41l1.42 1.41a1 1 0 010 1.42z" />
-        </svg>
-        <svg v-else-if="theme === 'light'" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M21.64 13a1 1 0 00-1.05-.14 8.05 8.05 0 01-3.37.73 8.15 8.15 0 01-8.14-8.14 8.59 8.59 0 01.25-2A1 1 0 008 2.36a10.14 10.14 0 1014 11 1 1 0 00-.36-.64z" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M12 2L2 9l10 13L22 9 12 2zm0 2.8L19.5 9 12 19.2 4.5 9 12 4.8z" />
-        </svg>
-      </button>
+      <el-button class="theme-toggle" :icon="themeIcon" circle text @click="toggleTheme" :title="themeTitle" />
     </header>
 
     <!-- Main content -->

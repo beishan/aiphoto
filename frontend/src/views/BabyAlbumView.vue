@@ -47,11 +47,11 @@ function openViewer(photos: Photo[], index: number) {
   <div class="baby-view">
     <!-- Back to albums -->
     <div class="baby-header">
-      <button class="back-btn" @click="router.push('/albums')">
+      <el-button class="back-btn" circle text aria-label="返回相册" @click="router.push('/albums')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <h2>宝宝相册</h2>
       <el-select
         v-if="albums.length > 0"
@@ -64,14 +64,7 @@ function openViewer(photos: Photo[], index: number) {
     </div>
 
     <!-- Empty -->
-    <div v-if="albums.length === 0" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-        <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 3a2.5 2.5 0 110 5 2.5 2.5 0 010-5zm0 13.2c-2.03 0-3.8-.81-5.11-2.12.03-1.99 4-3.08 6.11-3.08 2.03 0 5.97 1.09 6 3.08A7.96 7.96 0 0112 18.2z" />
-      </svg>
-      <h3>暂无宝宝相册</h3>
-      <p>请先创建一个宝宝类型的相册</p>
-      <button class="create-btn" @click="router.push('/albums')">去创建</button>
-    </div>
+    <el-empty v-if="albums.length === 0" class="empty-state" description="暂无宝宝相册" :image-size="92"><p>请先创建一个宝宝类型的相册</p><el-button type="primary" round @click="router.push('/albums')">去创建</el-button></el-empty>
 
     <!-- Timeline -->
     <div v-else-if="loading" class="loading-state">

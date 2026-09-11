@@ -28,7 +28,7 @@ const iconPaths: Record<string, string> = {
 <template>
   <div class="more-view">
     <!-- Menu sections -->
-    <div class="menu-section">
+    <el-card class="menu-section" shadow="never" :body-style="{ padding: '0' }">
       <div
         v-for="item in menuItems"
         :key="item.path"
@@ -45,7 +45,7 @@ const iconPaths: Record<string, string> = {
           <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
         </svg>
       </div>
-    </div>
+    </el-card>
 
     <!-- App info -->
     <div class="app-info">
@@ -54,16 +54,16 @@ const iconPaths: Record<string, string> = {
     </div>
 
     <!-- Logout -->
-    <div class="menu-section">
-      <button class="menu-item logout-item" @click="handleLogout">
+    <el-card class="menu-section" shadow="never" :body-style="{ padding: '0' }">
+      <el-button class="menu-item logout-item" text @click="handleLogout">
         <div class="menu-icon danger">
           <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
             <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
           </svg>
         </div>
         <span class="menu-label danger">退出登录</span>
-      </button>
-    </div>
+      </el-button>
+    </el-card>
   </div>
 </template>
 

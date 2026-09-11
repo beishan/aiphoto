@@ -81,58 +81,35 @@ function formatSize(bytes: number | null) {
 <template>
   <div class="dedup-view">
     <div class="page-header">
-      <button class="back-btn" @click="router.push('/more')">
+      <el-button class="back-btn" circle text aria-label="返回" @click="router.push('/more')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <h1 class="page-title">去重检测</h1>
     </div>
 
     <!-- Scan button -->
     <div class="scan-section">
-      <button class="scan-btn" @click="scan" :disabled="loading">
+      <el-button type="primary" class="scan-btn" round :loading="loading" @click="scan">
         <svg v-if="!loading" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
         </svg>
-        <div v-else class="scan-spinner"></div>
         {{ loading ? '扫描中...' : '扫描重复照片' }}
-      </button>
+      </el-button>
     </div>
 
     <!-- Tabs -->
-    <div v-if="scanned && !loading" class="dedup-tabs">
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'exact' }"
-        @click="activeTab = 'exact'"
-      >
-        精确重复
-        <span class="tab-badge" v-if="exactGroups.length">{{ exactGroups.length }}</span>
-      </button>
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'similar' }"
-        @click="activeTab = 'similar'"
-      >
-        相似照片
-        <span class="tab-badge" v-if="similarGroups.length">{{ similarGroups.length }}</span>
-      </button>
-    </div>
+    <el-segmented v-if="scanned && !loading" v-model="activeTab" class="dedup-tabs" :options="[{ label: `精确重复 ${exactGroups.length || ''}`, value: 'exact' }, { label: `相似照片 ${similarGroups.length || ''}`, value: 'similar' }]" block />
 
     <!-- Results -->
     <div v-if="scanned && !loading" class="dedup-results">
       <!-- Empty -->
-      <div v-if="currentGroups.length === 0" class="empty-state">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-        </svg>
-        <h3>没有发现{{ activeTab === 'exact' ? '精确重复' : '相似' }}的照片</h3>
-      </div>
+      <el-empty v-if="currentGroups.length === 0" class="empty-state" :description="`没有发现${activeTab === 'exact' ? '精确重复' : '相似'}的照片`" :image-size="88" />
 
       <!-- Group list -->
       <div v-else class="group-list">
-        <div v-for="(group, gi) in currentGroups" :key="gi" class="group-card">
+        <el-card v-for="(group, gi) in currentGroups" :key="gi" class="group-card" shadow="never">
           <div class="group-header">
             <span class="group-info">{{ group.length }} 张照片</span>
             <span class="group-size" v-if="group[0]?.fileSize">{{ formatSize(group[0].fileSize) }}</span>
@@ -152,18 +129,12 @@ function formatSize(bytes: number | null) {
               </button>
             </div>
           </div>
-        </div>
+        </el-card>
       </div>
     </div>
 
     <!-- Initial state -->
-    <div v-if="!scanned && !loading" class="initial-state">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64" class="initial-icon">
-        <path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-      </svg>
-      <h3>照片去重</h3>
-      <p>扫描你的照片库，找出重复和相似的照片</p>
-    </div>
+    <el-empty v-if="!scanned && !loading" class="initial-state" description="扫描照片库，找出重复和相似的照片" :image-size="104" />
 
     <PhotoViewer
       v-model:show="viewerVisible"

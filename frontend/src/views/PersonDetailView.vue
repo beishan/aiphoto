@@ -209,16 +209,16 @@ function getBboxStyle(bboxJson: string) {
   <div class="detail-view">
     <!-- Header -->
     <div class="detail-header glass">
-      <button class="back-btn" @click="goBack">
+      <el-button class="back-btn" circle text aria-label="返回人物" @click="goBack">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z" />
         </svg>
-      </button>
+      </el-button>
       <div class="header-info">
         <div v-if="editing" class="name-edit">
           <el-input v-model="editName" class="name-input" autofocus @keyup.enter="saveName" />
-          <button class="name-save" @click="saveName">保存</button>
-          <button class="name-cancel" @click="editing = false">取消</button>
+          <el-button type="primary" size="small" round @click="saveName">保存</el-button>
+          <el-button size="small" round @click="editing = false">取消</el-button>
         </div>
         <h2 v-else @click="startEdit" class="name-editable">
           {{ person?.name || '未命名' }}
@@ -228,11 +228,11 @@ function getBboxStyle(bboxJson: string) {
         </h2>
         <span class="header-meta">{{ totalElements }} 张照片 · {{ formatRange() }}</span>
       </div>
-      <button class="delete-btn" @click="confirmDelete" title="删除人物">
+      <el-button class="delete-btn" circle text type="danger" aria-label="删除人物" @click="confirmDelete">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
         </svg>
-      </button>
+      </el-button>
     </div>
 
     <div class="detail-scroll" @scroll="handleScroll">
@@ -259,13 +259,7 @@ function getBboxStyle(bboxJson: string) {
       </div>
 
       <!-- Empty state -->
-      <div v-if="!loading && photos.length === 0" class="empty-state">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" class="empty-icon">
-          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-        </svg>
-        <h3>暂无照片</h3>
-        <p>AI 还没有找到此人的照片</p>
-      </div>
+      <el-empty v-if="!loading && photos.length === 0" class="empty-state" description="AI 还没有找到此人的照片" :image-size="92" />
 
       <!-- Photo grid -->
       <template v-else>
