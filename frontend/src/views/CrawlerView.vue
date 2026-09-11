@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Collection, Connection, DataAnalysis, List, Plus, Refresh, Warning } from '@element-plus/icons-vue'
+import {
+  CircleCheck, Collection, Connection, Delete, Download, EditPen, FolderOpened,
+  List, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, Warning,
+} from '@element-plus/icons-vue'
 import { crawlApi } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
@@ -71,13 +74,12 @@ const failedJobs = computed(() => jobs.value.filter(job => ['FAILED', 'PARTIAL']
 const reviewJobs = computed(() => jobs.value.filter(job => job.phase === 'REVIEW'))
 const totalDownloaded = computed(() => jobs.value.reduce((total, job) => total + job.imagesDownloaded, 0))
 const recentJobs = computed(() => jobs.value.slice(0, 6))
-const tabs = computed(() => [
-  { key: 'overview' as const, label: '采集概览', icon: DataAnalysis, count: 0 },
-  { key: 'sites' as const, label: '网站与规则', icon: Connection, count: sites.value.length },
-  { key: 'tasks' as const, label: '采集任务', icon: List, count: activeJobs.value.length },
-  { key: 'review' as const, label: '待整理区', icon: Collection, count: reviewJobs.value.length },
+const tabOptions = computed(() => [
+  { label: '采集概览', value: 'overview' },
+  { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
+  { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
+  { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
 ])
-const activeIndex = computed(() => tabs.value.findIndex(tab => tab.key === activeTab.value))
 const metrics = computed(() => [
   { label: '采集网站', value: sites.value.length, note: `${sites.value.length ? '已配置来源' : '等待配置'}`, icon: Connection },
   { label: '运行中任务', value: activeJobs.value.length, note: `${jobs.value.length} 个历史任务`, icon: List },
@@ -144,19 +146,6 @@ function phaseLabel(phase: CrawlJob['phase']) {
 function formatTime(value?: string) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-}
-
-function handleTabKey(event: KeyboardEvent) {
-  const keys = tabs.value.map(tab => tab.key)
-  let index = activeIndex.value
-  if (['ArrowRight', 'ArrowDown'].includes(event.key)) index = (index + 1) % keys.length
-  else if (['ArrowLeft', 'ArrowUp'].includes(event.key)) index = (index - 1 + keys.length) % keys.length
-  else if (event.key === 'Home') index = 0
-  else if (event.key === 'End') index = keys.length - 1
-  else return
-  event.preventDefault()
-  activeTab.value = keys[index]
-  requestAnimationFrame(() => document.querySelectorAll<HTMLButtonElement>('.crawler-segment')[index]?.focus())
 }
 
 async function loadJobDetail() {
@@ -248,6 +237,20 @@ async function selectSite(site: CrawlSite) {
   activeSiteId.value = site.id || null
   Object.assign(siteForm, site)
   await loadRules()
+}
+
+function selectSiteById(id: string) {
+  const site = sites.value.find(item => item.id === Number(id))
+  if (site) void selectSite(site)
+}
+
+function selectRuleById(id: string) {
+  const rule = rules.value.find(item => item.id === Number(id))
+  if (rule) useRule(rule)
+}
+
+function selectJobById(id: string) {
+  activeJobId.value = Number(id)
 }
 
 function resetCreateSiteForm() {
@@ -379,6 +382,11 @@ function toggleAsset(id: number) {
 
 function selectAllDownloadable() {
   selectedAssets.value = new Set(reviewAssets.value.filter(asset => asset.status === 'DOWNLOADED').map(asset => asset.id))
+}
+
+function toggleAllDownloadable(selected: string | number | boolean) {
+  if (Boolean(selected)) selectAllDownloadable()
+  else selectedAssets.value = new Set()
 }
 
 async function deleteSelected() {
@@ -544,154 +552,284 @@ onUnmounted(() => {
 
 <template>
   <main class="crawler-page">
-    <header class="crawler-hero">
-      <div>
-        <p class="eyebrow">IMAGE COLLECTION PIPELINE</p>
-        <h1>图片爬虫</h1>
-        <p class="subtitle">从授权网站发现图片、人工确认下载范围，再整理并安全导入私人图库。</p>
+    <el-card class="hero-card surface-card" shadow="never">
+      <div class="crawler-hero">
+        <div class="hero-copy">
+          <span class="hero-symbol"><el-icon><MagicStick /></el-icon></span>
+          <div><p class="eyebrow">PRIVATE COLLECTION AUTOMATION</p><h1>图片采集中心</h1><p class="subtitle">发现、确认、下载、整理，每一步都由你掌控。</p></div>
+        </div>
+        <el-space wrap>
+          <el-tag v-if="activeJobs.length" type="primary" effect="light" round>{{ activeJobs.length }} 个任务运行中</el-tag>
+          <el-tag v-else type="success" effect="light" round><el-icon><CircleCheck /></el-icon>&nbsp;系统空闲</el-tag>
+          <el-button :icon="Refresh" circle aria-label="刷新采集数据" @click="refresh" />
+          <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">新增网站</el-button>
+        </el-space>
       </div>
-      <el-button type="primary" :icon="Plus" @click="activeTab = 'sites'; openNewSiteDialog()">新增采集网站</el-button>
-    </header>
+    </el-card>
 
-    <nav class="crawler-tabs" role="tablist" aria-label="图片采集中心栏目" @keydown="handleTabKey">
-      <span class="crawler-tab-indicator" :style="{ transform: `translateX(${activeIndex * 100}%)`, width: `${100 / tabs.length}%` }" />
-      <button v-for="tab in tabs" :key="tab.key" class="crawler-segment" :class="{ active: activeTab === tab.key }"
-        role="tab" :aria-selected="activeTab === tab.key" :tabindex="activeTab === tab.key ? 0 : -1" @click="activeTab = tab.key">
-        <el-icon><component :is="tab.icon" /></el-icon><span>{{ tab.label }}</span><b v-if="tab.count">{{ tab.count }}</b>
-      </button>
-    </nav>
+    <div class="workspace-switcher surface-card">
+      <el-segmented v-model="activeTab" :options="tabOptions" block aria-label="图片采集中心栏目" />
+    </div>
 
-    <section v-if="activeTab === 'overview'" class="panel overview-panel" role="tabpanel">
+    <section v-if="activeTab === 'overview'" class="overview-workspace" role="tabpanel">
       <div class="metric-grid">
-        <article v-for="metric in metrics" :key="metric.label" class="metric-card">
-          <span class="metric-icon"><el-icon><component :is="metric.icon" /></el-icon></span>
-          <div><strong>{{ metric.value }}</strong><p>{{ metric.label }}</p></div><small>{{ metric.note }}</small>
-        </article>
+        <el-card v-for="metric in metrics" :key="metric.label" class="metric-card surface-card" shadow="never">
+          <div class="metric-top"><span class="metric-icon"><el-icon><component :is="metric.icon" /></el-icon></span><el-statistic :value="metric.value" /></div>
+          <strong>{{ metric.label }}</strong><p>{{ metric.note }}</p>
+        </el-card>
       </div>
-      <div class="pipeline-strip" aria-label="图片采集流程">
-        <article><b>01</b><div><strong>发现链接</strong><small>按网站规则遍历列表页</small></div></article>
-        <i>→</i><article><b>02</b><div><strong>人工确认</strong><small>筛选需要下载的图片页</small></div></article>
-        <i>→</i><article><b>03</b><div><strong>下载校验</strong><small>限制域名、大小并隔离失败项</small></div></article>
-        <i>→</i><article><b>04</b><div><strong>整理入库</strong><small>去重、标注、选择相册和标签</small></div></article>
+
+      <div class="overview-grid">
+        <el-card class="pipeline-card surface-card" shadow="never">
+          <template #header><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>采集流程</h2><p>先确认链接范围，再把文件安全带回图库。</p></div><el-tag type="info" effect="plain" round>4 个阶段</el-tag></div></template>
+          <el-steps :active="activeJobs.length ? 1 : 0" align-center finish-status="success">
+            <el-step title="发现链接" description="扫描列表页" :icon="Search" />
+            <el-step title="人工确认" description="筛选图片页" :icon="CircleCheck" />
+            <el-step title="下载校验" description="域名与大小限制" :icon="Download" />
+            <el-step title="整理入库" description="去重与标注" :icon="Collection" />
+          </el-steps>
+        </el-card>
+
+        <el-card class="quick-card surface-card" shadow="never">
+          <template #header><div class="card-heading"><div><p class="eyebrow">QUICK START</p><h2>快速开始</h2></div></div></template>
+          <el-timeline>
+            <el-timeline-item type="primary" hollow><strong>添加采集网站</strong><p>限定入口与允许访问的域名</p></el-timeline-item>
+            <el-timeline-item type="primary" hollow><strong>配置解析规则</strong><p>选择图片页链接与原图节点</p></el-timeline-item>
+            <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>人工确认后再下载图片</p></el-timeline-item>
+          </el-timeline>
+          <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">配置第一个网站</el-button>
+        </el-card>
       </div>
-      <div class="section-heading"><div><p class="eyebrow">LIVE QUEUE</p><h2>最近任务</h2></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
-      <el-table v-if="recentJobs.length" :data="recentJobs" class="task-table">
-        <el-table-column label="任务" min-width="230"><template #default="{ row }"><div class="task-name"><strong>{{ row.name }}</strong><p>{{ phaseLabel(row.phase) }} · {{ formatTime(row.createdAt) }}</p></div></template></el-table-column>
-        <el-table-column label="进度" min-width="180"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" :stroke-width="7" /></template></el-table-column>
-        <el-table-column label="已下载" prop="imagesDownloaded" width="100" />
-        <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="120"><template #default="{ row }"><el-button text type="primary" @click="openJob(row, row.phase === 'REVIEW' ? 'review' : 'tasks')">查看详情</el-button></template></el-table-column>
-      </el-table>
-      <el-empty v-else description="暂无采集任务，先配置网站和解析规则" />
+
+      <el-card class="recent-card surface-card" shadow="never">
+        <template #header><div class="card-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>最近任务</h2></div><el-button link type="primary" :icon="Refresh" @click="refresh">刷新</el-button></div></template>
+        <el-table v-if="recentJobs.length" :data="recentJobs" table-layout="fixed">
+          <el-table-column label="任务" min-width="230"><template #default="{ row }"><div class="task-name"><strong>{{ row.name }}</strong><p>{{ phaseLabel(row.phase) }} · {{ formatTime(row.createdAt) }}</p></div></template></el-table-column>
+          <el-table-column label="进度" min-width="190"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" :stroke-width="7" /></template></el-table-column>
+          <el-table-column label="已下载" prop="imagesDownloaded" width="100" align="center" />
+          <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)" effect="light" round>{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
+          <el-table-column label="" width="100" align="right"><template #default="{ row }"><el-button link type="primary" @click="openJob(row, row.phase === 'REVIEW' ? 'review' : 'tasks')">查看</el-button></template></el-table-column>
+        </el-table>
+        <el-empty v-else description="暂无采集任务"><el-button type="primary" link @click="activeTab = 'sites'">前往配置网站</el-button></el-empty>
+      </el-card>
     </section>
 
-    <template v-else-if="activeTab === 'sites'">
-      <section class="panel site-panel" role="tabpanel">
-        <div class="section-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>网站基础配置独立保存，每个网站可以维护多条解析规则。</p></div><el-button :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></div>
-        <div class="site-layout">
-          <aside class="sites"><button v-for="site in sites" :key="site.id" :class="{ active: activeSiteId === site.id }" @click="selectSite(site)"><span class="site-mark">{{ site.name.slice(0, 1) }}</span><span><strong>{{ site.name }}</strong><small>{{ site.startUrl }}</small></span></button><el-empty v-if="!sites.length" description="暂无网站" :image-size="48" /></aside>
-          <div v-if="activeSiteId" class="fields site-form">
-            <div class="form-block-title"><b>01</b><div><strong>网站身份与入口</strong><small>只允许访问配置的站点和图片 CDN 域名</small></div></div>
-            <div class="two"><el-input v-model="siteForm.name" placeholder="网站名称" /><el-input v-model="siteForm.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" /></div>
-            <el-input v-model="siteForm.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
-            <div class="form-block-title"><b>02</b><div><strong>单次任务安全上限</strong><small>避免错误规则产生无限翻页或超量下载</small></div></div>
-            <div class="limits"><label><span>列表页上限</span><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" /></label><label><span>图片页上限</span><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" /></label><label><span>图片上限</span><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" /></label></div>
-            <div class="actions"><el-button type="primary" @click="saveSite">保存网站配置</el-button></div>
-          </div>
-          <el-empty v-else description="选择一个网站查看配置，或点击新增网站" :image-size="60" />
-        </div>
-      </section>
+    <section v-else-if="activeTab === 'sites'" class="source-workspace" role="tabpanel">
+      <el-card class="source-sidebar surface-card" shadow="never">
+        <template #header><div class="card-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2></div><el-button type="primary" :icon="Plus" circle aria-label="新增网站" @click="openNewSiteDialog" /></div></template>
+        <el-scrollbar max-height="620px">
+          <el-menu v-if="sites.length" :default-active="String(activeSiteId || '')" class="source-menu" @select="selectSiteById">
+            <el-menu-item v-for="site in sites" :key="site.id" :index="String(site.id)">
+              <span class="source-avatar">{{ site.name.slice(0, 1) }}</span>
+              <div class="menu-copy"><strong>{{ site.name }}</strong><small>{{ site.startUrl }}</small></div>
+            </el-menu-item>
+          </el-menu>
+          <el-empty v-else description="还没有采集网站" :image-size="72"><el-button type="primary" link @click="openNewSiteDialog">立即添加</el-button></el-empty>
+        </el-scrollbar>
+      </el-card>
 
-      <section class="panel rule-panel">
-        <div class="section-heading"><div><p class="eyebrow">SELECTOR RULES</p><h2>解析规则</h2><p>同一网站可保留多条规则，但同时最多只有一条生效。</p></div><el-button :disabled="!activeSiteId" @click="newRule">新增规则</el-button></div>
-        <el-empty v-if="!activeSiteId" description="请先选择或新增一个网站" :image-size="60" />
-        <div v-else class="rule-layout">
-          <div class="fields">
-            <div class="two"><el-input v-model="form.name" placeholder="规则名称" /><el-switch v-model="form.enabled" inline-prompt active-text="生效" inactive-text="停用" /></div>
-            <div class="rule-block"><p class="eyebrow">DISCOVERY SELECTORS</p><strong>列表页与图片页链接</strong></div>
-            <div class="two"><el-input v-model="form.detailSelector" placeholder="图片页链接 CSS 选择器" /><el-input v-model="form.nextSelector" placeholder="列表下一页选择器（可空）" /></div>
-            <div class="two"><el-input v-model="form.detailUrlIncludes" placeholder="图片页 URL 必须包含（逗号分隔）" /><el-input v-model="form.detailUrlExcludes" placeholder="图片页 URL 排除片段（逗号分隔）" /></div>
-            <div class="rule-block"><p class="eyebrow">IMAGE SELECTORS</p><strong>原图提取与详情翻页</strong></div>
-            <div class="two"><el-input v-model="form.imageSelector" placeholder="详情页图片选择器" /><el-input v-model="form.imageAttributes" placeholder="图片属性优先级" /></div>
-            <div class="two"><el-input v-model="form.imageUrlIncludes" placeholder="图片 URL 必须包含（逗号分隔）" /><el-input v-model="form.imageUrlExcludes" placeholder="图片 URL 排除片段，如 thumb,avatar" /></div>
-            <div class="two"><el-input v-model="form.detailNextSelector" placeholder="详情下一页选择器（可空）" /><div class="limit-field"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" /><span>每个详情页组上限</span></div></div>
-            <div class="actions"><el-button :loading="busy === 'preview'" @click="testRule">在线测试</el-button><el-button @click="saveRule()">保存规则</el-button><el-button type="primary" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">扫描网站</el-button></div>
-          </div>
-          <aside class="rules"><strong>规则版本</strong><button v-for="rule in rules" :key="rule.id" :class="{ active: form.id === rule.id }" @click="useRule(rule)"><span class="rule-name">{{ rule.name }}<el-tag v-if="rule.enabled" size="small" type="success">生效中</el-tag></span><small v-if="rule.enabled">新任务将使用此规则</small><small v-else @click.stop="activateRule(rule)">点击设为生效规则</small></button><el-empty v-if="!rules.length" description="暂无规则" :image-size="48" /></aside>
-        </div>
-        <div v-if="previewUrls.length" class="preview-list"><strong>图片页链接预览（最多 20 条）</strong><a v-for="url in previewUrls" :key="url" :href="url" target="_blank" rel="noreferrer">{{ url }}</a></div>
-        <el-alert v-if="previewImageError" class="preview-error" type="warning" :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
-        <div v-if="previewImageUrls.length" class="preview-list"><strong>原图地址预览（最多 20 条）</strong><a v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" rel="noreferrer">{{ url }}</a></div>
-      </section>
-    </template>
+      <div class="source-main">
+        <el-card class="site-editor surface-card" shadow="never">
+          <template #header><div class="card-heading"><div><p class="eyebrow">SITE SETTINGS</p><h2>{{ activeSiteId ? '网站配置' : '选择网站' }}</h2><p v-if="activeSiteId">入口、访问边界与单次任务上限。</p></div><el-button v-if="activeSiteId" type="primary" :icon="CircleCheck" round @click="saveSite">保存更改</el-button></div></template>
+          <el-form v-if="activeSiteId" :model="siteForm" label-position="top" class="mac-form">
+            <el-row :gutter="16">
+              <el-col :xs="24" :md="10"><el-form-item label="网站名称"><el-input v-model="siteForm.name" placeholder="例如：家庭活动图库" /></el-form-item></el-col>
+              <el-col :xs="24" :md="14"><el-form-item label="起始列表页"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
+              <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
+            </el-row>
+            <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;安全上限</el-divider>
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
+              <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
+              <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
+            </el-row>
+          </el-form>
+          <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
+        </el-card>
 
-    <section v-else-if="activeTab === 'tasks'" class="panel task-panel" role="tabpanel">
-      <div class="section-heading"><div><p class="eyebrow">PERSISTENT QUEUE</p><h2>采集任务</h2><p>发现与下载分阶段执行，单页失败不会中断整个任务。</p></div><el-button text :icon="Refresh" @click="refresh">刷新</el-button></div>
-      <div class="task-layout">
-        <aside class="jobs"><button v-for="job in jobs" :key="job.id" :class="{ active: activeJobId === job.id }" @click="activeJobId = job.id"><strong>{{ job.name }}</strong><span><el-tag size="small" :type="statusType(job.status)">{{ statusLabel(job.status) }}</el-tag><small>{{ phaseLabel(job.phase) }} · {{ formatTime(job.createdAt) }}</small></span></button><el-empty v-if="!jobs.length" description="暂无任务" :image-size="48" /></aside>
-        <div v-if="activeJob" class="task-detail">
-          <div class="task-summary"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h3>{{ activeJob.name }}</h3></div><el-tag :type="statusType(activeJob.status)">{{ statusLabel(activeJob.status) }}</el-tag></div>
-          <el-progress :percentage="jobProgress(activeJob)" :stroke-width="8" />
-          <div class="stats"><span>列表页 <b>{{ activeJob.listProcessed }}</b></span><span>图片页 <b>{{ activeJob.pagesFound }}</b></span><span>已处理 <b>{{ activeJob.pagesProcessed }}</b></span><span>已下载 <b>{{ activeJob.imagesDownloaded }}</b></span><span>失败 <b>{{ activeJob.failCount }}</b></span><span>执行次数 <b>{{ activeJob.attemptCount }}</b></span></div>
-          <el-alert v-if="activeJob.errorMessage" type="error" :title="activeJob.errorMessage" :closable="false" />
-          <div class="task-actions"><el-button v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" type="primary" :disabled="includedPageTotal === 0" @click="startDownload">确认 {{ includedPageTotal }} 个图片页并开始下载</el-button><el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" @click="controlJob('pause')">暂停</el-button><el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status)" @click="controlJob('resume')">继续/重试</el-button><el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain @click="controlJob('cancel')">取消</el-button><el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain @click="activeTab = 'review'">进入待整理区</el-button><el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" text @click="purgeJob">永久清理</el-button></div>
-          <div class="page-toolbar"><el-input v-model="pageQuery" clearable placeholder="搜索图片页 URL" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input><div v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" class="actions"><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></div></div>
-          <div class="page-list"><div v-for="page in pages" :key="page.id"><el-checkbox v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" :model-value="page.included" @change="onPageIncludedChange(page, $event)" /><el-tag v-else size="small" :type="page.status === 'FAILED' ? 'danger' : page.status === 'SUCCEEDED' ? 'success' : 'info'">{{ page.status }}</el-tag><span :class="{ excluded: !page.included }" :title="page.url">{{ page.url }}</span></div></div>
-          <el-empty v-if="!pages.length" description="当前任务暂无图片页记录" :image-size="54" />
-          <el-pagination v-if="pageTotal > pagePageSize" class="page-pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
-        </div>
-        <el-empty v-else description="选择一个采集任务查看进度" />
+        <el-card class="rule-editor surface-card" shadow="never">
+          <template #header><div class="card-heading"><div><p class="eyebrow">PARSING RULES</p><h2>解析规则</h2><p>定义怎样发现详情页并提取原图。</p></div><el-button :icon="Plus" round :disabled="!activeSiteId" @click="newRule">新增规则</el-button></div></template>
+          <el-empty v-if="!activeSiteId" description="选择网站后配置解析规则" :image-size="76" />
+          <div v-else class="rule-workspace">
+            <aside class="rule-sidebar">
+              <el-menu v-if="rules.length" :default-active="String(form.id || '')" class="source-menu" @select="selectRuleById">
+                <el-menu-item v-for="rule in rules" :key="rule.id" :index="String(rule.id)">
+                  <div class="menu-copy"><strong>{{ rule.name }}</strong><small>{{ rule.enabled ? '当前生效规则' : '已停用' }}</small></div>
+                  <el-tag v-if="rule.enabled" size="small" type="success" effect="light" round>生效</el-tag>
+                </el-menu-item>
+              </el-menu>
+              <el-empty v-else description="暂无规则" :image-size="56" />
+            </aside>
+            <el-form :model="form" label-position="top" class="mac-form rule-form">
+              <el-row :gutter="16">
+                <el-col :xs="24" :md="16"><el-form-item label="规则名称"><el-input v-model="form.name" placeholder="例如：默认图片解析" /></el-form-item></el-col>
+                <el-col :xs="24" :md="8"><el-form-item label="任务状态"><el-switch v-model="form.enabled" inline-prompt active-text="生效" inactive-text="停用" /></el-form-item></el-col>
+              </el-row>
+              <el-divider content-position="left">链接发现</el-divider>
+              <el-row :gutter="16">
+                <el-col :xs="24" :md="12"><el-form-item label="图片页链接选择器"><el-input v-model="form.detailSelector" placeholder="CSS 选择器" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="列表下一页选择器"><el-input v-model="form.nextSelector" placeholder="可留空" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="URL 必须包含"><el-input v-model="form.detailUrlIncludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="URL 排除片段"><el-input v-model="form.detailUrlExcludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
+              </el-row>
+              <el-divider content-position="left">原图提取</el-divider>
+              <el-row :gutter="16">
+                <el-col :xs="24" :md="12"><el-form-item label="图片选择器"><el-input v-model="form.imageSelector" placeholder="例如 img.gallery-image" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="图片属性优先级"><el-input v-model="form.imageAttributes" placeholder="data-original,data-src,src" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="图片 URL 必须包含"><el-input v-model="form.imageUrlIncludes" placeholder="可留空" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="图片 URL 排除片段"><el-input v-model="form.imageUrlExcludes" placeholder="例如 thumb,avatar" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="详情下一页选择器"><el-input v-model="form.detailNextSelector" placeholder="可留空" /></el-form-item></el-col>
+                <el-col :xs="24" :md="12"><el-form-item label="每个详情页组上限"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" controls-position="right" /></el-form-item></el-col>
+              </el-row>
+              <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">开始扫描</el-button></div>
+            </el-form>
+          </div>
+          <el-alert v-if="previewImageError" class="preview-error" type="warning" show-icon :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
+          <el-collapse v-if="previewUrls.length || previewImageUrls.length" class="preview-collapse">
+            <el-collapse-item v-if="previewUrls.length" :title="`图片页链接预览（${previewUrls.length}）`" name="pages"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
+            <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
+          </el-collapse>
+        </el-card>
       </div>
     </section>
 
-    <section v-else class="panel review-panel" role="tabpanel">
-      <div class="section-heading review-heading"><div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>去重、筛选和标注后，再将图片导入目标相册。</p></div><el-select v-model="activeJobId" placeholder="选择待整理任务"><el-option v-for="job in reviewJobs" :key="job.id" :label="`${job.name}（${job.imagesDownloaded} 张）`" :value="job.id" /></el-select></div>
-      <el-empty v-if="!activeJob || (!assets.length && activeJob.phase !== 'REVIEW')" description="暂无可整理的图片，完成下载后会出现在这里" />
+    <section v-else-if="activeTab === 'tasks'" class="task-workspace" role="tabpanel">
+      <el-card class="task-sidebar surface-card" shadow="never">
+        <template #header><div class="card-heading"><div><p class="eyebrow">QUEUE</p><h2>采集任务</h2></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div></template>
+        <el-scrollbar max-height="680px">
+          <el-menu v-if="jobs.length" :default-active="String(activeJobId || '')" class="source-menu job-menu" @select="selectJobById">
+            <el-menu-item v-for="job in jobs" :key="job.id" :index="String(job.id)">
+              <span class="job-dot" :class="job.status.toLowerCase()" />
+              <div class="menu-copy"><strong>{{ job.name }}</strong><small>{{ phaseLabel(job.phase) }} · {{ formatTime(job.createdAt) }}</small></div>
+              <el-tag size="small" :type="statusType(job.status)" effect="light" round>{{ statusLabel(job.status) }}</el-tag>
+            </el-menu-item>
+          </el-menu>
+          <el-empty v-else description="暂无采集任务" :image-size="72" />
+        </el-scrollbar>
+      </el-card>
+
+      <el-card class="task-detail surface-card" shadow="never">
+        <template v-if="activeJob" #header>
+          <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>
+        </template>
+        <template v-if="activeJob">
+          <div class="progress-card"><div><strong>任务进度</strong><span>{{ jobProgress(activeJob) }}%</span></div><el-progress :percentage="jobProgress(activeJob)" :stroke-width="10" :show-text="false" /></div>
+          <el-descriptions :column="3" border class="job-stats">
+            <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
+            <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>
+            <el-descriptions-item label="已处理图片页">{{ activeJob.pagesProcessed }}</el-descriptions-item>
+            <el-descriptions-item label="已下载图片">{{ activeJob.imagesDownloaded }}</el-descriptions-item>
+            <el-descriptions-item label="失败项目">{{ activeJob.failCount }}</el-descriptions-item>
+            <el-descriptions-item label="执行次数">{{ activeJob.attemptCount }}</el-descriptions-item>
+          </el-descriptions>
+          <el-alert v-if="activeJob.errorMessage" type="error" show-icon :title="activeJob.errorMessage" :closable="false" />
+          <el-space class="task-actions" wrap>
+            <el-button v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" type="primary" :icon="Download" round :disabled="includedPageTotal === 0" @click="startDownload">确认 {{ includedPageTotal }} 页并下载</el-button>
+            <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
+            <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
+            <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
+            <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="activeTab = 'review'">进入待整理区</el-button>
+            <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
+          </el-space>
+          <el-divider />
+          <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>检查发现结果，并决定哪些页面进入下载阶段。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
+          <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
+          <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
+            <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
+            <el-table-column label="图片页 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.url }}</span></template></el-table-column>
+            <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
+          </el-table>
+          <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
+        </template>
+        <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
+      </el-card>
+    </section>
+
+    <section v-else class="review-workspace" role="tabpanel">
+      <el-card class="review-toolbar surface-card" shadow="never">
+        <div class="card-heading review-heading">
+          <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
+          <el-select v-model="activeJobId" class="review-job-select" placeholder="选择待整理任务"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="job in reviewJobs" :key="job.id" :label="`${job.name}（${job.imagesDownloaded} 张）`" :value="job.id" /></el-select>
+        </div>
+      </el-card>
+      <el-empty v-if="!activeJob || (!assets.length && activeJob.phase !== 'REVIEW')" class="surface-card review-empty" description="暂无可整理的图片，完成下载后会出现在这里" :image-size="110" />
       <template v-else>
-      <header><div><h2>筛选与批量操作</h2><p>共 {{ assetTotal }} 张；本页 {{ reviewAssets.length }} 张可见，涉及 {{ duplicateHashes.size }} 组全任务精确重复，{{ deletedAssets.length }} 张已删除。</p></div><div class="actions"><el-select v-model="assetStatus" class="status-filter" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /><el-option label="失败" value="FAILED" /></el-select><el-checkbox v-model="exactDuplicateOnly" border>只看精确重复</el-checkbox><el-checkbox v-model="similarOnly" border>只看相似图片</el-checkbox><el-button @click="selectAllDownloadable">选择本页可入库</el-button><el-button :disabled="!selectedAssets.size" @click="deleteSelected">删除选中</el-button><el-button type="primary" :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected">选择入库（{{ selectedAssets.size }}）</el-button></div></header>
-      <div class="similarity-bar"><span>感知哈希距离阈值</span><el-slider v-model="similarityThreshold" :min="0" :max="16" show-input /><el-button :loading="busy === 'similarity'" @click="analyzeSimilarity">分析相似图片</el-button><small>阈值越大匹配越宽松，结果仅供人工整理。</small></div>
-      <div class="organize-bar"><el-input v-model="batchNote" placeholder="给选中图片添加备注" clearable /><el-button :disabled="!selectedAssets.size" @click="editSelected">应用备注</el-button><el-select v-model="targetAlbumId" clearable placeholder="入库目标相册"><el-option v-for="album in albums" :key="album.id" :label="album.name" :value="album.id" /></el-select><el-select v-model="targetTagIds" multiple collapse-tags clearable placeholder="入库标签"><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select></div>
-      <details v-if="recentImportBatch" class="import-batch" open>
-        <summary>最近导入批次 #{{ recentImportBatch.id }}（{{ recentImportBatch.status }}）：成功 {{ recentImportBatch.success }}，跳过 {{ recentImportBatch.skipped }}，失败 {{ recentImportBatch.fail }}</summary>
-        <div class="import-toolbar">
-          <el-radio-group :model-value="importItemStatus" size="small" @change="filterImportItems(String($event))">
-            <el-radio-button value="">全部</el-radio-button>
-            <el-radio-button value="SUCCESS">成功</el-radio-button>
-            <el-radio-button value="SKIPPED">跳过</el-radio-button>
-            <el-radio-button value="FAILED">失败</el-radio-button>
-          </el-radio-group>
-        </div>
-        <div class="import-items">
-          <div v-for="item in recentImportItems" :key="item.id">
-            <el-tag size="small" :type="item.status === 'FAILED' ? 'danger' : item.status === 'SUCCESS' ? 'success' : 'info'">{{ item.status }}</el-tag>
-            <span>待整理图片 #{{ item.assetId }}</span>
-            <span v-if="item.photoId">图库照片 #{{ item.photoId }}</span>
-            <span v-if="item.errorMessage" class="import-error">{{ item.errorMessage }}</span>
+        <el-card class="filter-card surface-card" shadow="never">
+          <el-form label-position="top" class="review-filter-form">
+            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /><el-option label="失败" value="FAILED" /></el-select></el-form-item>
+            <el-form-item label="智能筛选"><el-space wrap><el-checkbox v-model="exactDuplicateOnly" border>精确重复</el-checkbox><el-checkbox v-model="similarOnly" border>相似图片</el-checkbox></el-space></el-form-item>
+            <el-form-item label="相似度阈值" class="similarity-field"><el-slider v-model="similarityThreshold" :min="0" :max="16" show-input /><el-button :icon="MagicStick" :loading="busy === 'similarity'" @click="analyzeSimilarity">分析</el-button></el-form-item>
+          </el-form>
+          <el-divider />
+          <el-descriptions :column="4" class="review-stats">
+            <el-descriptions-item label="任务图片">{{ assetTotal }}</el-descriptions-item>
+            <el-descriptions-item label="本页可见">{{ reviewAssets.length }}</el-descriptions-item>
+            <el-descriptions-item label="精确重复组">{{ duplicateHashes.size }}</el-descriptions-item>
+            <el-descriptions-item label="已删除">{{ deletedAssets.length }}</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+
+        <el-card class="selection-bar surface-card" shadow="never">
+          <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
+          <el-space wrap><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected">导入图库</el-button></el-space>
+        </el-card>
+
+        <el-card class="organize-card surface-card" shadow="never">
+          <template #header><div class="card-heading"><div><p class="eyebrow">BATCH METADATA</p><h3>批量整理</h3></div></div></template>
+          <div class="organize-grid">
+            <el-input v-model="batchNote" clearable placeholder="给选中图片添加备注"><template #prefix><el-icon><EditPen /></el-icon></template></el-input>
+            <el-button :disabled="!selectedAssets.size" @click="editSelected">应用备注</el-button>
+            <el-select v-model="targetAlbumId" clearable placeholder="目标相册"><template #prefix><el-icon><FolderOpened /></el-icon></template><el-option v-for="album in albums" :key="album.id" :label="album.name" :value="album.id" /></el-select>
+            <el-select v-model="targetTagIds" multiple collapse-tags clearable placeholder="入库标签"><template #prefix><el-icon><PriceTag /></el-icon></template><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select>
           </div>
-          <el-empty v-if="!recentImportItems.length" description="当前筛选没有明细" :image-size="42" />
+        </el-card>
+
+        <el-collapse v-if="recentImportBatch" class="history-collapse surface-card">
+          <el-collapse-item name="import">
+            <template #title><div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="recentImportBatch.fail ? 'warning' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div></template>
+            <el-radio-group :model-value="importItemStatus" size="small" @change="filterImportItems(String($event))"><el-radio-button value="">全部</el-radio-button><el-radio-button value="SUCCESS">成功</el-radio-button><el-radio-button value="SKIPPED">跳过</el-radio-button><el-radio-button value="FAILED">失败</el-radio-button></el-radio-group>
+            <el-table :data="recentImportItems" size="small" empty-text="当前筛选没有明细">
+              <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCESS' ? 'success' : 'info'" effect="light">{{ row.status }}</el-tag></template></el-table-column>
+              <el-table-column label="待整理图片" width="130"><template #default="{ row }">#{{ row.assetId }}</template></el-table-column>
+              <el-table-column label="图库照片" width="130"><template #default="{ row }">{{ row.photoId ? `#${row.photoId}` : '—' }}</template></el-table-column>
+              <el-table-column label="说明" prop="errorMessage" min-width="220" />
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+
+        <div class="asset-grid">
+          <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && toggleAsset(asset.id)">
+            <div class="asset-preview">
+              <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
+              <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div>
+              <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
+              <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
+            </div>
+            <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
+          </el-card>
         </div>
-      </details>
-      <div class="asset-grid">
-        <article v-for="asset in reviewAssets" :key="asset.id" :class="{ selected: selectedAssets.has(asset.id), duplicate: duplicateHashes.has(asset.fileHashMd5), similar: asset.similarityCount > 1 }" @click="asset.status === 'DOWNLOADED' && toggleAsset(asset.id)">
-          <img v-if="previewImages[asset.id]" :src="previewImages[asset.id]" alt="" />
-          <div v-else class="placeholder">{{ asset.status }}</div>
-          <div class="asset-copy"><strong>{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning">待整理区相同 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary">相似组 × {{ asset.similarityCount }}</el-tag><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div>
-        </article>
-      </div>
-      <details v-if="deletedAssets.length"><summary>已删除（{{ deletedAssets.length }}）</summary><div class="deleted-list"><span v-for="asset in deletedAssets" :key="asset.id">{{ asset.originalFilename }} <el-button text size="small" @click="restoreDeleted(asset.id)">恢复</el-button></span></div></details>
-      <el-pagination v-if="assetTotal > assetPageSize" class="asset-pagination" layout="prev, pager, next, total" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
+        <el-pagination v-if="assetTotal > assetPageSize" class="pagination" layout="prev, pager, next, total" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
+        <el-collapse v-if="deletedAssets.length" class="deleted-collapse surface-card"><el-collapse-item :title="`已删除（${deletedAssets.length}）`" name="deleted"><el-table :data="deletedAssets" size="small"><el-table-column label="文件" prop="originalFilename" min-width="240" /><el-table-column label="大小" width="120"><template #default="{ row }">{{ formatBytes(row.fileSize) }}</template></el-table-column><el-table-column label="" width="90"><template #default="{ row }"><el-button link type="primary" @click="restoreDeleted(row.id)">恢复</el-button></template></el-table-column></el-table></el-collapse-item></el-collapse>
       </template>
     </section>
 
-    <el-dialog v-model="siteDialogVisible" title="新增采集网站" width="min(620px, calc(100vw - 28px))" destroy-on-close @closed="resetCreateSiteForm">
-      <div class="fields site-dialog-form">
-        <div class="form-block-title"><b>01</b><div><strong>网站身份与入口</strong><small>只允许访问配置的站点和图片 CDN 域名</small></div></div>
-        <div class="two"><el-input v-model="createSiteForm.name" autofocus placeholder="网站名称" /><el-input v-model="createSiteForm.startUrl" placeholder="起始列表页，例如 https://example.com/gallery" /></div>
-        <el-input v-model="createSiteForm.allowedHosts" placeholder="允许域名，多个用逗号分隔（含图片 CDN）" />
-        <div class="form-block-title"><b>02</b><div><strong>单次任务安全上限</strong><small>避免错误规则产生无限翻页或超量下载</small></div></div>
-        <div class="limits"><label><span>列表页上限</span><el-input-number v-model="createSiteForm.maxListPages" :min="1" :max="1000" /></label><label><span>图片页上限</span><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" /></label><label><span>图片上限</span><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" /></label></div>
-      </div>
-      <template #footer><el-button @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
+    <el-dialog v-model="siteDialogVisible" class="site-dialog" width="min(680px, calc(100vw - 28px))" destroy-on-close align-center @closed="resetCreateSiteForm">
+      <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Connection /></el-icon></span><div><h2>新增采集网站</h2><p>设置采集入口与访问边界，创建后再配置解析规则。</p></div></div></template>
+      <el-form :model="createSiteForm" label-position="top" class="mac-form site-dialog-form">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="10"><el-form-item label="网站名称" required><el-input v-model="createSiteForm.name" autofocus placeholder="例如：家庭活动图库" /></el-form-item></el-col>
+          <el-col :xs="24" :md="14"><el-form-item label="起始列表页" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
+          <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="createSiteForm.allowedHosts" placeholder="留空时自动使用起始 URL 的域名；多个域名用逗号分隔" /></el-form-item></el-col>
+        </el-row>
+        <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;单次任务安全上限</el-divider>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="createSiteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
+          <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
+          <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
+        </el-row>
+        <el-alert type="info" show-icon :closable="false" title="采集器只会访问允许域名中的页面和图片资源。" />
+      </el-form>
+      <template #footer><el-button round @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :icon="Plus" round :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
     </el-dialog>
   </main>
 </template>
@@ -708,3 +846,4 @@ onUnmounted(() => {
 @media(max-width:760px){.crawler-page{padding:16px 14px 92px}.crawler-hero,.section-heading,.review-panel>header{display:grid}.crawler-hero h1{font-size:28px}.crawler-tabs{overflow-x:auto;grid-template-columns:repeat(4,minmax(130px,1fr))}.crawler-tab-indicator{display:none}.crawler-segment.active{border-radius:10px;background:var(--bg-card)}.metric-grid,.pipeline-strip,.site-layout,.rule-layout,.task-layout,.two,.page-toolbar,.organize-bar,.limits{grid-template-columns:1fr}.actions{justify-content:flex-start}.similarity-bar{grid-template-columns:1fr}.similarity-bar small{grid-column:1}.review-heading :deep(.el-select){width:100%}}
 @media(prefers-reduced-motion:reduce){.crawler-tab-indicator{transition:none}}
 </style>
+<style scoped src="../assets/crawler-view.css"></style>
