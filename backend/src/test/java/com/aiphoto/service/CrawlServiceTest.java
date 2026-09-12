@@ -139,7 +139,7 @@ class CrawlServiceTest {
                 .thenReturn(List.of(trashPhoto));
 
         CrawlAsset result = crawlService.listAssets(
-                8L, 9L, null, false, false, pageable).getContent().get(0);
+                8L, 9L, null, false, false, null, pageable).getContent().get(0);
 
         assertThat(result.getExactDuplicateCount()).isEqualTo(3);
         assertThat(result.getLibraryDuplicate()).isFalse();
@@ -154,6 +154,7 @@ class CrawlServiceTest {
         site.setName("示例站点");
         site.setStartUrl("https://example.com/gallery");
         site.setAllowedHosts("example.com,cdn.example.com");
+        site.setMinRequestIntervalMillis(10_000L);
         CrawlRule input = new CrawlRule();
         input.setSiteId(3L);
         input.setName("高清图规则");
@@ -169,6 +170,7 @@ class CrawlServiceTest {
         assertThat(saved.getEnabled()).isTrue();
         assertThat(saved.getStartUrl()).isEqualTo("https://example.com/gallery");
         assertThat(saved.getAllowedHosts()).isEqualTo("example.com,cdn.example.com");
+        assertThat(saved.getMinRequestIntervalMillis()).isEqualTo(10_000L);
     }
 
     @Test

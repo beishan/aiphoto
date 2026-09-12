@@ -53,6 +53,8 @@ public class CrawlRule {
     private Integer maxImages = 5000;
     @Transient
     private Long maxFileBytes = 20L * 1024 * 1024;
+    @Transient
+    private Long minRequestIntervalMillis = 1000L;
     @CreationTimestamp
     private LocalDateTime createdAt;
     @UpdateTimestamp

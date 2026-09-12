@@ -67,6 +67,11 @@ public class CrawlService {
         site.setMaxImages(clamp(input.getMaxImages(), 1, 50000, 5000));
         site.setMaxFileBytes(input.getMaxFileBytes() == null
                 ? 20L * 1024 * 1024 : Math.max(1024, Math.min(input.getMaxFileBytes(), 100L * 1024 * 1024)));
+        site.setMinRequestIntervalMillis(input.getMinRequestIntervalMillis() == null
+                ? 1000L : Math.max(0L, Math.min(input.getMinRequestIntervalMillis(), 60_000L)));
+        site.setScheduleEnabled(Boolean.TRUE.equals(input.getScheduleEnabled()));
+        site.setDailyScanTime(input.getDailyScanTime() == null
+                ? java.time.LocalTime.of(3, 0) : input.getDailyScanTime());
         return siteRepository.save(site);
     }
 
@@ -105,7 +110,8 @@ public class CrawlService {
         CrawlSite site = getSite(input.getSiteId(), ownerId);
         copyValidatedRule(input, rule, site, ownerId);
         SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                rule.getStartUrl(), rule.getAllowedHosts(), MAX_HTML_BYTES);
+                rule.getStartUrl(), rule.getAllowedHosts(), MAX_HTML_BYTES,
+                rule.getMinRequestIntervalMillis());
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -135,7 +141,8 @@ public class CrawlService {
     private List<String> previewImages(CrawlRule rule, List<String> detailUrls) throws Exception {
         if (detailUrls.isEmpty()) return List.of();
         SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                detailUrls.get(0), rule.getAllowedHosts(), MAX_HTML_BYTES);
+                detailUrls.get(0), rule.getAllowedHosts(), MAX_HTML_BYTES,
+                rule.getMinRequestIntervalMillis());
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -197,6 +204,7 @@ public class CrawlService {
         rule.setMaxDetailPages(site.getMaxDetailPages());
         rule.setMaxImages(site.getMaxImages());
         rule.setMaxFileBytes(site.getMaxFileBytes());
+        rule.setMinRequestIntervalMillis(site.getMinRequestIntervalMillis());
     }
 
     @Transactional
@@ -209,6 +217,7 @@ public class CrawlService {
         applySiteConfig(rule, site);
         CrawlJob job = new CrawlJob();
         job.setOwnerId(ownerId);
+        job.setSiteId(site.getId());
         job.setRuleId(ruleId);
         job.setName(site.getName() + " · " + rule.getName());
         try {
@@ -337,12 +346,24 @@ public class CrawlService {
 
     public Page<CrawlAsset> listAssets(
             Long jobId, Long ownerId, CrawlAsset.Status status,
-            boolean exactDuplicates, boolean similarOnly, Pageable pageable) {
+            boolean exactDuplicates, boolean similarOnly, Long pageId, Pageable pageable) {
         getJob(jobId, ownerId);
         if (exactDuplicates && similarOnly) {
             throw new IllegalArgumentException("精确重复和相似图片筛选不能同时启用");
         }
-        Page<CrawlAsset> result = similarOnly
+        if (pageId != null) {
+            pageRepository.findByIdAndJobId(pageId, jobId)
+                    .orElseThrow(() -> new IllegalArgumentException("图片页不存在"));
+            if (exactDuplicates || similarOnly) {
+                throw new IllegalArgumentException("按来源页查看时不能叠加重复图片筛选");
+            }
+        }
+        Page<CrawlAsset> result = pageId != null
+                ? status == null
+                        ? assetRepository.findByJobIdAndSourcePageId(jobId, pageId, pageable)
+                        : assetRepository.findByJobIdAndSourcePageIdAndStatus(
+                                jobId, pageId, status, pageable)
+                : similarOnly
                 ? assetRepository.findByJobIdAndStatusAndSimilarityGroupIdIsNotNullOrderByIdDesc(
                         jobId, CrawlAsset.Status.DOWNLOADED, pageable)
                 : exactDuplicates

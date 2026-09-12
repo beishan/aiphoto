@@ -4,6 +4,7 @@ import com.aiphoto.async.CrawlWorker;
 import com.aiphoto.async.CrawlImportWorker;
 import com.aiphoto.entity.CrawlAsset;
 import com.aiphoto.entity.CrawlImportItem;
+import com.aiphoto.entity.CrawlImageSkip;
 import com.aiphoto.entity.CrawlJob;
 import com.aiphoto.entity.CrawlPage;
 import com.aiphoto.entity.CrawlRule;
@@ -11,6 +12,7 @@ import com.aiphoto.entity.CrawlSite;
 import com.aiphoto.entity.User;
 import com.aiphoto.repository.UserRepository;
 import com.aiphoto.service.CrawlImportService;
+import com.aiphoto.service.CrawlImageSkipService;
 import com.aiphoto.service.CrawlService;
 import com.aiphoto.service.CrawlSimilarityService;
 import com.aiphoto.service.CrawlStagingStorageService;
@@ -35,6 +37,7 @@ public class CrawlController {
     private final CrawlImportService importService;
     private final CrawlStagingStorageService stagingStorage;
     private final CrawlSimilarityService similarityService;
+    private final CrawlImageSkipService imageSkipService;
     private final UserRepository userRepository;
 
     @GetMapping("/sites")
@@ -154,10 +157,38 @@ public class CrawlController {
             @RequestParam(required = false) CrawlAsset.Status status,
             @RequestParam(defaultValue = "false") boolean exactDuplicates,
             @RequestParam(defaultValue = "false") boolean similarOnly,
+            @RequestParam(required = false) Long pageId,
             Authentication authentication) {
         return crawlService.listAssets(
-                jobId, userId(authentication), status, exactDuplicates, similarOnly,
+                jobId, userId(authentication), status, exactDuplicates, similarOnly, pageId,
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
+    }
+
+    @PostMapping("/jobs/{jobId}/assets/skip")
+    public Map<String, Integer> skipAssets(
+            @PathVariable Long jobId,
+            @RequestBody SkipAssetsRequest request,
+            Authentication authentication) {
+        return Map.of("success", imageSkipService.addFromAssets(
+                jobId, request.ids(), userId(authentication), request.reason()));
+    }
+
+    @GetMapping("/image-skips")
+    public Page<CrawlImageSkip> listImageSkips(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String query,
+            Authentication authentication) {
+        return imageSkipService.list(
+                userId(authentication), query,
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
+    }
+
+    @DeleteMapping("/image-skips/{id}")
+    public Map<String, Integer> deleteImageSkip(
+            @PathVariable Long id, Authentication authentication) {
+        imageSkipService.delete(id, userId(authentication));
+        return Map.of("success", 1);
     }
 
     @PostMapping("/jobs/{jobId}/similarity")
@@ -273,4 +304,5 @@ public class CrawlController {
             List<Long> ids, Long albumId, List<Long> tagIds, String idempotencyKey) {}
     public record EditAssetsRequest(List<Long> ids, String note) {}
     public record PageSelectionRequest(List<Long> ids, boolean included) {}
+    public record SkipAssetsRequest(List<Long> ids, String reason) {}
 }

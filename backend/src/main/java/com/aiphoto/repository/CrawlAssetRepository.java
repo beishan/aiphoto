@@ -15,6 +15,16 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     Page<CrawlAsset> findByJobIdOrderByIdDesc(Long jobId, Pageable pageable);
     Page<CrawlAsset> findByJobIdAndStatusOrderByIdDesc(
             Long jobId, CrawlAsset.Status status, Pageable pageable);
+    @Query("SELECT a FROM CrawlAsset a, CrawlAssetSource s WHERE a.id = s.assetId "
+            + "AND a.jobId = :jobId AND s.pageId = :pageId ORDER BY a.id DESC")
+    Page<CrawlAsset> findByJobIdAndSourcePageId(
+            @Param("jobId") Long jobId, @Param("pageId") Long pageId, Pageable pageable);
+    @Query("SELECT a FROM CrawlAsset a, CrawlAssetSource s WHERE a.id = s.assetId "
+            + "AND a.jobId = :jobId AND s.pageId = :pageId AND a.status = :status "
+            + "ORDER BY a.id DESC")
+    Page<CrawlAsset> findByJobIdAndSourcePageIdAndStatus(
+            @Param("jobId") Long jobId, @Param("pageId") Long pageId,
+            @Param("status") CrawlAsset.Status status, Pageable pageable);
     Page<CrawlAsset> findByJobIdAndStatusAndSimilarityGroupIdIsNotNullOrderByIdDesc(
             Long jobId, CrawlAsset.Status status, Pageable pageable);
     @Query("SELECT a FROM CrawlAsset a WHERE a.jobId = :jobId AND a.status <> :deletedStatus "

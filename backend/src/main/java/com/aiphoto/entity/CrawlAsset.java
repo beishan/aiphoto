@@ -59,5 +59,5 @@ public class CrawlAsset {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    public enum Status { PENDING, DOWNLOADED, FAILED, DELETED, DUPLICATE, IMPORTED }
+    public enum Status { PENDING, DOWNLOADED, FAILED, SKIPPED, DELETED, DUPLICATE, IMPORTED }
 }

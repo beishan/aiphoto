@@ -47,4 +47,42 @@ class CrawlRuleMatcherTest {
 
         assertThat(result).isNull();
     }
+
+    @Test
+    void extractsT66yEssDataInsteadOfPlaceholderAttribute() {
+        var element = Jsoup.parse("""
+                <div id='conttpc'>
+                  <img iyl-data='http://a.d/adblo_ck.jpg'
+                       ess-data='https://23img.com/i/2026/09/12/photo.jpg'>
+                </div>
+                """).selectFirst("#conttpc img");
+
+        String result = CrawlRuleMatcher.extractImageUrl(
+                element, "ess-data,src,data-original,data-src,srcset",
+                URI.create("https://t66y.com/htm_data/2609/16/1.html"));
+
+        assertThat(result).isEqualTo("https://23img.com/i/2026/09/12/photo.jpg");
+    }
+
+    @Test
+    void t66ySelectorsExcludeStickyRowsAndOnlyFollowNextPage() {
+        var document = Jsoup.parse("""
+                <div class='pages'>
+                  <a href='thread0806.php?fid=16&page=2'>2</a>
+                  <a href='thread0806.php?fid=16&page=2'>下一頁</a>
+                  <a href='thread0806.php?fid=16&page=971'>＞</a>
+                </div>
+                <table>
+                  <tbody id='cate_thread'><tr><td><h3><a href='/htm_data/old/16/1.html'>置顶</a></h3></td></tr></tbody>
+                  <tbody id='tbody'><tr><td><h3><a href='/htm_data/2609/16/2.html'>普通主题</a></h3></td></tr></tbody>
+                </table>
+                """);
+
+        assertThat(document.select("#tbody h3 a[href^='/htm_data/'][href$='.html']"))
+                .extracting(element -> element.text())
+                .containsExactly("普通主题");
+        assertThat(document.select(".pages a[href^='thread0806.php']:matchesOwn(^下一頁$)"))
+                .extracting(element -> element.text())
+                .containsExactly("下一頁");
+    }
 }

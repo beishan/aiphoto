@@ -1,5 +1,5 @@
 import http from './http'
-import type { CrawlAsset, CrawlJob, CrawlPage, CrawlRule, CrawlSite, PageResponse } from '@/types'
+import type { CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, PageResponse } from '@/types'
 
 export interface CrawlImportBatch {
   id: number
@@ -45,7 +45,10 @@ export const crawlApi = {
   pause: (id: number) => http.post<CrawlJob>(`/crawl/jobs/${id}/pause`),
   resume: (id: number) => http.post(`/crawl/jobs/${id}/resume`),
   cancel: (id: number) => http.post<CrawlJob>(`/crawl/jobs/${id}/cancel`),
-  assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false) => http.get<PageResponse<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly } }),
+  assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, pageId?: number) => http.get<PageResponse<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, pageId } }),
+  skipAssets: (jobId: number, ids: number[], reason: string) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/skip`, { ids, reason }),
+  imageSkips: (page = 0, size = 50, query = '') => http.get<PageResponse<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } }),
+  deleteImageSkip: (id: number) => http.delete<{ success: number }>(`/crawl/image-skips/${id}`),
   analyzeSimilarity: (jobId: number, threshold: number) => http.post<{ analyzed: number; groups: number; matched: number; threshold: number }>(`/crawl/jobs/${jobId}/similarity`, null, { params: { threshold } }),
   deleteAssets: (jobId: number, ids: number[]) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/delete`, ids),
   restoreAssets: (jobId: number, ids: number[]) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/restore`, ids),

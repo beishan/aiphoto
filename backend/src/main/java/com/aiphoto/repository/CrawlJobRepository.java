@@ -1,6 +1,7 @@
 package com.aiphoto.repository;
 
 import com.aiphoto.entity.CrawlJob;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,7 @@ public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
     List<CrawlJob> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
     Optional<CrawlJob> findByIdAndOwnerId(Long id, Long ownerId);
     List<CrawlJob> findByStatusIn(List<CrawlJob.Status> statuses);
+    boolean existsBySiteIdAndStatusIn(Long siteId, Collection<CrawlJob.Status> statuses);
 
     @Query(value = "SELECT id FROM crawl_jobs WHERE status = 'QUEUED' "
             + "OR (status = 'RUNNING' AND (lease_until IS NULL OR lease_until < :now)) "

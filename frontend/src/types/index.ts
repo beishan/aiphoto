@@ -151,6 +151,10 @@ export interface CrawlSite {
   maxDetailPages: number
   maxImages: number
   maxFileBytes: number
+  minRequestIntervalMillis: number
+  scheduleEnabled: boolean
+  dailyScanTime: string
+  lastScheduledScanDate?: string | null
 }
 
 export interface CrawlRule {
@@ -172,6 +176,7 @@ export interface CrawlRule {
 
 export interface CrawlJob {
   id: number
+  siteId: number
   ruleId: number
   name: string
   phase: 'DISCOVERY' | 'AWAITING_CONFIRMATION' | 'DOWNLOAD' | 'REVIEW'
@@ -207,7 +212,7 @@ export interface CrawlAsset {
   fileSize: number
   width: number | null
   height: number | null
-  status: 'PENDING' | 'DOWNLOADED' | 'FAILED' | 'DELETED' | 'DUPLICATE' | 'IMPORTED'
+  status: 'PENDING' | 'DOWNLOADED' | 'FAILED' | 'SKIPPED' | 'DELETED' | 'DUPLICATE' | 'IMPORTED'
   importedPhotoId: number | null
   note: string | null
   errorMessage: string | null
@@ -216,4 +221,15 @@ export interface CrawlAsset {
   libraryTrashDuplicate: boolean
   similarityGroupId: number | null
   similarityCount: number
+}
+
+export interface CrawlImageSkip {
+  id: number
+  imageUrl: string
+  normalizedUrl: string
+  sourcePageUrl: string | null
+  reason: string | null
+  skipCount: number
+  lastSkippedAt: string | null
+  createdAt: string
 }

@@ -1,7 +1,10 @@
 package com.aiphoto.entity;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
@@ -27,6 +30,11 @@ public class CrawlSite {
     private Integer maxDetailPages = 1000;
     private Integer maxImages = 5000;
     private Long maxFileBytes = 20L * 1024 * 1024;
+    private Long minRequestIntervalMillis = 1000L;
+    private Boolean scheduleEnabled = false;
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime dailyScanTime = LocalTime.of(3, 0);
+    private LocalDate lastScheduledScanDate;
     @CreationTimestamp
     private LocalDateTime createdAt;
     @UpdateTimestamp

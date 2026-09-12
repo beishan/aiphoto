@@ -1,14 +1,18 @@
 package com.aiphoto.async;
 
 import com.aiphoto.entity.CrawlAsset;
+import com.aiphoto.entity.CrawlAssetSource;
 import com.aiphoto.entity.CrawlJob;
 import com.aiphoto.entity.CrawlPage;
 import com.aiphoto.entity.CrawlRule;
 import com.aiphoto.repository.CrawlAssetRepository;
+import com.aiphoto.repository.CrawlAssetSourceRepository;
 import com.aiphoto.repository.CrawlJobRepository;
 import com.aiphoto.repository.CrawlPageRepository;
 import com.aiphoto.repository.CrawlRuleRepository;
+import com.aiphoto.repository.CrawlImageSkipRepository;
 import com.aiphoto.service.CrawlStagingStorageService;
+import com.aiphoto.service.CrawlDiscoveryHistoryService;
 import com.aiphoto.service.CrawlJobQueueService;
 import com.aiphoto.service.CrawlRuleMatcher;
 import com.aiphoto.service.SafeHttpFetcher;
@@ -50,6 +54,9 @@ public class CrawlWorker {
     private final ObjectMapper objectMapper;
     private final CrawlJobQueueService queueService;
     private final PerceptualHashService perceptualHashService;
+    private final CrawlDiscoveryHistoryService discoveryHistoryService;
+    private final CrawlImageSkipRepository imageSkipRepository;
+    private final CrawlAssetSourceRepository assetSourceRepository;
 
     @Async
     public void discover(Long jobId) {
@@ -76,7 +83,8 @@ public class CrawlWorker {
                 if (!visited.add(normalized)) continue;
                 try {
                     SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                            normalized, rule.getAllowedHosts(), MAX_HTML_BYTES);
+                            normalized, rule.getAllowedHosts(), MAX_HTML_BYTES,
+                            rule.getMinRequestIntervalMillis());
                     requireHtml(resource.contentType());
                     Document document = Jsoup.parse(
                             new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -89,14 +97,8 @@ public class CrawlWorker {
                             continue;
                         }
                         String detailHash = SafeHttpFetcher.urlHash(detailUrl);
-                        if (pageRepository.findByJobIdAndUrlHash(jobId, detailHash).isEmpty()) {
-                            CrawlPage page = new CrawlPage();
-                            page.setJobId(jobId);
-                            page.setUrl(href);
-                            page.setNormalizedUrl(detailUrl);
-                            page.setUrlHash(detailHash);
-                            pageRepository.save(page);
-                        }
+                        discoveryHistoryService.addIfNew(
+                                jobId, rule.getSiteId(), href, detailUrl, detailHash);
                         if (pageRepository.countByJobId(jobId) >= rule.getMaxDetailPages()) break;
                     }
                     if (rule.getNextSelector() != null && !rule.getNextSelector().isBlank()) {
@@ -160,7 +162,8 @@ public class CrawlWorker {
                         String detailUrl = SafeHttpFetcher.normalize(detailQueue.removeFirst());
                         if (!detailVisited.add(detailUrl)) continue;
                         SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                                detailUrl, rule.getAllowedHosts(), MAX_HTML_BYTES);
+                                detailUrl, rule.getAllowedHosts(), MAX_HTML_BYTES,
+                                rule.getMinRequestIntervalMillis());
                         requireHtml(resource.contentType());
                         Document document = Jsoup.parse(
                                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -174,7 +177,7 @@ public class CrawlWorker {
                                     imageUrl, rule.getImageUrlIncludes(), rule.getImageUrlExcludes())) {
                                 continue;
                             }
-                            downloadAsset(jobId, page, rule, imageUrl);
+                            downloadAsset(jobId, job.getOwnerId(), page, rule, imageUrl);
                         }
                         if (rule.getDetailNextSelector() != null && !rule.getDetailNextSelector().isBlank()) {
                             for (Element link : document.select(rule.getDetailNextSelector())) {
@@ -229,12 +232,11 @@ public class CrawlWorker {
         }
     }
 
-    private void downloadAsset(Long jobId, CrawlPage page, CrawlRule rule, String imageUrl) {
+    private void downloadAsset(
+            Long jobId, Long ownerId, CrawlPage page, CrawlRule rule, String imageUrl) {
         String normalized = SafeHttpFetcher.normalize(imageUrl);
         String urlHash = SafeHttpFetcher.urlHash(normalized);
         CrawlAsset asset = assetRepository.findByJobIdAndUrlHash(jobId, urlHash).orElse(null);
-        if (asset != null && asset.getStatus() != CrawlAsset.Status.FAILED
-                && asset.getStatus() != CrawlAsset.Status.PENDING) return;
         if (asset == null) {
             asset = new CrawlAsset();
             asset.setJobId(jobId);
@@ -244,13 +246,29 @@ public class CrawlWorker {
             asset.setNormalizedUrl(normalized);
             asset.setUrlHash(urlHash);
             asset.setOriginalFilename(filename(URI.create(imageUrl)));
+            asset = assetRepository.save(asset);
         }
+        recordSource(asset, page);
+        if (asset.getStatus() != CrawlAsset.Status.FAILED
+                && asset.getStatus() != CrawlAsset.Status.PENDING) return;
         asset.setStatus(CrawlAsset.Status.PENDING);
         asset.setErrorMessage(null);
         asset = assetRepository.save(asset);
+        var skip = imageSkipRepository.findByOwnerIdAndUrlHash(ownerId, urlHash).orElse(null);
+        if (skip != null && normalized.equals(skip.getNormalizedUrl())) {
+            skip.setSkipCount(skip.getSkipCount() + 1);
+            skip.setLastSkippedAt(LocalDateTime.now());
+            if (skip.getSourcePageUrl() == null) skip.setSourcePageUrl(page.getUrl());
+            imageSkipRepository.save(skip);
+            asset.setStatus(CrawlAsset.Status.SKIPPED);
+            asset.setErrorMessage("已按永久跳过规则跳过");
+            assetRepository.save(asset);
+            return;
+        }
         try {
             SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                    imageUrl, rule.getAllowedHosts(), rule.getMaxFileBytes());
+                    imageUrl, rule.getAllowedHosts(), rule.getMaxFileBytes(),
+                    pageHostInterval(imageUrl, rule));
             if (!resource.contentType().startsWith("image/")) {
                 throw new IllegalArgumentException("响应不是图片");
             }
@@ -323,6 +341,22 @@ public class CrawlWorker {
 
     private String md5(byte[] bytes) throws Exception {
         return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("MD5").digest(bytes));
+    }
+
+    private long pageHostInterval(String url, CrawlRule rule) {
+        URI start = URI.create(rule.getStartUrl());
+        URI target = URI.create(url);
+        return start.getHost() != null && start.getHost().equalsIgnoreCase(target.getHost())
+                ? rule.getMinRequestIntervalMillis() : 0L;
+    }
+
+    private void recordSource(CrawlAsset asset, CrawlPage page) {
+        if (assetSourceRepository.existsByAssetIdAndPageId(asset.getId(), page.getId())) return;
+        CrawlAssetSource source = new CrawlAssetSource();
+        source.setAssetId(asset.getId());
+        source.setPageId(page.getId());
+        source.setSourcePageUrl(page.getUrl());
+        assetSourceRepository.save(source);
     }
 
     private String shortMessage(Exception exception) {

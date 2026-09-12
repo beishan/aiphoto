@@ -265,6 +265,9 @@ CREATE TABLE IF NOT EXISTS crawler_settings (
     connect_timeout_seconds INTEGER NOT NULL DEFAULT 10,
     request_timeout_seconds INTEGER NOT NULL DEFAULT 30,
     min_request_interval_millis BIGINT NOT NULL DEFAULT 1000,
+    schedule_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    daily_scan_time TIME NOT NULL DEFAULT '03:00:00',
+    last_scheduled_scan_date DATE,
     max_retries INTEGER NOT NULL DEFAULT 2,
     retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -302,10 +305,15 @@ CREATE TABLE IF NOT EXISTS crawl_sites (
     max_detail_pages INTEGER NOT NULL DEFAULT 1000,
     max_images INTEGER NOT NULL DEFAULT 5000,
     max_file_bytes BIGINT NOT NULL DEFAULT 20971520,
+    min_request_interval_millis BIGINT NOT NULL DEFAULT 1000,
     migrated_rule_id BIGINT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS min_request_interval_millis BIGINT NOT NULL DEFAULT 1000;
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS schedule_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS daily_scan_time TIME NOT NULL DEFAULT '03:00:00';
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS last_scheduled_scan_date DATE;
 
 CREATE TABLE IF NOT EXISTS crawl_rules (
     id BIGSERIAL PRIMARY KEY,
@@ -355,11 +363,13 @@ ALTER TABLE crawl_rules ALTER COLUMN allowed_hosts DROP NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_crawl_rules_one_enabled_per_site
     ON crawl_rules(site_id) WHERE enabled = TRUE;
 CREATE INDEX IF NOT EXISTS idx_crawl_sites_owner_updated ON crawl_sites(owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crawl_sites_schedule ON crawl_sites(schedule_enabled, daily_scan_time);
 CREATE INDEX IF NOT EXISTS idx_crawl_rules_site_updated ON crawl_rules(site_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS crawl_jobs (
     id BIGSERIAL PRIMARY KEY,
     owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    site_id BIGINT NOT NULL REFERENCES crawl_sites(id) ON DELETE RESTRICT,
     rule_id BIGINT NOT NULL REFERENCES crawl_rules(id) ON DELETE RESTRICT,
     rule_snapshot TEXT NOT NULL,
     name VARCHAR(200) NOT NULL,
@@ -380,7 +390,12 @@ CREATE TABLE IF NOT EXISTS crawl_jobs (
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(100);
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS site_id BIGINT REFERENCES crawl_sites(id) ON DELETE RESTRICT;
+UPDATE crawl_jobs j SET site_id = r.site_id
+FROM crawl_rules r WHERE j.site_id IS NULL AND j.rule_id = r.id;
+ALTER TABLE crawl_jobs ALTER COLUMN site_id SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_crawl_jobs_runnable ON crawl_jobs(status, lease_until, created_at);
+CREATE INDEX IF NOT EXISTS idx_crawl_jobs_site_created ON crawl_jobs(site_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS crawl_pages (
     id BIGSERIAL PRIMARY KEY,
@@ -395,6 +410,22 @@ CREATE TABLE IF NOT EXISTS crawl_pages (
     UNIQUE(job_id, url_hash)
 );
 ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
+
+CREATE TABLE IF NOT EXISTS crawl_seen_pages (
+    id BIGSERIAL PRIMARY KEY,
+    site_id BIGINT NOT NULL REFERENCES crawl_sites(id) ON DELETE CASCADE,
+    normalized_url VARCHAR(4096) NOT NULL,
+    url_hash VARCHAR(64) NOT NULL,
+    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site_id, url_hash)
+);
+INSERT INTO crawl_seen_pages (site_id, normalized_url, url_hash, first_seen_at)
+SELECT DISTINCT ON (j.site_id, p.url_hash)
+    j.site_id, p.normalized_url, p.url_hash, p.created_at
+FROM crawl_pages p JOIN crawl_jobs j ON j.id = p.job_id
+ON CONFLICT (site_id, url_hash) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_crawl_seen_pages_site_seen
+    ON crawl_seen_pages(site_id, first_seen_at DESC);
 
 CREATE TABLE IF NOT EXISTS crawl_assets (
     id BIGSERIAL PRIMARY KEY,
@@ -427,9 +458,41 @@ ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_group_id BIGINT;
 ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS note TEXT;
 
+CREATE TABLE IF NOT EXISTS crawl_asset_sources (
+    id BIGSERIAL PRIMARY KEY,
+    asset_id BIGINT NOT NULL REFERENCES crawl_assets(id) ON DELETE CASCADE,
+    page_id BIGINT NOT NULL REFERENCES crawl_pages(id) ON DELETE CASCADE,
+    source_page_url VARCHAR(4096) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(asset_id, page_id)
+);
+INSERT INTO crawl_asset_sources (asset_id, page_id, source_page_url, created_at)
+SELECT id, page_id, source_page_url, created_at FROM crawl_assets
+ON CONFLICT (asset_id, page_id) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_crawl_asset_sources_page
+    ON crawl_asset_sources(page_id, asset_id);
+
+CREATE TABLE IF NOT EXISTS crawl_image_skips (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    image_url VARCHAR(4096) NOT NULL,
+    normalized_url VARCHAR(4096) NOT NULL,
+    url_hash VARCHAR(64) NOT NULL,
+    source_page_url VARCHAR(4096),
+    reason VARCHAR(500),
+    skip_count BIGINT NOT NULL DEFAULT 0,
+    last_skipped_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(owner_id, url_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_crawl_image_skips_owner_created
+    ON crawl_image_skips(owner_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_crawl_jobs_owner_created ON crawl_jobs(owner_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_crawl_pages_job_status ON crawl_pages(job_id, status);
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_job_status ON crawl_assets(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_job_page ON crawl_assets(job_id, page_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_md5 ON crawl_assets(file_hash_md5);
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_similarity
     ON crawl_assets(job_id, similarity_group_id) WHERE similarity_group_id IS NOT NULL;

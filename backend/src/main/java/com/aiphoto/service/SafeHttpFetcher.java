@@ -35,12 +35,20 @@ public class SafeHttpFetcher {
     private final ConcurrentHashMap<String, HttpClient> clients = new ConcurrentHashMap<>();
 
     public FetchedResource fetch(String url, String allowedHosts, long maxBytes) throws Exception {
+        return fetch(url, allowedHosts, maxBytes, 0L);
+    }
+
+    public FetchedResource fetch(
+            String url, String allowedHosts, long maxBytes, long siteMinRequestIntervalMillis)
+            throws Exception {
         Set<String> hosts = parseHosts(allowedHosts);
         URI uri = URI.create(url);
         CrawlerSettingsService.NetworkSnapshot settings = crawlerSettingsService.networkSnapshot();
+        long requestIntervalMillis = Math.max(
+                settings.minRequestIntervalMillis(), siteMinRequestIntervalMillis);
         for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
             validate(uri, hosts);
-            awaitRateLimit(uri.getHost(), settings.minRequestIntervalMillis());
+            awaitRateLimit(uri.getHost(), requestIntervalMillis);
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(settings.requestTimeoutSeconds()))
                     .header("User-Agent", "aiphoto-crawler/1.0")

@@ -9,7 +9,7 @@ import { crawlApi } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
-import type { Album, CrawlAsset, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
+import type { Album, CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
 
 const sites = ref<CrawlSite[]>([])
 const rules = ref<CrawlRule[]>([])
@@ -47,19 +47,30 @@ const recentImportBatch = ref<CrawlImportBatch | null>(null)
 const recentImportItems = ref<CrawlImportItem[]>([])
 const importItemStatus = ref('')
 const pendingImport = ref<{ signature: string; key: string } | null>(null)
+const imageSkips = ref<CrawlImageSkip[]>([])
+const skipQuery = ref('')
+const skipPage = ref(0)
+const skipTotal = ref(0)
+const pageAssetsDialogVisible = ref(false)
+const pageAssets = ref<CrawlAsset[]>([])
+const pageAssetsTotal = ref(0)
+const pageAssetsPage = ref(0)
+const selectedSourcePage = ref<CrawlPage | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
-type TabKey = 'overview' | 'sites' | 'tasks' | 'review'
+type TabKey = 'overview' | 'sites' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
   name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
-  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
+  scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
 const createSiteForm = reactive<CrawlSite>({
   name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
-  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
+  scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
 const form = reactive<CrawlRule>({
@@ -79,6 +90,7 @@ const tabOptions = computed(() => [
   { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
+  { label: imageSkips.value.length ? `跳过管理  ${skipTotal.value}` : '跳过管理', value: 'skips' },
 ])
 const metrics = computed(() => [
   { label: '采集网站', value: sites.value.length, note: `${sites.value.length ? '已配置来源' : '等待配置'}`, icon: Connection },
@@ -110,9 +122,14 @@ async function loadJobs() {
   jobs.value = (await crawlApi.jobs()).data
   if (!activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
 }
+async function loadImageSkips() {
+  const { data } = await crawlApi.imageSkips(skipPage.value, 50, skipQuery.value)
+  imageSkips.value = data.content
+  skipTotal.value = data.totalElements
+}
 
 async function refresh() {
-  await Promise.all([loadSites(), loadJobs()])
+  await Promise.all([loadSites(), loadJobs(), loadImageSkips()])
   if (activeJobId.value) await loadJobDetail()
 }
 
@@ -174,7 +191,7 @@ async function loadJobDetail() {
 }
 
 async function loadPreviews() {
-  const wanted = reviewAssets.value.filter(asset => asset.status !== 'FAILED' && !previewImages[asset.id]).slice(0, 80)
+  const wanted = reviewAssets.value.filter(asset => !['FAILED', 'SKIPPED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
@@ -257,6 +274,23 @@ function resetCreateSiteForm() {
   Object.assign(createSiteForm, {
     id: undefined, name: '', startUrl: '', allowedHosts: '', maxListPages: 100,
     maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
+    minRequestIntervalMillis: 1000,
+    scheduleEnabled: false, dailyScanTime: '03:00', lastScheduledScanDate: null,
+  })
+}
+
+function applyT66yPreset() {
+  Object.assign(createSiteForm, {
+    name: 't66y 图片版',
+    startUrl: 'https://t66y.com/thread0806.php?fid=16',
+    allowedHosts: 't66y.com,23img.com,23lmg.com',
+    maxListPages: 100,
+    maxDetailPages: 5000,
+    maxImages: 10000,
+    maxFileBytes: 20 * 1024 * 1024,
+    minRequestIntervalMillis: 10000,
+    scheduleEnabled: false,
+    dailyScanTime: '03:00',
   })
 }
 
@@ -296,6 +330,26 @@ async function createSite() {
     await loadSites()
     const createdSite = sites.value.find(site => site.id === data.id) || data
     await selectSite(createdSite)
+    if (data.startUrl === 'https://t66y.com/thread0806.php?fid=16') {
+      Object.assign(form, {
+        id: undefined,
+        siteId: data.id,
+        name: 't66y 图片帖子',
+        enabled: true,
+        detailSelector: "#tbody h3 a[href^='/htm_data/'][href$='.html']",
+        detailUrlIncludes: '/16/',
+        detailUrlExcludes: '',
+        nextSelector: ".pages a[href^='thread0806.php']:matchesOwn(^下一頁$)",
+        imageSelector: '#conttpc img',
+        imageAttributes: 'ess-data,src,data-original,data-src,srcset',
+        imageUrlIncludes: '/i/',
+        imageUrlExcludes: 'thumb,avatar,adblo_ck',
+        detailNextSelector: '',
+        maxPagesPerDetail: 1,
+      })
+      const rule = await saveRule(false)
+      if (rule) useRule(rule)
+    }
     ElMessage.success('网站已创建')
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '网站创建失败')
@@ -395,6 +449,73 @@ async function deleteSelected() {
   ElMessage.success(`已移到待整理区已删除列表：${data.success} 张`)
   selectedAssets.value = new Set()
   await loadJobDetail()
+}
+
+async function skipSelectedNextTime() {
+  if (!activeJobId.value || !selectedAssets.value.size) return
+  let reason = '重复图片'
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '这些图片当前仍保留，但以后再次遇到相同图片 URL 时将直接记录为跳过。',
+      '以后不再采集',
+      { inputValue: '重复图片', confirmButtonText: '加入跳过清单', cancelButtonText: '取消' },
+    )
+    reason = value
+  } catch { return }
+  try {
+    const { data } = await crawlApi.skipAssets(activeJobId.value, [...selectedAssets.value], reason)
+    ElMessage.success(`已加入跳过清单：${data.success} 张`)
+    await loadImageSkips()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '加入跳过清单失败')
+  }
+}
+
+async function viewPageAssets(page: CrawlPage) {
+  selectedSourcePage.value = page
+  pageAssetsPage.value = 0
+  pageAssets.value = []
+  pageAssetsTotal.value = 0
+  pageAssetsDialogVisible.value = true
+  await loadPageAssets()
+}
+
+async function loadPageAssets() {
+  if (!activeJobId.value || !selectedSourcePage.value) return
+  const { data } = await crawlApi.assets(
+    activeJobId.value, pageAssetsPage.value, 48, '', false, false, selectedSourcePage.value.id)
+  pageAssets.value = data.content
+  pageAssetsTotal.value = data.totalElements
+  await Promise.all(pageAssets.value.filter(asset => asset.status !== 'FAILED' && asset.status !== 'SKIPPED' && !previewImages[asset.id]).map(async asset => {
+    try {
+      const { data: image } = await crawlApi.thumbnail(asset.id)
+      previewImages[asset.id] = URL.createObjectURL(image)
+    } catch { /* no local image */ }
+  }))
+}
+
+function changePageAssetsPage(page: number) {
+  pageAssetsPage.value = page - 1
+  void loadPageAssets()
+}
+
+function searchImageSkips() {
+  skipPage.value = 0
+  void loadImageSkips()
+}
+
+function changeSkipPage(page: number) {
+  skipPage.value = page - 1
+  void loadImageSkips()
+}
+
+async function removeImageSkip(skip: CrawlImageSkip) {
+  try {
+    await ElMessageBox.confirm('移除后，未来再次遇到这个图片 URL 时会恢复下载。', '移除跳过规则')
+  } catch { return }
+  await crawlApi.deleteImageSkip(skip.id)
+  ElMessage.success('已移除跳过规则')
+  await loadImageSkips()
 }
 
 async function editSelected() {
@@ -534,7 +655,7 @@ function changeAssetPage(page: number) {
   void loadJobDetail()
 }
 onMounted(async () => {
-  const [,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), albumApi.list(), tagApi.list()])
+  const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
   albums.value = albumResult.data
   tags.value = tagResult.data
   await loadJobDetail()
@@ -642,7 +763,15 @@ onUnmounted(() => {
               <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
               <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
               <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
+              <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="siteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
             </el-row>
+            <el-divider content-position="left">每日新增扫描</el-divider>
+            <el-row :gutter="16">
+              <el-col :xs="24" :sm="8"><el-form-item label="启用定时扫描"><el-switch v-model="siteForm.scheduleEnabled" /></el-form-item></el-col>
+              <el-col :xs="24" :sm="8"><el-form-item label="每天执行时间"><el-time-select v-model="siteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!siteForm.scheduleEnabled" /></el-form-item></el-col>
+              <el-col :xs="24" :sm="8"><el-form-item label="上次自动扫描"><el-input :model-value="siteForm.lastScheduledScanDate || '尚未执行'" disabled /></el-form-item></el-col>
+            </el-row>
+            <el-alert type="info" show-icon :closable="false" title="定时任务只发现此前没有记录过的新链接，完成后仍由你确认是否下载。" />
           </el-form>
           <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
         </el-card>
@@ -737,7 +866,8 @@ onUnmounted(() => {
           <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
             <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
             <el-table-column label="图片页 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.url }}</span></template></el-table-column>
-            <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
+          <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
+          <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
           </el-table>
           <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
         </template>
@@ -745,7 +875,7 @@ onUnmounted(() => {
       </el-card>
     </section>
 
-    <section v-else class="review-workspace" role="tabpanel">
+    <section v-else-if="activeTab === 'review'" class="review-workspace" role="tabpanel">
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
@@ -756,7 +886,7 @@ onUnmounted(() => {
       <template v-else>
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
-            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /><el-option label="失败" value="FAILED" /></el-select></el-form-item>
+            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /><el-option label="失败" value="FAILED" /></el-select></el-form-item>
             <el-form-item label="智能筛选"><el-space wrap><el-checkbox v-model="exactDuplicateOnly" border>精确重复</el-checkbox><el-checkbox v-model="similarOnly" border>相似图片</el-checkbox></el-space></el-form-item>
             <el-form-item label="相似度阈值" class="similarity-field"><el-slider v-model="similarityThreshold" :min="0" :max="16" show-input /><el-button :icon="MagicStick" :loading="busy === 'similarity'" @click="analyzeSimilarity">分析</el-button></el-form-item>
           </el-form>
@@ -771,7 +901,7 @@ onUnmounted(() => {
 
         <el-card class="selection-bar surface-card" shadow="never">
           <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
-          <el-space wrap><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected">导入图库</el-button></el-space>
+          <el-space wrap><el-button :disabled="!selectedAssets.size" @click="skipSelectedNextTime">以后跳过</el-button><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected">导入图库</el-button></el-space>
         </el-card>
 
         <el-card class="organize-card surface-card" shadow="never">
@@ -813,8 +943,27 @@ onUnmounted(() => {
       </template>
     </section>
 
+    <section v-else class="skip-workspace" role="tabpanel">
+      <el-card class="surface-card" shadow="never">
+        <template #header><div class="card-heading"><div><p class="eyebrow">PERSISTENT EXCLUSIONS</p><h2>跳过图片管理</h2><p>这些图片 URL 再次出现时会留下来源记录，但不会下载文件。</p></div><el-tag type="info" round>{{ skipTotal }} 条</el-tag></div></template>
+        <el-input v-model="skipQuery" class="page-search" clearable placeholder="搜索图片 URL" :prefix-icon="Search" @keyup.enter="searchImageSkips" @clear="searchImageSkips"><template #append><el-button @click="searchImageSkips">搜索</el-button></template></el-input>
+        <el-table :data="imageSkips" table-layout="fixed" empty-text="暂无永久跳过的图片">
+          <el-table-column label="图片 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><el-link :href="row.imageUrl" target="_blank" type="primary">{{ row.imageUrl }}</el-link></template></el-table-column>
+          <el-table-column label="规则来源页面" min-width="300" show-overflow-tooltip prop="sourcePageUrl" />
+          <el-table-column label="原因" width="150" show-overflow-tooltip prop="reason" />
+          <el-table-column label="已跳过" width="90"><template #default="{ row }">{{ row.skipCount }} 次</template></el-table-column>
+          <el-table-column label="加入时间" width="150"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
+          <el-table-column label="" width="100"><template #default="{ row }"><el-button link type="danger" @click="removeImageSkip(row)">恢复采集</el-button></template></el-table-column>
+        </el-table>
+        <el-pagination v-if="skipTotal > 50" class="pagination" layout="prev, pager, next, total" :current-page="skipPage + 1" :page-size="50" :total="skipTotal" @current-change="changeSkipPage" />
+      </el-card>
+    </section>
+
     <el-dialog v-model="siteDialogVisible" class="site-dialog" width="min(680px, calc(100vw - 28px))" destroy-on-close align-center @closed="resetCreateSiteForm">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Connection /></el-icon></span><div><h2>新增采集网站</h2><p>设置采集入口与访问边界，创建后再配置解析规则。</p></div></div></template>
+      <el-alert class="preset-alert" type="info" show-icon :closable="false" title="已为目标图片版准备站点适配：识别 ess-data 原图，并按 robots.txt 每 10 秒请求一次。">
+        <template #default><el-button type="primary" link @click="applyT66yPreset">填入 t66y 图片版预设</el-button></template>
+      </el-alert>
       <el-form :model="createSiteForm" label-position="top" class="mac-form site-dialog-form">
         <el-row :gutter="16">
           <el-col :xs="24" :md="10"><el-form-item label="网站名称" required><el-input v-model="createSiteForm.name" autofocus placeholder="例如：家庭活动图库" /></el-form-item></el-col>
@@ -826,10 +975,28 @@ onUnmounted(() => {
           <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="createSiteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
+          <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="createSiteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
+        </el-row>
+        <el-divider content-position="left">每日新增扫描</el-divider>
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12"><el-form-item label="启用定时扫描"><el-switch v-model="createSiteForm.scheduleEnabled" /></el-form-item></el-col>
+          <el-col :xs="24" :sm="12"><el-form-item label="每天执行时间"><el-time-select v-model="createSiteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!createSiteForm.scheduleEnabled" /></el-form-item></el-col>
         </el-row>
         <el-alert type="info" show-icon :closable="false" title="采集器只会访问允许域名中的页面和图片资源。" />
       </el-form>
       <template #footer><el-button round @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :icon="Plus" round :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="pageAssetsDialogVisible" width="min(980px, calc(100vw - 28px))" destroy-on-close>
+      <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Picture /></el-icon></span><div><h2>链接采集结果</h2><p>{{ selectedSourcePage?.url }}</p></div></div></template>
+      <el-alert v-if="!pageAssets.length" type="info" :closable="false" title="这个链接尚未提取到图片，或还未进入下载阶段。" />
+      <div v-else class="asset-grid page-result-grid">
+        <el-card v-for="asset in pageAssets" :key="asset.id" class="asset-card surface-card" shadow="never">
+          <div class="asset-preview"><el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" /><div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div></div>
+          <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.status }} · {{ formatBytes(asset.fileSize) }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small></div>
+        </el-card>
+      </div>
+      <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
     </el-dialog>
   </main>
 </template>
@@ -840,6 +1007,8 @@ onUnmounted(() => {
 .panel{padding:24px;border:1px solid var(--separator);border-radius:22px;background:var(--bg-card);box-shadow:0 16px 42px rgba(0,0,0,.08)}.section-heading,.review-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}.section-heading h2,.review-panel>header h2{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:23px}.section-heading p:not(.eyebrow),.review-panel>header p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric-card{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:18px;border:1px solid var(--separator);border-radius:17px;background:var(--bg-secondary)}.metric-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:13px;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent);font-size:20px}.metric-card strong{font-size:25px;line-height:1}.metric-card p{margin:5px 0 0;color:var(--text-secondary);font-size:11px}.metric-card small{grid-column:1/-1;color:var(--text-tertiary);font-size:10px}.pipeline-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 27px;padding:16px;border:1px solid var(--separator);border-radius:17px;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 8%,var(--bg-secondary)),var(--bg-secondary))}.pipeline-strip article{display:flex;min-width:0;align-items:center;gap:10px}.pipeline-strip article>b{display:grid;flex:0 0 30px;height:30px;place-items:center;border-radius:10px;background:var(--bg-card);color:var(--accent);font-size:10px}.pipeline-strip article div{display:grid;gap:3px}.pipeline-strip article strong{font-size:12px}.pipeline-strip article small{color:var(--text-tertiary);font-size:9px}.pipeline-strip>i{color:var(--text-tertiary);font-style:normal}.task-name{display:grid;gap:4px}.task-name strong{font-size:12px}.task-name p{margin:0;color:var(--text-tertiary);font-size:10px}
 .site-layout,.rule-layout,.task-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px}.rule-layout{grid-template-columns:minmax(0,1fr) 260px}.fields{display:grid;gap:12px}.two{display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:11px}.sites,.rules,.jobs{display:grid;align-content:start;gap:8px;max-height:420px;overflow:auto}.sites button,.rules button,.jobs button{display:grid;gap:5px;padding:11px;border:1px solid var(--separator);border-radius:13px;background:var(--bg-secondary);color:var(--text-primary);text-align:left;cursor:pointer;transition:border-color .18s ease,background .18s ease}.sites button.active,.rules button.active,.jobs button.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg-secondary))}.sites button{grid-template-columns:38px minmax(0,1fr);align-items:center}.site-mark{display:grid;width:38px;height:38px;place-items:center;border-radius:12px;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:16px;font-weight:800}.sites button>span:last-child,.jobs button>span{display:grid;min-width:0;gap:4px}.sites small,.rules small,.jobs small{overflow:hidden;color:var(--text-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.rules>strong{margin-bottom:4px;font-size:12px}.rule-name{display:flex;align-items:center;justify-content:space-between;gap:8px}.form-block-title{display:flex;align-items:center;gap:10px;margin-top:4px;padding-top:4px}.form-block-title>b{display:grid;width:31px;height:31px;place-items:center;border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:10px}.form-block-title>div{display:grid;gap:2px}.form-block-title strong{font-size:12px}.form-block-title small{color:var(--text-tertiary);font-size:10px}.limits{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.limits label{display:grid;gap:6px;color:var(--text-secondary);font-size:10px}.limits :deep(.el-input-number){width:100%}.actions,.task-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.rule-block{margin-top:4px;padding-top:13px;border-top:1px solid var(--separator)}.rule-block strong{display:block;margin-top:4px;font-size:13px}.limit-field{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:10px}.preview-list,.page-list{display:grid;gap:7px;max-height:240px;margin-top:16px;overflow:auto}.preview-list{padding:13px;border-radius:13px;background:var(--bg-secondary)}.preview-list strong{font-size:11px}.preview-list a,.page-list>div{overflow:hidden;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.page-list>div{display:flex;align-items:center;gap:7px;padding:7px 3px;border-bottom:1px solid var(--separator)}.page-list span.excluded{text-decoration:line-through;opacity:.55}
 .site-dialog-form{padding:0 2px 8px}
+.preset-alert{margin-bottom:16px}
+.skip-workspace{min-width:0}.page-result-grid{max-height:65vh;overflow:auto;padding:2px}
 .task-summary{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}.task-summary h3{margin:3px 0 0;font-size:18px}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0}.stats span{display:grid;gap:4px;padding:10px;border-radius:11px;background:var(--bg-secondary);color:var(--text-secondary);font-size:9px}.stats b{color:var(--text-primary);font-size:16px}.task-actions{justify-content:flex-start;margin:14px 0}.page-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;margin-top:16px}.page-pagination,.asset-pagination{justify-content:center;margin-top:18px}.review-heading :deep(.el-select){width:min(320px,40vw)}.status-filter{width:130px}.similarity-bar{display:grid;grid-template-columns:auto minmax(220px,1fr) auto auto;align-items:center;gap:12px;margin-bottom:14px;padding:11px 13px;border-radius:13px;background:var(--bg-secondary);color:var(--text-secondary);font-size:10px}.organize-bar{display:grid;grid-template-columns:minmax(180px,1fr) auto minmax(160px,.5fr) minmax(180px,.7fr);gap:8px;margin-bottom:14px}.import-batch{margin:0 0 14px;padding:13px;border-radius:13px;background:var(--bg-secondary);color:var(--text-secondary)}.import-toolbar{margin-top:10px}.import-items{display:grid;gap:7px;max-height:210px;margin-top:10px;overflow:auto}.import-items>div{display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:10px}.import-error{color:var(--danger,#f56c6c)}
 .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.asset-grid article{position:relative;overflow:hidden;border:2px solid transparent;border-radius:15px;background:var(--bg-secondary);cursor:pointer}.asset-grid article.selected{border-color:var(--accent)}.asset-grid article.duplicate::after,.asset-grid article.similar::before{position:absolute;top:8px;z-index:1;padding:3px 6px;border-radius:8px;color:white;font-size:9px}.asset-grid article.duplicate::after{right:8px;background:#ff9f0a;content:'重复'}.asset-grid article.similar::before{left:8px;background:#6366f1;content:'相似'}.asset-grid img,.placeholder{width:100%;height:145px;object-fit:cover}.placeholder{display:grid;place-items:center;color:var(--text-tertiary)}.asset-copy{display:grid;gap:5px;padding:10px}.asset-copy strong,.asset-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.asset-copy strong{font-size:12px}.asset-copy small{color:var(--text-secondary);font-size:10px}details{margin-top:18px;color:var(--text-secondary)}.deleted-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px}.deleted-list span{padding:6px 9px;border-radius:9px;background:var(--bg-secondary);font-size:10px}
 @media(max-width:1050px){.metric-grid{grid-template-columns:repeat(2,1fr)}.pipeline-strip>i{display:none}.pipeline-strip{display:grid;grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(3,1fr)}}

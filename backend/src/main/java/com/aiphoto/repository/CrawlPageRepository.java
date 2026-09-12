@@ -17,6 +17,7 @@ public interface CrawlPageRepository extends JpaRepository<CrawlPage, Long> {
     Page<CrawlPage> findByJobIdAndUrlContainingIgnoreCaseOrderById(
             Long jobId, String query, Pageable pageable);
     Optional<CrawlPage> findByJobIdAndUrlHash(Long jobId, String urlHash);
+    Optional<CrawlPage> findByIdAndJobId(Long id, Long jobId);
     long countByJobId(Long jobId);
     long countByJobIdAndIncludedTrue(Long jobId);
 }

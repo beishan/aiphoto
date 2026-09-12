@@ -17,6 +17,7 @@ public class CrawlJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private Long ownerId;
+    private Long siteId;
     private Long ruleId;
     @Column(nullable = false, columnDefinition = "TEXT")
     private String ruleSnapshot;
