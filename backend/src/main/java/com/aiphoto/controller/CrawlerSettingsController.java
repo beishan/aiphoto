@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class CrawlerSettingsController {
 
     private final CrawlerSettingsService settingsService;
+    private final com.aiphoto.service.CrawlerExecutorService executorService;
+    private final com.aiphoto.service.CrawlerProxyTestService proxyTestService;
 
     @GetMapping
     public CrawlerSettingsService.SettingsView getSettings() {
@@ -43,6 +45,7 @@ public class CrawlerSettingsController {
     public CrawlerSettingsService.ProxyView updateProxy(
             @PathVariable Long id,
             @RequestBody CrawlerSettingsService.ProxyRequest request) {
+        executorService.assertProxyEditable(id);
         return settingsService.saveProxy(id, request);
     }
 
@@ -51,8 +54,49 @@ public class CrawlerSettingsController {
         return settingsService.reorder(ids);
     }
 
+    @PostMapping("/proxies/{id}/test")
+    public com.aiphoto.service.CrawlerProxyTestService.TestResult testProxy(@PathVariable Long id) {
+        return proxyTestService.test(id);
+    }
+
+    @GetMapping("/proxies/{id}/nodes")
+    public com.fasterxml.jackson.databind.JsonNode nodes(@PathVariable Long id) throws Exception {
+        return executorService.nodes(id);
+    }
+
+    @PostMapping("/proxies/{id}/delay")
+    public java.util.Map<String, Integer> delay(@PathVariable Long id, @RequestBody NodeRequest request) throws Exception {
+        return java.util.Map.of("delay", executorService.delay(id, request.node()));
+    }
+
+    @GetMapping("/executors")
+    public List<com.aiphoto.service.CrawlerExecutorService.ExecutorView> executors() {
+        return executorService.list();
+    }
+
+    @PostMapping("/executors")
+    public com.aiphoto.service.CrawlerExecutorService.ExecutorView createExecutor(
+            @RequestBody com.aiphoto.service.CrawlerExecutorService.ExecutorRequest request) throws Exception {
+        return executorService.save(null, request);
+    }
+
+    @PutMapping("/executors/{id}")
+    public com.aiphoto.service.CrawlerExecutorService.ExecutorView updateExecutor(@PathVariable Long id,
+            @RequestBody com.aiphoto.service.CrawlerExecutorService.ExecutorRequest request) throws Exception {
+        return executorService.save(id, request);
+    }
+
+    @DeleteMapping("/executors/{id}")
+    public ResponseEntity<Void> deleteExecutor(@PathVariable Long id) {
+        executorService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    public record NodeRequest(String node) {}
+
     @DeleteMapping("/proxies/{id}")
     public ResponseEntity<Void> deleteProxy(@PathVariable Long id) {
+        executorService.assertProxyEditable(id);
         settingsService.deleteProxy(id);
         return ResponseEntity.noContent().build();
     }

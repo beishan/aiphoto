@@ -3,6 +3,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { settingApi, type CrawlerProxy, type CrawlerProxyRequest } from '@/api/settingApi'
 
+import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
+
+const props = defineProps<{ proxiesOnly?: boolean }>()
 const loading = ref(false)
 const saving = ref(false)
 const proxies = ref<CrawlerProxy[]>([])
@@ -19,7 +22,7 @@ const settings = reactive({
 })
 const editor = reactive<CrawlerProxyRequest>({
   name: '', host: '', port: 7890, username: '', password: '',
-  clearPassword: false, enabled: true,
+  clearPassword: false, enabled: true, proxyType: 'HTTP', controllerUrl: '', secret: '', clearSecret: false,
 })
 const editingHasPassword = ref(false)
 
@@ -55,7 +58,7 @@ function addProxy() {
   editingHasPassword.value = false
   Object.assign(editor, {
     name: '', host: '', port: 7890, username: '', password: '',
-    clearPassword: false, enabled: true,
+    clearPassword: false, enabled: true, proxyType: 'HTTP', controllerUrl: '', secret: '', clearSecret: false,
   })
   showEditor.value = true
 }
@@ -66,7 +69,8 @@ function editProxy(proxy: CrawlerProxy) {
   Object.assign(editor, {
     name: proxy.name, host: proxy.host, port: proxy.port,
     username: proxy.username || '', password: '', clearPassword: false,
-    enabled: proxy.enabled,
+    enabled: proxy.enabled, proxyType: proxy.proxyType,
+    controllerUrl: proxy.controllerUrl || '', secret: '', clearSecret: false,
   })
   showEditor.value = true
 }
@@ -95,13 +99,26 @@ async function toggleProxy(proxy: CrawlerProxy) {
     const { data } = await settingApi.updateCrawlerProxy(proxy.id, {
       name: proxy.name, host: proxy.host, port: proxy.port,
       username: proxy.username || '', password: '', clearPassword: false,
-      enabled: proxy.enabled,
+      enabled: proxy.enabled, proxyType: proxy.proxyType,
+    controllerUrl: proxy.controllerUrl || '', secret: '', clearSecret: false,
     })
     Object.assign(proxy, data)
   } catch (error: any) {
     proxy.enabled = !proxy.enabled
     ElMessage.error(error?.response?.data?.message || '更新代理状态失败')
   }
+}
+
+const testingId = ref<number | null>(null)
+async function testProxy(proxy: CrawlerProxy) {
+  testingId.value = proxy.id
+  try {
+    const { data } = await settingApi.testCrawlerProxy(proxy.id)
+    const text = `${data.controllerOk == null ? '' : `控制 API ${data.controllerOk ? '可用' : '失败'}；`}${data.message}`
+    if (data.proxyOk && data.controllerOk !== false) ElMessage.success(text)
+    else ElMessage.warning(text)
+  } catch (error: any) { ElMessage.error(error?.response?.data?.message || '连接测试失败') }
+  finally { testingId.value = null }
 }
 
 async function removeProxy(proxy: CrawlerProxy) {
@@ -157,11 +174,11 @@ onMounted(load)
 <template>
   <div v-loading="loading" class="crawler-settings">
     <div class="section-heading">
-      <div><h2>爬虫设置</h2><p>控制网页采集的连接策略、请求频率和代理优先级。</p></div>
-      <el-button type="primary" :loading="saving" @click="saveSettings">保存网络设置</el-button>
+      <div><h2>{{ props.proxiesOnly ? "系统代理配置" : "爬虫设置" }}</h2><p>{{ props.proxiesOnly ? "管理普通 HTTP 代理与 Mihomo 控制连接，供爬虫执行器使用。" : "控制采集请求策略与执行器。" }}</p></div>
+      <el-button v-if="!props.proxiesOnly" type="primary" :loading="saving" @click="saveSettings">保存网络设置</el-button>
     </div>
 
-    <section class="settings-card">
+    <section v-if="!props.proxiesOnly" class="settings-card">
       <h3>请求策略</h3>
       <div class="setting-grid">
         <label><span>连接超时</span><el-input-number v-model="settings.connectTimeoutSeconds" :min="1" :max="60" /><small>秒</small></label>
@@ -171,18 +188,20 @@ onMounted(load)
         <label><span>重试基础等待</span><el-input-number v-model="settings.retryBaseDelayMillis" :min="0" :max="60000" :step="100" /><small>毫秒，指数退避</small></label>
       </div>
       <div class="fallback-row"><div><strong>代理失败后允许直连</strong><small>按优先级尝试全部启用代理后，再使用 NAS 的直接网络连接。</small></div><el-switch v-model="settings.directFallback" /></div>
-      <el-alert v-if="!settings.directFallback && !proxies.some(proxy => proxy.enabled)" type="warning" :closable="false" title="当前没有启用代理且禁止直连，所有采集请求都会失败。" />
+      <el-alert v-if="!settings.directFallback && !proxies.some(proxy => proxy.enabled && proxy.proxyType === 'HTTP')" type="warning" :closable="false" title="当前没有启用代理且禁止直连，所有采集请求都会失败。" />
     </section>
 
-    <section class="settings-card">
+    <CrawlerExecutorsSettingsPanel v-if="!props.proxiesOnly" :proxies="proxies" />
+
+    <section v-if="props.proxiesOnly" class="settings-card">
       <div class="proxy-heading"><div><h3>代理列表</h3><p>从上到下依次尝试。拖动左侧手柄即可调整优先级。</p></div><el-button @click="addProxy">添加代理</el-button></div>
       <div class="proxy-list">
         <article v-for="(proxy, index) in proxies" :key="proxy.id" class="proxy-row" @dragover.prevent @drop="dropBefore(proxy.id)">
           <button class="drag-handle" draggable="true" title="拖动调整优先级" @dragstart="startDrag(proxy.id)" @dragend="draggedId = null">⋮⋮</button>
           <span class="priority">{{ index + 1 }}</span>
-          <div class="proxy-copy"><strong>{{ proxy.name }}</strong><small>HTTP · {{ proxy.host }}:{{ proxy.port }}<template v-if="proxy.username"> · {{ proxy.username }}</template><template v-if="proxy.hasPassword"> · 已保存密码</template></small></div>
+          <div class="proxy-copy"><strong>{{ proxy.name }}</strong><small>{{ proxy.proxyType === "MIHOMO" ? "Mihomo" : "HTTP" }} · {{ proxy.host }}:{{ proxy.port }}<template v-if="proxy.username"> · {{ proxy.username }}</template><template v-if="proxy.hasPassword"> · 已保存密码</template></small></div>
           <el-switch v-model="proxy.enabled" @change="toggleProxy(proxy)" />
-          <div class="proxy-actions"><el-button text :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button><el-button text :disabled="index === proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
+          <div class="proxy-actions"><el-button text :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button><el-button text :disabled="index === proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button><el-button text :loading="testingId === proxy.id" @click="testProxy(proxy)">测试连接</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
         </article>
         <el-empty v-if="!proxies.length" description="暂无代理，将使用直连模式" :image-size="64" />
       </div>
@@ -190,11 +209,18 @@ onMounted(load)
 
     <el-dialog v-model="showEditor" :title="editingId == null ? '添加代理' : '编辑代理'" width="min(520px, 92vw)">
       <el-form label-position="top">
+        <el-form-item label="代理类型"><el-select v-model="editor.proxyType"><el-option label="普通 HTTP 代理" value="HTTP" /><el-option label="Mihomo 代理" value="MIHOMO" /></el-select></el-form-item>
         <el-form-item label="名称"><el-input v-model="editor.name" placeholder="例如：家庭代理 1" /></el-form-item>
         <div class="editor-grid"><el-form-item label="主机"><el-input v-model="editor.host" placeholder="proxy.example.com 或 192.168.1.10" /></el-form-item><el-form-item label="端口"><el-input-number v-model="editor.port" :min="1" :max="65535" /></el-form-item></div>
         <el-form-item label="用户名（可选）"><el-input v-model="editor.username" autocomplete="off" /></el-form-item>
         <el-form-item label="密码（可选）"><el-input v-model="editor.password" type="password" show-password autocomplete="new-password" :placeholder="editingHasPassword ? '留空则保持现有密码' : '未配置密码'" /></el-form-item>
         <el-checkbox v-if="editingHasPassword" v-model="editor.clearPassword">清除已保存密码</el-checkbox>
+        <template v-if="editor.proxyType === 'MIHOMO'">
+          <el-form-item label="控制 API 地址"><el-input v-model="editor.controllerUrl" placeholder="http://192.168.1.10:9090" /></el-form-item>
+          <el-form-item label="控制 API 密钥（留空保留）"><el-input v-model="editor.secret" type="password" show-password autocomplete="new-password" /></el-form-item>
+          <el-checkbox v-model="editor.clearSecret">清除控制 API 密钥</el-checkbox>
+          <el-alert type="info" :closable="false" title="主机和端口填写 HTTP 代理入口；控制 API 使用独立地址。建议为每个执行器设置专用 Selector 与入口。" />
+        </template>
         <div class="editor-enabled"><span>保存后立即启用</span><el-switch v-model="editor.enabled" /></div>
       </el-form>
       <template #footer><el-button @click="showEditor = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveProxy">保存</el-button></template>

@@ -63,6 +63,26 @@ export interface DownloadTask {
   endTime: string | null
 }
 
+export interface CrawlerExecutorRequest {
+  name: string
+  enabled: boolean
+  proxyMode: 'DEFAULT' | 'DIRECT' | 'SELECTED' | 'MIHOMO'
+  proxyId: number | null
+  proxyGroup: string
+  nodes: string[]
+  switchMode: 'MANUAL' | 'FAILOVER' | 'REQUESTS'
+  rotateAfterRequests: number
+  cooldownSeconds: number
+}
+export interface CrawlerExecutor extends CrawlerExecutorRequest {
+  id: number
+  activeJobId: number | null
+  currentNode: string | null
+  completedRequests: number
+  lastError: string | null
+  cooldowns: Record<string, string>
+}
+export interface MihomoProxyNode { type: string; all?: string[]; now?: string }
 export interface CrawlerProxy {
   id: number
   name: string
@@ -72,6 +92,9 @@ export interface CrawlerProxy {
   hasPassword: boolean
   enabled: boolean
   priority: number
+  proxyType: 'HTTP' | 'MIHOMO'
+  controllerUrl: string | null
+  secretConfigured: boolean
 }
 
 export interface CrawlerSettings {
@@ -91,6 +114,10 @@ export interface CrawlerProxyRequest {
   username: string
   password: string
   clearPassword: boolean
+  proxyType: 'HTTP' | 'MIHOMO'
+  controllerUrl: string
+  secret: string
+  clearSecret: boolean
   enabled: boolean
 }
 
@@ -179,6 +206,16 @@ export const settingApi = {
   getSystemInfo() {
     return http.get<Record<string, unknown>>('/settings/system-info')
   },
+
+  getCrawlerExecutors() { return http.get<CrawlerExecutor[]>('/settings/crawler/executors') },
+  saveCrawlerExecutor(id: number | null, request: CrawlerExecutorRequest) {
+    return id == null ? http.post<CrawlerExecutor>('/settings/crawler/executors', request)
+      : http.put<CrawlerExecutor>(`/settings/crawler/executors/${id}`, request)
+  },
+  deleteCrawlerExecutor(id: number) { return http.delete(`/settings/crawler/executors/${id}`) },
+  testCrawlerProxy(id: number) { return http.post<{ controllerOk: boolean | null; proxyOk: boolean; message: string }>(`/settings/crawler/proxies/${id}/test`, {}, { timeout: 30000 }) },
+  getMihomoNodes(id: number) { return http.get<{ proxies: Record<string, MihomoProxyNode> }>(`/settings/crawler/proxies/${id}/nodes`) },
+  testMihomoNode(id: number, node: string) { return http.post<{ delay: number }>(`/settings/crawler/proxies/${id}/delay`, { node }) },
 
   getCrawlerSettings() {
     return http.get<CrawlerSettings>('/settings/crawler')

@@ -32,6 +32,7 @@ const navItems = [
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
+  { key: 'proxy', label: '系统代理配置', icon: '🔗' },
   { key: 'crawler', label: '爬虫设置', icon: '🕸️' },
   { key: 'tags', label: '标签管理', icon: '🏷️' },
   { key: 'photos', label: '照片与视频', icon: '🖼️' },
@@ -52,7 +53,7 @@ const navGroups = computed(() => [
   { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon'] : ['general'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
-  { label: '管理', keys: isCurrentUserAdmin ? ['users', 'storage'] : ['storage'] },
+  { label: '管理', keys: isCurrentUserAdmin ? ['users', 'proxy', 'storage'] : ['storage'] },
   { label: '系统', keys: ['system'] },
 ].map(group => ({
   label: group.label,
@@ -715,7 +716,8 @@ async function loadSystemInfo() {
           <SiteFaviconSettingsPanel />
         </div>
 
-        <div v-if="activeSection === 'crawler'" class="content-panel">
+        <div v-if="activeSection === 'proxy' && isCurrentUserAdmin" class="content-panel"><CrawlerSettingsPanel proxies-only /></div>
+        <div v-if="activeSection === 'crawler' && isCurrentUserAdmin" class="content-panel">
           <CrawlerSettingsPanel />
         </div>
 

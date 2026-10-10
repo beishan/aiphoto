@@ -70,6 +70,38 @@ class CrawlerSettingsServiceTest {
                 .hasMessageContaining("全部代理");
     }
 
+    @Test
+    void mihomoSecretIsEncryptedPreservedAndNeverReturned() {
+        CrawlerProxy proxy = proxy(1L, 0);
+        proxy.setProxyType("MIHOMO"); proxy.setSecretCiphertext("encrypted");
+        when(proxyRepository.findById(1L)).thenReturn(Optional.of(proxy));
+        when(proxyRepository.save(proxy)).thenReturn(proxy);
+        var view = service.saveProxy(1L, new CrawlerSettingsService.ProxyRequest(
+                "Mihomo", "localhost", 7895, null, "", false, true, "MIHOMO",
+                "http://localhost:9090/", "", false));
+        assertThat(proxy.getSecretCiphertext()).isEqualTo("encrypted");
+        assertThat(view.secretConfigured()).isTrue();
+        assertThat(view.controllerUrl()).isEqualTo("http://localhost:9090");
+    }
+
+    @Test
+    void mihomoDoesNotEnterDefaultProxyPool() {
+        CrawlerProxy ordinary = proxy(1L, 0);
+        CrawlerProxy mihomo = proxy(2L, 1); mihomo.setProxyType("MIHOMO");
+        when(settingRepository.findById(1L)).thenReturn(Optional.empty());
+        when(proxyRepository.findByEnabledTrueOrderByPriorityAscIdAsc()).thenReturn(List.of(ordinary, mihomo));
+        assertThat(service.networkSnapshot().proxies()).extracting(CrawlerSettingsService.ProxyConfig::id)
+                .containsExactly(1L);
+    }
+
+    @Test
+    void controllerUrlRejectsCredentialsAndPaths() {
+        assertThatThrownBy(() -> CrawlerSettingsService.validateControllerUrl("http://user:secret@localhost:9090"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CrawlerSettingsService.validateControllerUrl("http://localhost:9090/proxies"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private CrawlerProxy proxy(Long id, int priority) {
         CrawlerProxy proxy = new CrawlerProxy();
         proxy.setId(id);
