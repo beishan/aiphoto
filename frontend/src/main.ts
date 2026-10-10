@@ -7,6 +7,7 @@ import App from './App.vue'
 import router from './router'
 import './assets/main.css'
 import './assets/app-redesign.css'
+import './assets/element-layout.css'
 import { loadSiteFavicon } from '@/utils/siteFavicon'
 
 void loadSiteFavicon()

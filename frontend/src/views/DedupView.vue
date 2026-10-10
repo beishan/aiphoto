@@ -212,7 +212,6 @@ function formatSize(bytes: number | null) {
 
 .dedup-tabs {
   display: flex;
-  gap: 8px;
   margin: 0 16px 16px;
 }
 

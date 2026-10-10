@@ -982,3 +982,5 @@
     transform: none;
   }
 }
+
+.similarity-field :deep(.el-slider) { min-width: 0; width: 100%; padding-inline: 10px; }

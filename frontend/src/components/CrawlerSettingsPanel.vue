@@ -255,7 +255,7 @@ onMounted(load)
       <small class="proxy-summary">共 {{ proxies.length }} 个代理，{{ enabledCount }} 个启用；Mihomo 通过执行器绑定使用。</small>
     </section>
 
-    <el-dialog v-model="showEditor" append-to-body :title="mergedProxy ? `${mergedProxy.name} · 代理配置` : editingId == null ? '添加代理' : '编辑代理'" :width="mergedProxy ? 'min(960px, 96vw)' : 'min(520px, 92vw)'" top="6vh" destroy-on-close>
+    <el-dialog v-model="showEditor" append-to-body :title="mergedProxy ? `${mergedProxy.name} · 代理配置` : editingId == null ? '添加代理' : '编辑代理'" :width="mergedProxy ? 'min(960px, 96vw)' : 'min(520px, 92vw)'" top="6vh" class="proxy-config-dialog" destroy-on-close>
       <component :is="mergedProxy ? SystemMihomoNodesPanel : 'div'" v-if="showEditor" :proxy="mergedProxy || undefined">
       <el-form label-position="top" class="proxy-editor-form">
         <el-form-item label="代理类型"><el-select v-model="editor.proxyType"><el-option label="普通 HTTP 代理" value="HTTP" /><el-option label="Mihomo 代理" value="MIHOMO" /></el-select></el-form-item>
@@ -275,14 +275,28 @@ onMounted(load)
         <el-alert v-if="draftResult" class="draft-test-result" :type="draftResult.proxyOk && draftResult.controllerOk !== false ? 'success' : 'warning'" :closable="false" :title="`${draftResult.controllerOk == null ? '' : `控制 API ${draftResult.controllerOk ? '可用' : '失败'}；`}${draftResult.message}`" />
         <div class="editor-enabled"><span>保存后立即启用</span><el-switch v-model="editor.enabled" /></div>
       </el-form>
+      <div class="proxy-basic-actions">
+        <el-button @click="showEditor = false">取消</el-button>
+        <el-button type="primary" :disabled="testingDraft" :loading="saving" @click="saveProxy">保存配置</el-button>
+      </div>
       </component>
-      <template #footer><el-button @click="showEditor = false">取消</el-button><el-button type="primary" :disabled="testingDraft" :loading="saving" @click="saveProxy">保存代理配置</el-button></template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.proxy-editor-form{width:100%;max-width:640px;margin:0 auto}
+.proxy-editor-form{width:100%;min-width:0;margin:0}
+.proxy-editor-form :deep(.el-form-item__content){gap:6px;min-width:0}
+.proxy-editor-form :deep(.el-form-item__content > small){width:100%;line-height:1.6;color:var(--text-secondary)}
+.proxy-editor-form :deep(.el-input),.proxy-editor-form :deep(.el-select){width:100%}
+.proxy-editor-form > .el-alert{margin:12px 0}
+.proxy-editor-form > .el-checkbox{display:flex;margin:0 0 12px;height:auto;min-height:32px}
+.proxy-basic-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}
+.proxy-basic-actions :deep(.el-button + .el-button){margin-left:0}
+:global(.proxy-config-dialog){display:flex;flex-direction:column;max-height:88vh;margin-bottom:0;padding:0}
+:global(.proxy-config-dialog .el-dialog__header){flex:0 0 auto;padding-right:60px}
+:global(.proxy-config-dialog .el-dialog__body){min-height:0;overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:560px){:global(.proxy-config-dialog .el-dialog__body){padding:16px}.proxy-basic-actions{gap:8px}}
 
 .proxy-summary{color:var(--text-secondary)}.draft-test-result{margin-top:12px}.proxy-copy small{overflow-wrap:anywhere}
 

@@ -1,17 +1,11 @@
 <template>
   <section v-loading="loading && activeTab !== 'basic'" class="nodes-panel">
-    <header class="nodes-panel-header">
-      <div>
-        <p class="eyebrow">MIHOMO ROUTING</p>
-        <h3>{{ proxy.name }} · 节点与备用组</h3>
-        <p class="nodes-panel-description">
-          管理备用节点组，并查看控制器返回的全部具体节点。
-        </p>
-      </div>
+    <div class="nodes-tabs-scroll">
+      <el-segmented v-model="activeTab" :options="tabOptions" class="nodes-segmented-tabs" block aria-label="代理管理分类" />
+    </div>
+    <div v-if="activeTab !== 'basic'" class="nodes-refresh-toolbar">
       <el-button :loading="loading" @click="load">刷新</el-button>
-    </header>
-
-    <el-segmented v-model="activeTab" :options="tabOptions" block aria-label="代理管理分类" />
+    </div>
 
     <section v-if="hasBasic" v-show="activeTab === 'basic'" class="nodes-tab-panel" role="tabpanel" aria-label="基础配置">
       <el-alert type="info" :closable="false" title="节点管理使用已保存的代理连接。修改代理入口、控制地址或密钥后，请先保存代理配置。" />
@@ -131,6 +125,7 @@
       append-to-body
       destroy-on-close
       class="node-group-editor-dialog"
+      top="6vh"
     >
       <div class="group-editor" v-loading="saving">
         <el-form label-position="top" class="group-editor-form">
@@ -596,6 +591,38 @@ onMounted(load)
 </script>
 
 <style scoped>
+:global(.node-group-editor-dialog){display:flex;flex-direction:column;max-height:88vh;margin-bottom:0;padding:0}
+:global(.node-group-editor-dialog .el-dialog__header),:global(.node-group-editor-dialog .el-dialog__footer){flex:0 0 auto}
+:global(.node-group-editor-dialog .el-dialog__header){padding-right:60px}
+:global(.node-group-editor-dialog .el-dialog__body){min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.group-editor-form :deep(.el-form-item__content){min-width:0}
+.group-editor-form :deep(.el-input),.group-editor-form :deep(.el-select){width:100%}
+
+.nodes-tabs-scroll { overflow-x: auto; padding: 3px; }
+.nodes-segmented-tabs {
+  --el-segmented-bg-color: var(--el-fill-color-light);
+  --el-segmented-item-selected-bg-color: var(--el-bg-color);
+  --el-segmented-item-selected-color: var(--el-color-primary);
+  --el-border-radius-base: 10px;
+  width: 100%; min-width: 420px; padding: 4px; box-shadow: none;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color); border-radius: 13px;
+}
+.nodes-segmented-tabs :deep(.el-segmented__group) { width: 100%; }
+.nodes-segmented-tabs :deep(.el-segmented__item) {
+  flex: 1; min-width: 0; min-height: 40px; padding: 7px 12px;
+  border: 0; background: transparent; box-shadow: none;
+}
+.nodes-segmented-tabs :deep(.el-segmented__item-selected) {
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow: var(--el-box-shadow-light); border-radius: 10px;
+}
+.nodes-segmented-tabs :deep(.el-segmented__item.is-selected) { font-weight: 700; }
+.nodes-refresh-toolbar { display: flex; justify-content: flex-end; }
+.nodes-panel :deep(.el-button + .el-button), .editor-footer :deep(.el-button + .el-button) { margin-left: 0; }
+.nodes-panel :deep(.el-button), .editor-footer :deep(.el-button) { flex-shrink: 0; }
+.editor-footer { flex-wrap: wrap; }
+
 .nodes-panel {
   display: grid;
   min-width: 0;

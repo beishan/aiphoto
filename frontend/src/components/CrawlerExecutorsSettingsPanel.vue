@@ -134,7 +134,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
       <el-table-column label="状态" min-width="135"><template #default="{ row }"><el-tag :type="row.options.frozen ? 'warning' : row.enabled ? 'success' : 'info'">{{ row.options.frozen ? '人工冻结' : row.enabled ? '已启用' : '已停用' }}</el-tag><small>{{ row.activeJobId ? `任务 #${row.activeJobId}` : row.waitingJobId ? `等待恢复 #${row.waitingJobId}` : '空闲' }}</small></template></el-table-column>
       <el-table-column label="操作" min-width="295"><template #default="{ row }"><el-button size="small" @click="openLogs(row)">执行详情</el-button><el-button size="small" @click="edit(row)">配置</el-button><el-button size="small" @click="freeze(row)">{{ row.options.frozen ? '解除冻结' : '冻结' }}</el-button><el-button text type="danger" :disabled="!!row.activeJobId" @click="remove(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <el-dialog v-model="showEditor" append-to-body destroy-on-close :title="editingId ? '配置执行器' : '新增执行器'" width="min(820px, 96vw)">
+    <el-dialog v-model="showEditor" append-to-body destroy-on-close :title="editingId ? '配置执行器' : '新增执行器'" width="min(820px, 96vw)" top="6vh" class="executor-editor-dialog">
       <el-tabs v-model="editorTab">
         <el-tab-pane name="basic" label="基础配置">
           <el-form label-position="top"><div class="grid"><el-form-item label="执行器名称"><el-input v-model="editor.name" maxlength="100" /></el-form-item><el-form-item label="启用"><el-switch v-model="editor.enabled" /><small>停用后不接收新任务，已运行任务继续完成。</small></el-form-item></div>
@@ -159,7 +159,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
             </template>
             <template v-if="editor.proxyMode === 'MIHOMO'">
               <el-form-item label="Mihomo 系统代理"><el-select v-model="editor.proxyId" filterable @change="editor.options.nodeGroupId = null; editor.options.manualNode = null; editor.nodes = []; editor.proxyGroup = ''; loadNodes()"><el-option v-for="proxy in availableProxies" :key="proxy.id" :value="proxy.id" :label="proxy.name" :disabled="!proxy.enabled" /></el-select></el-form-item>
-              <el-form-item label="已保存的备用节点组"><el-select v-model="editor.options.nodeGroupId" clearable @change="selectGroup"><el-option v-for="group in savedGroups" :key="group.id" :value="group.id" :label="`${group.name} · ${group.nodes.length} 个节点 · ${group.host}:${group.port}`" /></el-select><small>在系统代理配置 → 节点与备用组管理可复用节点组。</small></el-form-item>
+              <el-form-item label="已保存的备用节点组"><el-select v-model="editor.options.nodeGroupId" clearable @change="selectGroup"><el-option v-for="group in savedGroups" :key="group.id" :value="group.id" :label="`${group.name} · ${group.nodes.length} 个节点 · ${group.host}:${group.port}`" /></el-select><small>在系统代理配置 → 编辑 → 节点组中管理可复用节点组。</small></el-form-item>
               <el-button :loading="loadingNodes" @click="loadNodes">刷新控制 API / 节点组</el-button>
               <template v-if="!editor.options.nodeGroupId">
                 <el-alert type="info" :closable="false" title="兼容直接配置；可保存为命名节点组后引用。" />
@@ -206,5 +206,12 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
   </section>
 </template>
 <style scoped>
+.heading,.toolbar,.proxy-row{flex-wrap:wrap}
+.proxy-row > span{overflow-wrap:anywhere}
+.proxy-row :deep(.el-button + .el-button){margin-left:0}
+:global(.executor-editor-dialog .el-tabs__header){margin-bottom:20px}
+
+
 .executor-card{display:grid;gap:16px;padding:18px;border:1px solid var(--separator);border-radius:16px;background:var(--bg-card)}.heading,.toolbar,.proxy-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.toolbar{justify-content:flex-start}.toolbar>.el-select{max-width:360px}h3,p{margin:0}p,small{display:block;margin-top:6px;font-size:12px;line-height:1.7;color:var(--text-secondary)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.proxy-row{padding:8px 0}.proxy-row>span{flex:1;min-width:0}.runtime,.group-preview{display:grid;gap:10px;padding:16px;border-radius:12px;background:var(--bg-secondary);margin:12px 0}.runtime>.el-button{justify-self:start}.group-preview .el-tag{margin:4px}.event-list{max-height:420px;overflow:auto}.event-list>article{display:grid;gap:8px;padding:16px 0;border-bottom:1px solid var(--separator)}.event-list .el-tag{justify-self:start}.log-details{padding:16px;overflow-wrap:anywhere}.el-select{width:100%}.el-pagination{margin-top:18px}@media(max-width:640px){.grid{grid-template-columns:1fr}.heading,.toolbar,.proxy-row{flex-wrap:wrap}}
+@media(max-width:560px){.grid{grid-template-columns:minmax(0,1fr)}.proxy-row > span{flex-basis:100%}.proxy-row :deep(.el-input-number){max-width:100%}}
 </style>

@@ -213,14 +213,7 @@ function openViewer(photos: Photo[], index: number) {
   width: 140px;
 }
 
-.view-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 2px;
-  border: 0.5px solid var(--glass-border);
-}
+.view-toggle { flex: 0 0 auto; }
 
 .view-btn {
   display: flex;
