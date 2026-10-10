@@ -114,7 +114,7 @@ export interface CrawlerExecutionLog {
   id: number; jobId: number; jobName: string | null; siteName: string | null; phase: string | null; executorName: string; proxyName: string | null; proxyNode: string | null;
   url: string; failed: boolean; attempts: number; durationMillis: number; description: string; createdAt: string
 }
-export interface MihomoProxyNode { type: string; all?: string[]; now?: string }
+export interface MihomoProxyNode { type: string; all?: string[]; now?: string; alive?: boolean; history?: { time: string; delay: number }[] }
 export interface CrawlerProxy {
   id: number
   name: string
@@ -256,6 +256,10 @@ export const settingApi = {
       : http.put<CrawlerExecutor>(`/settings/crawler/executors/${id}`, request)
   },
   deleteCrawlerExecutor(id: number) { return http.delete(`/settings/crawler/executors/${id}`) },
+  previewCrawlerProxy(proxy: CrawlerProxyRequest, id: number | null) {
+    return http.post<{ controllerOk: boolean | null; proxyOk: boolean; message: string }>(
+      '/settings/crawler/proxies/test', proxy, { params: id == null ? {} : { id }, timeout: 30000 })
+  },
   testCrawlerProxy(id: number) { return http.post<{ controllerOk: boolean | null; proxyOk: boolean; message: string }>(`/settings/crawler/proxies/${id}/test`, {}, { timeout: 30000 }) },
   getMihomoNodes(id: number) { return http.get<{ proxies: Record<string, MihomoProxyNode> }>(`/settings/crawler/proxies/${id}/nodes`) },
   testMihomoNode(id: number, node: string) { return http.post<{ delay: number }>(`/settings/crawler/proxies/${id}/delay`, { node }) },

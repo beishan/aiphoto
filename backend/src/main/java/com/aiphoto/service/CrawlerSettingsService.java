@@ -59,6 +59,29 @@ public class CrawlerSettingsService {
     public ProxyView saveProxy(Long id, ProxyRequest request) {
         CrawlerProxy proxy = id == null ? new CrawlerProxy() : proxyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("代理不存在"));
+        configureProxy(proxy, request);
+        if (id == null) proxy.setPriority(proxyRepository.findAllByOrderByPriorityAscIdAsc().size());
+        proxy = proxyRepository.save(proxy);
+        invalidate();
+        return toView(proxy);
+    }
+
+    /** Build a detached candidate so testing never changes saved routing or credentials. */
+    public CrawlerProxy previewProxy(Long id, ProxyRequest request) {
+        CrawlerProxy candidate = new CrawlerProxy();
+        if (id != null) {
+            CrawlerProxy saved = proxyRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("代理不存在"));
+            candidate.setProxyType(saved.getProxyType());
+            candidate.setControllerUrl(saved.getControllerUrl());
+            candidate.setPasswordCiphertext(saved.getPasswordCiphertext());
+            candidate.setSecretCiphertext(saved.getSecretCiphertext());
+        }
+        configureProxy(candidate, request);
+        return candidate;
+    }
+
+    private void configureProxy(CrawlerProxy proxy, ProxyRequest request) {
         proxy.setName(requireText(request.name(), "代理名称", 100));
         proxy.setHost(validateHost(request.host()));
         if (request.port() == null || request.port() < 1 || request.port() > 65535) {
@@ -88,10 +111,6 @@ public class CrawlerSettingsService {
             proxy.setSecretCiphertext(null);
         }
         proxy.setEnabled(request.enabled());
-        if (id == null) proxy.setPriority(proxyRepository.findAllByOrderByPriorityAscIdAsc().size());
-        proxy = proxyRepository.save(proxy);
-        invalidate();
-        return toView(proxy);
     }
 
     @Transactional

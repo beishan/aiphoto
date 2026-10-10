@@ -13,9 +13,18 @@ public class CrawlerProxyTestService {
     private final CrawlerProxyRepository repository;
     private final CrawlerSecretService secrets;
     private final MihomoApiClient mihomo;
+    private final CrawlerSettingsService settings;
 
     public TestResult test(Long id) {
         var proxy = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("代理不存在"));
+        return test(proxy);
+    }
+
+    public TestResult preview(Long id, CrawlerSettingsService.ProxyRequest request) {
+        return test(settings.previewProxy(id, request));
+    }
+
+    private TestResult test(com.aiphoto.entity.CrawlerProxy proxy) {
         Boolean controllerOk = null;
         if ("MIHOMO".equals(proxy.getProxyType())) {
             try {

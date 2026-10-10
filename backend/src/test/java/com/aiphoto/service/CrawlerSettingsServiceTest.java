@@ -102,6 +102,56 @@ class CrawlerSettingsServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void previewUsesExistingCredentialsWithoutMutatingSavedProxy() {
+        CrawlerProxy saved = proxy(1L, 7);
+        saved.setProxyType("MIHOMO");
+        saved.setControllerUrl("http://old.example.com:9090");
+        saved.setPasswordCiphertext("saved-password");
+        saved.setSecretCiphertext("saved-secret");
+        when(proxyRepository.findById(1L)).thenReturn(Optional.of(saved));
+
+        CrawlerProxy preview = service.previewProxy(1L, new CrawlerSettingsService.ProxyRequest(
+                "Draft", "new.example.com", 7890, "user", "", false, true,
+                "MIHOMO", "http://new.example.com:9090", "", false));
+
+        assertThat(preview.getPasswordCiphertext()).isEqualTo("saved-password");
+        assertThat(preview.getSecretCiphertext()).isEqualTo("saved-secret");
+        assertThat(preview.getHost()).isEqualTo("new.example.com");
+        assertThat(saved.getHost()).isEqualTo("proxy1.example.com");
+        assertThat(saved.getControllerUrl()).isEqualTo("http://old.example.com:9090");
+        assertThat(saved.getPriority()).isEqualTo(7);
+        org.mockito.Mockito.verify(proxyRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void previewCanReplaceOrClearCredentialsWithoutPersistingThem() {
+        CrawlerProxy saved = proxy(1L, 0);
+        saved.setProxyType("MIHOMO");
+        saved.setPasswordCiphertext("saved-password");
+        saved.setSecretCiphertext("saved-secret");
+        when(proxyRepository.findById(1L)).thenReturn(Optional.of(saved));
+        when(secretService.encrypt("new-secret")).thenReturn("encrypted-new-secret");
+        CrawlerProxy preview = service.previewProxy(1L, new CrawlerSettingsService.ProxyRequest(
+                "Draft", "example.com", 7890, "", "", true, true,
+                "MIHOMO", "http://example.com:9090", "new-secret", false));
+        assertThat(preview.getPasswordCiphertext()).isNull();
+        assertThat(preview.getSecretCiphertext()).isEqualTo("encrypted-new-secret");
+        assertThat(saved.getSecretCiphertext()).isEqualTo("saved-secret");
+        assertThat(saved.getPasswordCiphertext()).isEqualTo("saved-password");
+    }
+
+    @Test
+    void previewValidatesNewConfigurationAndMissingProxy() {
+        assertThatThrownBy(() -> service.previewProxy(null, new CrawlerSettingsService.ProxyRequest(
+                "Draft", "example.com", 0, "", "", false, true)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("端口");
+        when(proxyRepository.findById(99L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.previewProxy(99L, new CrawlerSettingsService.ProxyRequest(
+                "Draft", "example.com", 7890, "", "", false, true)))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("代理不存在");
+    }
+
     private CrawlerProxy proxy(Long id, int priority) {
         CrawlerProxy proxy = new CrawlerProxy();
         proxy.setId(id);

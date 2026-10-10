@@ -59,6 +59,13 @@ public class CrawlerSettingsController {
         return proxyTestService.test(id);
     }
 
+    @PostMapping("/proxies/test")
+    public com.aiphoto.service.CrawlerProxyTestService.TestResult previewProxy(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Long id,
+            @RequestBody CrawlerSettingsService.ProxyRequest request) {
+        return proxyTestService.preview(id, request);
+    }
+
     @GetMapping("/proxies/{id}/nodes")
     public com.fasterxml.jackson.databind.JsonNode nodes(@PathVariable Long id) throws Exception {
         return executorService.nodes(id);
