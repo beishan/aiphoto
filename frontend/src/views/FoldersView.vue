@@ -320,7 +320,7 @@ function closeAddDialog() {
       </svg>
     </button>
 
-    <el-dialog v-model="showAdd" title="添加文件夹" width="620px" class="mv-dialog folder-dialog" @closed="closeAddDialog">
+    <el-dialog append-to-body v-model="showAdd" title="添加文件夹" width="620px" class="mv-dialog folder-dialog" @closed="closeAddDialog">
 
             <div class="form-group">
               <label>名称</label>

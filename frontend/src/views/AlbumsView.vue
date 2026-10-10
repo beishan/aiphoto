@@ -101,7 +101,7 @@ const albumTypeIcons: Record<string, string> = {
       </svg>
     </el-button>
 
-    <el-dialog v-model="showCreate" title="新建相册" width="460px" destroy-on-close class="mv-dialog">
+    <el-dialog append-to-body v-model="showCreate" title="新建相册" width="460px" destroy-on-close class="mv-dialog">
       <el-form label-position="top">
         <el-form-item label="名称" required>
           <el-input v-model="newAlbum.name" placeholder="相册名称" maxlength="100" show-word-limit />

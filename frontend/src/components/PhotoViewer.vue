@@ -5,7 +5,7 @@ import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, useZIndex } from 'element-plus'
 
 const router = useRouter()
 
@@ -19,6 +19,8 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
 
+const { nextZIndex } = useZIndex()
+const viewerZIndex = ref(0)
 const photoStore = usePhotoStore()
 const currentIndex = ref(props.initialIndex)
 const showInfo = ref(false)
@@ -42,13 +44,14 @@ watch(() => props.initialIndex, (val) => {
   currentIndex.value = val
 })
 
-watch(() => props.show, (val) => {
+watch(() => props.show, (val, wasVisible) => {
   if (val) {
+    viewerZIndex.value = nextZIndex()
     document.body.style.overflow = 'hidden'
-  } else {
+  } else if (wasVisible) {
     document.body.style.overflow = ''
   }
-})
+}, { immediate: true })
 
 function close() {
   emit('update:show', false)
@@ -176,7 +179,7 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="viewer">
-      <div v-if="show" class="viewer-overlay" @click.self="close">
+      <div v-if="show" class="viewer-overlay" :style="{ zIndex: viewerZIndex }" @click.self="close">
         <!-- Top toolbar -->
         <div class="viewer-topbar glass">
           <div class="topbar-left">
@@ -273,7 +276,7 @@ onUnmounted(() => {
           </div>
         </Transition>
 
-        <el-dialog v-model="showAlbumPicker" title="添加到相册" width="460px" :z-index="10020" class="mv-dialog album-picker-dialog">
+        <el-dialog append-to-body v-model="showAlbumPicker" title="添加到相册" width="460px" class="mv-dialog album-picker-dialog">
               <!-- Create new album -->
               <div v-if="showCreateAlbum" class="create-album-row">
                 <el-input
@@ -330,7 +333,6 @@ onUnmounted(() => {
 .viewer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
   background: #000;
   display: flex;
   flex-direction: column;

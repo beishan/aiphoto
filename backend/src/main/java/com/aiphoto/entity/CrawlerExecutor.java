@@ -28,6 +28,10 @@ public class CrawlerExecutor {
     private Integer rotateAfterRequests = 100;
     @Column(nullable = false)
     private Integer cooldownSeconds = 300;
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String optionsJson = "{}";
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String runtimeJson = "{}";
     @Column(length = 255)
     private String currentNode;
     @Column(nullable = false)

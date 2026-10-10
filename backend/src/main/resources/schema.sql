@@ -590,3 +590,46 @@ ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS current_node VARCHAR(255)
 ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS completed_requests INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS cooldowns_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS last_error VARCHAR(500);
+
+-- 0.12.0: Expanded executor policies, reusable node groups and execution diagnostics.
+ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS options_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE crawler_executors ADD COLUMN IF NOT EXISTS runtime_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE crawler_executors DROP CONSTRAINT IF EXISTS crawler_executors_switch_mode_check;
+ALTER TABLE crawler_executors ADD CONSTRAINT crawler_executors_switch_mode_check
+    CHECK (switch_mode IN ('MANUAL','FAILOVER','REQUESTS','TIME','PAGE','IMAGE','TASK'));
+CREATE TABLE IF NOT EXISTS crawler_node_groups (
+    id BIGSERIAL PRIMARY KEY,
+    proxy_id BIGINT NOT NULL REFERENCES crawler_proxies(id),
+    name VARCHAR(100) NOT NULL,
+    control_group VARCHAR(255) NOT NULL,
+    host VARCHAR(255) NOT NULL,
+    port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    nodes_json TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_crawler_node_groups_proxy ON crawler_node_groups(proxy_id);
+CREATE TABLE IF NOT EXISTS crawler_execution_logs (
+    id BIGSERIAL PRIMARY KEY,
+    executor_id BIGINT REFERENCES crawler_executors(id) ON DELETE SET NULL,
+    job_id BIGINT,
+    executor_name VARCHAR(100),
+    proxy_name VARCHAR(100),
+    proxy_node VARCHAR(255),
+    url TEXT,
+    failed BOOLEAN NOT NULL DEFAULT FALSE,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    duration_millis BIGINT NOT NULL DEFAULT 0,
+    description VARCHAR(500),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crawler_execution_logs_executor ON crawler_execution_logs(executor_id, id DESC);
+
+CREATE TABLE IF NOT EXISTS crawler_executor_receipts (
+    id BIGSERIAL PRIMARY KEY,
+    executor_id BIGINT NOT NULL REFERENCES crawler_executors(id) ON DELETE CASCADE,
+    receipt_key VARCHAR(150) NOT NULL,
+    UNIQUE (executor_id, receipt_key)
+);
+
+ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS job_name VARCHAR(200);
+ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);
+ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS phase VARCHAR(30);

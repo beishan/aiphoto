@@ -4,8 +4,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { settingApi, type CrawlerProxy, type CrawlerProxyRequest } from '@/api/settingApi'
 
 import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
+import CrawlerNodeGroupsPanel from './CrawlerNodeGroupsPanel.vue'
 
 const props = defineProps<{ proxiesOnly?: boolean }>()
+const showNodeGroups = ref(false)
+const groupProxy = ref<CrawlerProxy | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const proxies = ref<CrawlerProxy[]>([])
@@ -201,13 +204,14 @@ onMounted(load)
           <span class="priority">{{ index + 1 }}</span>
           <div class="proxy-copy"><strong>{{ proxy.name }}</strong><small>{{ proxy.proxyType === "MIHOMO" ? "Mihomo" : "HTTP" }} · {{ proxy.host }}:{{ proxy.port }}<template v-if="proxy.username"> · {{ proxy.username }}</template><template v-if="proxy.hasPassword"> · 已保存密码</template></small></div>
           <el-switch v-model="proxy.enabled" @change="toggleProxy(proxy)" />
-          <div class="proxy-actions"><el-button text :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button><el-button text :disabled="index === proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button><el-button text :loading="testingId === proxy.id" @click="testProxy(proxy)">测试连接</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
+          <div class="proxy-actions"><el-button text :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button><el-button text :disabled="index === proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button><el-button v-if="proxy.proxyType === 'MIHOMO'" text @click="groupProxy = proxy; showNodeGroups = true">节点与备用组</el-button><el-button text :loading="testingId === proxy.id" @click="testProxy(proxy)">测试连接</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
         </article>
         <el-empty v-if="!proxies.length" description="暂无代理，将使用直连模式" :image-size="64" />
       </div>
     </section>
 
-    <el-dialog v-model="showEditor" :title="editingId == null ? '添加代理' : '编辑代理'" width="min(520px, 92vw)">
+    <CrawlerNodeGroupsPanel v-model="showNodeGroups" :proxy="groupProxy" />
+    <el-dialog v-model="showEditor" append-to-body :title="editingId == null ? '添加代理' : '编辑代理'" width="min(520px, 92vw)">
       <el-form label-position="top">
         <el-form-item label="代理类型"><el-select v-model="editor.proxyType"><el-option label="普通 HTTP 代理" value="HTTP" /><el-option label="Mihomo 代理" value="MIHOMO" /></el-select></el-form-item>
         <el-form-item label="名称"><el-input v-model="editor.name" placeholder="例如：家庭代理 1" /></el-form-item>

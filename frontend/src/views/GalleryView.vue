@@ -4,11 +4,14 @@ import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
 import type { Album } from '@/types'
+import { useZIndex } from 'element-plus'
 import { useMessage, useDialog } from '@/utils/feedback'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import Uploader from '@/components/Uploader.vue'
 
+const { nextZIndex } = useZIndex()
+const pickerZIndex = ref(0)
 const photoStore = usePhotoStore()
 const message = useMessage()
 const dialog = useDialog()
@@ -174,6 +177,10 @@ async function setBatchRating(rating: number) {
     message.error('设置评分失败')
   }
 }
+
+watch([showAlbumPicker, showRatingPicker], ([albumVisible, ratingVisible], [albumWasVisible, ratingWasVisible]) => {
+  if ((albumVisible && !albumWasVisible) || (ratingVisible && !ratingWasVisible)) pickerZIndex.value = nextZIndex()
+})
 
 // Timeline
 interface TimelineItem {
@@ -342,20 +349,22 @@ async function handleToggleFavorite(photoId: number) {
               </svg>
             </el-button>
             <!-- Album picker dropdown -->
-            <Transition name="fade">
-              <div v-if="showAlbumPicker" class="picker-dropdown" @click.self="showAlbumPicker = false">
-                <div class="picker-panel">
-                  <div class="picker-header">选择相册</div>
-                  <div class="picker-list">
-                    <button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
-                      <span class="picker-item-name">{{ album.name }}</span>
-                      <span class="picker-item-count">{{ album.photoCount }} 张</span>
-                    </button>
-                    <div v-if="albums.length === 0" class="picker-empty">暂无相册</div>
+            <Teleport to="body">
+              <Transition name="fade">
+                <div v-if="showAlbumPicker" class="picker-dropdown" :style="{ zIndex: pickerZIndex }" @click.self="showAlbumPicker = false">
+                  <div class="picker-panel">
+                    <div class="picker-header">选择相册</div>
+                    <div class="picker-list">
+                      <button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
+                        <span class="picker-item-name">{{ album.name }}</span>
+                        <span class="picker-item-count">{{ album.photoCount }} 张</span>
+                      </button>
+                      <div v-if="albums.length === 0" class="picker-empty">暂无相册</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Transition>
+              </Transition>
+            </Teleport>
           </div>
           <div class="picker-wrapper">
             <el-button class="toolbar-btn action-btn" circle text @click="showRatingPicker = !showRatingPicker" :disabled="selectedIds.size === 0" title="评分">
@@ -364,23 +373,25 @@ async function handleToggleFavorite(photoId: number) {
               </svg>
             </el-button>
             <!-- Rating picker dropdown -->
-            <Transition name="fade">
-              <div v-if="showRatingPicker" class="picker-dropdown" @click.self="showRatingPicker = false">
-                <div class="picker-panel rating-panel">
-                  <div class="picker-header">设置评分</div>
-                  <div class="rating-options">
-                    <button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
-                      <span class="rating-stars">
-                        <svg v-for="s in 5" :key="s" viewBox="0 0 24 24" :fill="s <= r ? '#ffcc00' : 'none'" :stroke="s <= r ? '#ffcc00' : 'currentColor'" stroke-width="2" width="16" height="16">
-                          <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-                        </svg>
-                      </span>
-                    </button>
-                    <button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</button>
+            <Teleport to="body">
+              <Transition name="fade">
+                <div v-if="showRatingPicker" class="picker-dropdown" :style="{ zIndex: pickerZIndex }" @click.self="showRatingPicker = false">
+                  <div class="picker-panel rating-panel">
+                    <div class="picker-header">设置评分</div>
+                    <div class="rating-options">
+                      <button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
+                        <span class="rating-stars">
+                          <svg v-for="s in 5" :key="s" viewBox="0 0 24 24" :fill="s <= r ? '#ffcc00' : 'none'" :stroke="s <= r ? '#ffcc00' : 'currentColor'" stroke-width="2" width="16" height="16">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                          </svg>
+                        </span>
+                      </button>
+                      <button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Transition>
+              </Transition>
+            </Teleport>
           </div>
           <el-button class="toolbar-btn delete-btn" circle text type="danger" aria-label="删除所选" @click="batchDelete" :disabled="selectedIds.size === 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -467,7 +478,7 @@ async function handleToggleFavorite(photoId: number) {
       </svg>
     </el-button>
 
-    <el-dialog v-model="showUploader" title="上传照片" width="min(720px, calc(100vw - 24px))" class="mv-dialog uploader-dialog" destroy-on-close>
+    <el-dialog append-to-body v-model="showUploader" title="上传照片" width="min(720px, calc(100vw - 24px))" class="mv-dialog uploader-dialog" destroy-on-close>
       <Uploader @uploaded="handleUploaded" @done="showUploader = false" />
     </el-dialog>
 
@@ -556,7 +567,6 @@ async function handleToggleFavorite(photoId: number) {
 .picker-dropdown {
   position: fixed;
   inset: 0;
-  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;

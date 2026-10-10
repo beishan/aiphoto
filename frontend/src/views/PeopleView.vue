@@ -261,7 +261,7 @@ function getBboxStyle(bboxJson: string) {
       </div>
     </template>
 
-    <el-dialog v-model="showMergeDialog" title="合并人物" width="560px" class="mv-dialog">
+    <el-dialog append-to-body v-model="showMergeDialog" title="合并人物" width="560px" class="mv-dialog">
             <div class="modal-body">
               <div class="merge-section">
                 <label class="merge-label">合并到（保留的人物）</label>
@@ -287,7 +287,7 @@ function getBboxStyle(bboxJson: string) {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showAssignDialog" title="分配人脸" width="520px" class="mv-dialog">
+    <el-dialog append-to-body v-model="showAssignDialog" title="分配人脸" width="520px" class="mv-dialog">
             <div class="modal-body">
               <p class="assign-hint">选择此人脸所属的人物：</p>
               <div class="assign-list">

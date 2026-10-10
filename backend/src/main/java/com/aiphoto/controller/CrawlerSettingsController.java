@@ -45,7 +45,7 @@ public class CrawlerSettingsController {
     public CrawlerSettingsService.ProxyView updateProxy(
             @PathVariable Long id,
             @RequestBody CrawlerSettingsService.ProxyRequest request) {
-        executorService.assertProxyEditable(id);
+        executorService.assertProxyUpdateAllowed(id, request);
         return settingsService.saveProxy(id, request);
     }
 
@@ -85,6 +85,30 @@ public class CrawlerSettingsController {
             @RequestBody com.aiphoto.service.CrawlerExecutorService.ExecutorRequest request) throws Exception {
         return executorService.save(id, request);
     }
+
+    @PutMapping("/executors/{id}/freeze")
+    public com.aiphoto.service.CrawlerExecutorService.ExecutorView freeze(@PathVariable Long id, @RequestBody FreezeRequest request) throws Exception {
+        return executorService.freeze(id, request.frozen());
+    }
+    @PostMapping("/executors/{id}/unbind")
+    public com.aiphoto.service.CrawlerExecutorService.ExecutorView unbind(@PathVariable Long id) throws Exception { return executorService.unbind(id); }
+    @GetMapping("/executors/{id}/logs")
+    public org.springframework.data.domain.Page<com.aiphoto.entity.CrawlerExecutionLog> logs(@PathVariable Long id,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean failedOnly) {
+        return executorService.logs(id, page, failedOnly);
+    }
+    @GetMapping("/proxies/{id}/groups")
+    public List<com.aiphoto.service.CrawlerExecutorService.GroupView> groups(@PathVariable Long id) { return executorService.groups(id); }
+    @PostMapping("/proxies/{id}/groups")
+    public com.aiphoto.service.CrawlerExecutorService.GroupView createGroup(@PathVariable Long id,
+            @RequestBody com.aiphoto.service.CrawlerExecutorService.GroupRequest request) throws Exception { return executorService.saveGroup(id, null, request); }
+    @PutMapping("/proxies/{id}/groups/{groupId}")
+    public com.aiphoto.service.CrawlerExecutorService.GroupView updateGroup(@PathVariable Long id, @PathVariable Long groupId,
+            @RequestBody com.aiphoto.service.CrawlerExecutorService.GroupRequest request) throws Exception { return executorService.saveGroup(id, groupId, request); }
+    @DeleteMapping("/proxies/{id}/groups/{groupId}")
+    public ResponseEntity<Void> deleteGroup(@PathVariable Long id, @PathVariable Long groupId) { executorService.deleteGroup(id, groupId); return ResponseEntity.noContent().build(); }
+    public record FreezeRequest(boolean frozen) {}
 
     @DeleteMapping("/executors/{id}")
     public ResponseEntity<Void> deleteExecutor(@PathVariable Long id) {

@@ -18,17 +18,23 @@ class CrawlerExecutorServiceTest {
     private final CrawlerSettingsService settings = mock(CrawlerSettingsService.class);
     private final CrawlerSecretService secrets = mock(CrawlerSecretService.class);
     private final MihomoApiClient mihomo = mock(MihomoApiClient.class);
+    private final com.aiphoto.repository.CrawlerNodeGroupRepository groupRepository = mock(com.aiphoto.repository.CrawlerNodeGroupRepository.class);
+    private final com.aiphoto.repository.CrawlerExecutionLogRepository logRepository = mock(com.aiphoto.repository.CrawlerExecutionLogRepository.class);
+    private final com.aiphoto.repository.CrawlJobRepository jobRepository = mock(com.aiphoto.repository.CrawlJobRepository.class);
+    private final com.aiphoto.repository.CrawlSiteRepository siteRepository = mock(com.aiphoto.repository.CrawlSiteRepository.class);
+    private final com.aiphoto.repository.CrawlerExecutorReceiptRepository receiptRepository = mock(com.aiphoto.repository.CrawlerExecutorReceiptRepository.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private CrawlerExecutorService service;
     private CrawlerExecutor executor;
     private CrawlerProxy proxy;
 
     @BeforeEach void setup() throws Exception {
-        service = new CrawlerExecutorService(repository, proxies, settings, secrets, mihomo, mapper);
+        service = new CrawlerExecutorService(repository, proxies, settings, secrets, mihomo, mapper,
+                groupRepository, logRepository, jobRepository, siteRepository, receiptRepository);
         executor = new CrawlerExecutor();
         executor.setId(1L); executor.setName("Mihomo"); executor.setProxyMode("MIHOMO");
         executor.setProxyId(2L); executor.setProxyGroup("Crawler"); executor.setNodesJson("[\"A\",\"B\"]");
-        executor.setSwitchMode("FAILOVER");
+        executor.setSwitchMode("FAILOVER"); executor.setOptionsJson("{\"failureThreshold\":1}");
         proxy = new CrawlerProxy(); proxy.setId(2L); proxy.setProxyType("MIHOMO");
         proxy.setHost("localhost"); proxy.setPort(7895); proxy.setControllerUrl("http://localhost:9090");
         when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(executor));
@@ -81,7 +87,7 @@ class CrawlerExecutorServiceTest {
         try (var session = service.acquire(10L)) {
             session.network(); session.failure(new IOException("failed"));
             assertThat(session.autoFailover()).isFalse();
-            assertThatThrownBy(session::network).hasMessageContaining("冷却");
+            assertThatThrownBy(session::network).hasMessageContaining("冻结");
             verify(mihomo, never()).select(anyString(), any(), anyString(), eq("B"));
         }
     }
@@ -121,4 +127,178 @@ class CrawlerExecutorServiceTest {
                 "Invalid", true, "MIHOMO", 2L, "Crawler", List.of("Crawler"), "MANUAL", 100, 300)))
                 .hasMessageContaining("具体代理节点");
     }
+    @Test void thresholdCountsOneExhaustedRequestAndSuccessResetsOnlyCurrentNode() throws Exception {
+        executor.setOptionsJson("{\"failureThreshold\":2}");
+        try (var session = service.acquire(10L)) {
+            session.network(); session.failure(new IOException("failed"));
+            assertThat(service.list().getFirst().cooldowns()).isEmpty();
+            assertThat(service.list().getFirst().proxyStates().getFirst().failures()).isEqualTo(1);
+            session.success();
+            assertThat(service.list().getFirst().proxyStates().getFirst().failures()).isZero();
+        }
+    }
+
+    @Test void manualSelectionDoesNotDependOnListOrder() throws Exception {
+        executor.setSwitchMode("MANUAL"); executor.setOptionsJson("{\"manualNode\":\"B\"}");
+        try (var session = service.acquire(10L)) {
+            session.network();
+            assertThat(service.list().getFirst().currentNode()).isEqualTo("B");
+            verify(mihomo).select("http://localhost:9090", null, "Crawler", "B");
+        }
+    }
+
+    @Test void disablingFailoverKeepsCurrentNodeOnRequestFailure() throws Exception {
+        executor.setSwitchMode("TIME"); executor.setOptionsJson("{\"failover\":false,\"failureThreshold\":2}");
+        try (var session = service.acquire(10L)) {
+            session.network(); session.failure(new IOException("failed"));
+            assertThat(session.autoFailover()).isFalse();
+            session.network();
+            assertThat(service.list().getFirst().currentNode()).isEqualTo("A");
+        }
+    }
+
+    @Test void pageRotationCountsCompletedPagesAndDeduplicatesReceipts() throws Exception {
+        executor.setSwitchMode("PAGE"); executor.setOptionsJson("{\"rotationPages\":1}");
+        try (var session = service.acquire(10L)) {
+            session.network(); session.pageCompleted(5L);
+            assertThat(service.list().getFirst().completedPages()).isEqualTo(1);
+            when(receiptRepository.existsByExecutorIdAndReceiptKey(1L, "page:10:5")).thenReturn(true);
+            session.pageCompleted(5L);
+            assertThat(service.list().getFirst().completedPages()).isEqualTo(1);
+            session.network();
+            assertThat(service.list().getFirst().currentNode()).isEqualTo("B");
+            assertThat(service.list().getFirst().completedPages()).isZero();
+        }
+    }
+
+    @Test void imageAndTaskRotationUseSuccessfulCompletionReceipts() throws Exception {
+        executor.setSwitchMode("IMAGE"); executor.setOptionsJson("{\"rotationImages\":1,\"rotationTasks\":1}");
+        try (var session = service.acquire(10L)) {
+            session.network(); session.imageCompleted(8L); session.network();
+            assertThat(service.list().getFirst().currentNode()).isEqualTo("B");
+            executor.setSwitchMode("TASK"); session.taskCompleted("REVIEW"); session.network();
+            assertThat(service.list().getFirst().currentNode()).isEqualTo("A");
+            verify(receiptRepository).saveAndFlush(argThat(r -> r.getReceiptKey().equals("task:10:REVIEW")));
+        }
+    }
+
+    @Test void timeRotationRestoresAccumulatedActiveTime() throws Exception {
+        executor.setCurrentNode("A"); executor.setSwitchMode("TIME");
+        executor.setOptionsJson("{\"rotationSeconds\":30}"); executor.setRuntimeJson("{\"activeMillis\":30000}");
+        try (var session = service.acquire(10L)) {
+            session.network(); assertThat(service.list().getFirst().currentNode()).isEqualTo("B");
+            assertThat(service.list().getFirst().activeMillis()).isZero();
+        }
+    }
+
+    @Test void randomRotationDoesNotImmediatelyRepeatCurrentNode() throws Exception {
+        executor.setCurrentNode("A"); executor.setSwitchMode("REQUESTS"); executor.setRotateAfterRequests(1);
+        executor.setCompletedRequests(1); executor.setOptionsJson("{\"selectionStrategy\":\"RANDOM\"}");
+        try (var session = service.acquire(10L)) { session.network(); assertThat(service.list().getFirst().currentNode()).isEqualTo("B"); }
+    }
+
+    @Test void dedicatedFrozenSiteDoesNotFallBackToGlobalExecutor() {
+        var job = new com.aiphoto.entity.CrawlJob(); job.setSiteId(3L);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        executor.setOptionsJson("{\"siteId\":3,\"frozen\":true}");
+        var global = new CrawlerExecutor(); global.setId(2L); global.setName("Global");
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(executor, global));
+        assertThat(service.acquire(10L)).isNull();
+    }
+
+    @Test void runtimeFreezePreservesWaitingJobAndUnfreezeAllowsAutomaticResume() throws Exception {
+        var job = new com.aiphoto.entity.CrawlJob(); job.setId(10L); job.setStatus(com.aiphoto.entity.CrawlJob.Status.PAUSED);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(job));
+        when(repository.saveAndFlush(executor)).thenReturn(executor);
+        try (var session = service.acquire(10L)) {
+            service.freeze(1L, true);
+            assertThatThrownBy(() -> session.begin("https://example.com"))
+                    .isInstanceOf(CrawlerExecutorService.WaitingException.class);
+            job.setErrorMessage("执行器等待：执行器已人工冻结");
+            assertThat(service.list().getFirst().waitingJobId()).isEqualTo(10L);
+        }
+        service.resumeWaiting(); assertThat(job.getStatus()).isEqualTo(com.aiphoto.entity.CrawlJob.Status.PAUSED);
+        service.freeze(1L, false); service.resumeWaiting();
+        assertThat(job.getStatus()).isEqualTo(com.aiphoto.entity.CrawlJob.Status.QUEUED);
+        assertThat(service.list().getFirst().waitingJobId()).isNull();
+    }
+
+    @Test void futureCooldownDoesNotResumeWaitingJobEarly() {
+        executor.setRuntimeJson("{\"waitingJobId\":10,\"waitUntil\":\"2099-01-01T00:00:00Z\"}");
+        service.resumeWaiting(); verify(jobRepository, never()).save(any());
+    }
+
+    @Test void ordinaryProxyCoolingIsIndependentAndPreservesConfiguredOrder() throws Exception {
+        executor.setProxyMode("SELECTED"); proxy.setProxyType("HTTP");
+        var secondary = new CrawlerProxy(); secondary.setId(3L); secondary.setName("Second"); secondary.setHost("other"); secondary.setPort(7890);
+        when(proxies.findById(3L)).thenReturn(Optional.of(secondary));
+        executor.setOptionsJson("{\"failureThreshold\":1,\"ordinaryProxies\":[{\"proxyId\":3,\"cooldownSeconds\":600},{\"proxyId\":2}]}");
+        try (var session = service.acquire(10L)) {
+            session.begin("https://example.com/");
+            assertThat(session.network().proxies()).extracting(CrawlerSettingsService.ProxyConfig::id).containsExactly(3L, 2L);
+            session.proxyFailed(3L, "connect failed"); session.finish(new IOException("failed"));
+            session.begin("https://example.com/");
+            assertThat(session.network().proxies()).extracting(CrawlerSettingsService.ProxyConfig::id).containsExactly(2L);
+            assertThat(service.list().getFirst().proxyStates().getFirst().failures()).isEqualTo(1);
+            session.finish(null);
+        }
+    }
+
+    @Test void executionLogsSnapshotNodeAndKeepFailureEvenAfterFailoverSuccess() throws Exception {
+        try (var session = service.acquire(10L)) {
+            session.begin("https://example.com/image.jpg"); session.network(); session.proxyAttempt(2L);
+            session.failure(new IOException("failed")); session.network(); session.proxyAttempt(2L); session.success(); session.finish(null);
+            verify(logRepository).save(argThat(log -> log.getFailed() && "A".equals(log.getProxyNode())));
+            verify(logRepository).save(argThat(log -> !log.getFailed() && "B".equals(log.getProxyNode()) && log.getAttempts() == 2));
+        }
+    }
+
+    @Test void namedGroupUsesItsOwnHttpEntry() throws Exception {
+        var group = new com.aiphoto.entity.CrawlerNodeGroup(); group.setId(9L); group.setProxyId(2L); group.setName("Dedicated");
+        group.setControlGroup("Crawler"); group.setHost("dedicated-entry"); group.setPort(7899); group.setNodesJson("[\"A\",\"B\"]");
+        when(groupRepository.findById(9L)).thenReturn(Optional.of(group));
+        executor.setOptionsJson("{\"nodeGroupId\":9}");
+        try (var session = service.acquire(10L)) {
+            assertThat(session.network().proxies().getFirst().host()).isEqualTo("dedicated-entry");
+            assertThat(session.network().proxies().getFirst().port()).isEqualTo(7899);
+        }
+    }
+
+    @Test void referencedNodeGroupCannotBeDeleted() {
+        var group = new com.aiphoto.entity.CrawlerNodeGroup(); group.setId(9L); group.setProxyId(2L);
+        when(groupRepository.findById(9L)).thenReturn(Optional.of(group)); executor.setOptionsJson("{\"nodeGroupId\":9}");
+        assertThatThrownBy(() -> service.deleteGroup(2L, 9L)).hasMessageContaining("引用");
+    }
+
+    @Test void hotMetadataUpdateDoesNotOverwriteNewSettingsOnRequestCompletion() throws Exception {
+        when(repository.saveAndFlush(executor)).thenReturn(executor);
+        try (var session = service.acquire(10L)) {
+            session.begin("https://example.com/"); session.network();
+            var options = new CrawlerExecutorOptions(); options.setDescription("Updated while running");
+            service.save(1L, new CrawlerExecutorService.ExecutorRequest("Renamed", false, "MIHOMO", 2L, "Crawler", List.of("A","B"), "FAILOVER", 100, 300, options));
+            session.success(); session.finish(null);
+            assertThat(executor.getName()).isEqualTo("Renamed"); assertThat(executor.getEnabled()).isFalse();
+            assertThat(executor.getOptionsJson()).contains("Updated while running");
+        }
+    }
+
+    @Test void disabledFirstSelectedProxyDoesNotPreventUsingOtherSelectedProxies() throws Exception {
+        executor.setProxyMode("SELECTED"); proxy.setProxyType("HTTP"); proxy.setEnabled(false);
+        var other = new CrawlerProxy(); other.setId(3L); other.setName("Other"); other.setHost("other"); other.setPort(7890);
+        when(proxies.findById(3L)).thenReturn(Optional.of(other));
+        executor.setOptionsJson("{\"ordinaryProxies\":[{\"proxyId\":2},{\"proxyId\":3}]}");
+        try (var session = service.acquire(10L)) {
+            assertThat(session).isNotNull();
+            assertThat(session.network().proxies()).extracting(CrawlerSettingsService.ProxyConfig::id).containsExactly(3L);
+        }
+    }
+
+    @Test void referencedProxyCredentialsCanChangeButEndpointCannot() {
+        when(repository.existsByProxyId(2L)).thenReturn(true);
+        service.assertProxyUpdateAllowed(2L, new CrawlerSettingsService.ProxyRequest("Renamed", "localhost", 7895,
+                null, "new-password", false, true, "MIHOMO", "http://localhost:9090", "new-token", false));
+        assertThatThrownBy(() -> service.assertProxyUpdateAllowed(2L, new CrawlerSettingsService.ProxyRequest("Renamed", "other", 7895,
+                null, "", false, true, "MIHOMO", "http://localhost:9090", "", false))).hasMessageContaining("引用");
+    }
+
 }

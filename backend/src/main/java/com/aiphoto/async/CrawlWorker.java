@@ -204,6 +204,7 @@ public class CrawlWorker {
                         }
                     }
                     page.setStatus(CrawlPage.Status.SUCCEEDED);
+                    executorService.current().pageCompleted(page.getId());
                 } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
                     throw exception;
                 } catch (Exception exception) {
@@ -231,6 +232,7 @@ public class CrawlWorker {
             job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
+            if (job.getStatus() == CrawlJob.Status.COMPLETED) executorService.current().taskCompleted(job.getPhase().name());
         } catch (Exception exception) {
             failJob(job, workerId, exception);
         }
@@ -320,6 +322,7 @@ public class CrawlWorker {
             asset.setErrorMessage(shortMessage(exception));
         }
         assetRepository.save(asset);
+        if (asset.getStatus() == CrawlAsset.Status.DOWNLOADED) executorService.current().imageCompleted(asset.getId());
     }
 
     private void failJob(CrawlJob job, String workerId, Exception exception) {

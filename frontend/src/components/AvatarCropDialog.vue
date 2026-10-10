@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, useZIndex } from 'element-plus'
+
+const { nextZIndex } = useZIndex()
+const overlayZIndex = ref(0)
 
 const OUTPUT_SIZE = 512
 const MIN_ZOOM = 1
@@ -223,6 +226,7 @@ async function confirmCrop() {
   }
 }
 
+watch(() => props.modelValue, (visible) => { if (visible) overlayZIndex.value = nextZIndex() }, { immediate: true })
 watch(() => [props.modelValue, props.file] as const, () => void loadImage(), { immediate: true })
 onBeforeUnmount(clearImage)
 </script>
@@ -230,7 +234,7 @@ onBeforeUnmount(clearImage)
 <template>
   <Teleport to="body">
     <Transition name="crop-dialog">
-      <div v-if="modelValue" class="crop-overlay" @click.self="closeDialog">
+      <div v-if="modelValue" class="crop-overlay" :style="{ zIndex: overlayZIndex }" @click.self="closeDialog">
         <section class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-dialog-title">
           <header class="crop-header">
             <div>
@@ -297,7 +301,7 @@ onBeforeUnmount(clearImage)
 </template>
 
 <style scoped>
-.crop-overlay{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:24px;background:rgba(7,12,20,.72);backdrop-filter:blur(12px) saturate(140%)}
+.crop-overlay{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:rgba(7,12,20,.72);backdrop-filter:blur(12px) saturate(140%)}
 .crop-dialog{width:min(880px,100%);max-height:calc(100vh - 48px);overflow:auto;color:var(--text-primary);border:1px solid var(--border-color-light);border-radius:var(--radius-xl);background:var(--surface-elevated);box-shadow:var(--shadow-xl),0 30px 80px rgba(0,0,0,.3)}
 .crop-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 28px 20px;border-bottom:1px solid var(--border-color-light)}
 .crop-kicker{display:block;margin-bottom:4px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.crop-header h2{margin:0;font-size:22px;line-height:1.25}.crop-header p{margin:6px 0 0;color:var(--text-secondary);font-size:13px}

@@ -224,7 +224,7 @@ async function handleReclassify() {
       </svg>
     </el-button>
 
-    <el-dialog v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
+    <el-dialog append-to-body v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
       <el-form label-position="top">
         <el-form-item label="名称" required>
           <el-input v-model="newCategoryName" placeholder="分类名称" maxlength="50" />
@@ -241,7 +241,7 @@ async function handleReclassify() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showPhotoPicker" :title="`选择模板照片 (${selectedPhotoIds.length}/5)`" width="min(900px, calc(100vw - 24px))" class="mv-dialog picker-dialog" @closed="closePhotoPicker">
+    <el-dialog append-to-body v-model="showPhotoPicker" :title="`选择模板照片 (${selectedPhotoIds.length}/5)`" width="min(900px, calc(100vw - 24px))" class="mv-dialog picker-dialog" @closed="closePhotoPicker">
             <p class="picker-hint">选择 2-5 张代表此分类的照片，AI 将自动找到相似的照片</p>
 
             <div class="picker-grid">

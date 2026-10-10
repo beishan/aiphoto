@@ -1199,7 +1199,7 @@ async function loadSystemInfo() {
     </div>
 
     <!-- User dialog -->
-    <el-dialog v-model="showUserDialog" class="user-create-dialog" title="新增用户" width="440px" align-center>
+    <el-dialog append-to-body v-model="showUserDialog" class="user-create-dialog" title="新增用户" width="440px" align-center>
       <p class="dialog-intro">创建一个新的家庭成员账户，并设置其访问权限。</p>
       <el-form label-position="top">
         <el-form-item label="用户名"><el-input v-model="newUser.username" placeholder="用户名" /></el-form-item>
@@ -1211,7 +1211,7 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Tag dialog -->
-    <el-dialog v-model="showTagDialog" title="新建标签" width="420px">
+    <el-dialog append-to-body v-model="showTagDialog" title="新建标签" width="420px">
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="newTag.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="newTag.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
@@ -1221,7 +1221,7 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Folder dialog -->
-    <el-dialog v-model="showFolderDialog" class="folder-picker-dialog" title="添加扫描目录" width="720px" align-center>
+    <el-dialog append-to-body v-model="showFolderDialog" class="folder-picker-dialog" title="添加扫描目录" width="720px" align-center>
       <p class="dialog-intro">浏览服务器可访问的目录，选择需要扫描的照片或书籍目录。</p>
       <div class="folder-picker-layout">
         <section class="folder-tree-panel">
@@ -1259,7 +1259,7 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Edit tag dialog -->
-    <el-dialog v-model="showEditTagDialog" title="编辑标签" width="420px">
+    <el-dialog append-to-body v-model="showEditTagDialog" title="编辑标签" width="420px">
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="editTagData.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="editTagData.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
@@ -3627,7 +3627,7 @@ async function loadSystemInfo() {
   line-height: 1.5;
 }
 
-:deep(.user-create-dialog) {
+:global(.user-create-dialog) {
   border: 1px solid var(--glass-border);
   border-radius: 18px;
   background: var(--surface-elevated);
