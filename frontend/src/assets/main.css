@@ -650,7 +650,7 @@ button {
   box-shadow: 0 8px 20px rgba(0, 122, 255, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
 
-[data-theme="macos26"] .el-button:not(.el-button--primary):not(.is-link) {
+[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--success):not(.el-button--warning):not(.el-button--info):not(.is-link):not(.is-text) {
   border-color: rgba(255, 255, 255, 0.7);
   background: rgba(255, 255, 255, 0.48);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
@@ -683,4 +683,19 @@ button {
     width: calc(100vw - 32px);
     min-width: 0;
   }
+}
+
+
+/* Element Plus actions used inside grids, preview cards and image toolbars.
+   Flatten only the default slot wrapper so existing content remains a grid/flex item. */
+.ep-control.el-button {
+  height: auto;
+  margin: 0;
+  white-space: normal;
+}
+.ep-control.el-button > span {
+  display: contents;
+}
+.ep-control.el-button.is-disabled {
+  cursor: not-allowed;
 }

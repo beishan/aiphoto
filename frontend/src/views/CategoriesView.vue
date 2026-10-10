@@ -230,9 +230,7 @@ async function handleReclassify() {
           <el-input v-model="newCategoryName" placeholder="分类名称" maxlength="50" />
         </el-form-item>
         <el-form-item label="颜色">
-          <div class="color-selector">
-            <button v-for="color in colorOptions" :key="color" class="color-btn" :class="{ active: newCategoryColor === color }" :style="{ background: color }" @click="newCategoryColor = color" />
-          </div>
+          <el-color-picker v-model="newCategoryColor" :predefine="colorOptions" aria-label="分类颜色" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -540,26 +538,6 @@ async function handleReclassify() {
 
 .ios-input:focus {
   border-color: var(--accent);
-}
-
-.color-selector {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.color-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 3px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.color-btn.active {
-  border-color: white;
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .picker-grid {

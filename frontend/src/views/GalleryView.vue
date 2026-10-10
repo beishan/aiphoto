@@ -4,14 +4,11 @@ import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
 import type { Album } from '@/types'
-import { useZIndex } from 'element-plus'
 import { useMessage, useDialog } from '@/utils/feedback'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import Uploader from '@/components/Uploader.vue'
 
-const { nextZIndex } = useZIndex()
-const pickerZIndex = ref(0)
 const photoStore = usePhotoStore()
 const message = useMessage()
 const dialog = useDialog()
@@ -177,10 +174,6 @@ async function setBatchRating(rating: number) {
     message.error('设置评分失败')
   }
 }
-
-watch([showAlbumPicker, showRatingPicker], ([albumVisible, ratingVisible], [albumWasVisible, ratingWasVisible]) => {
-  if ((albumVisible && !albumWasVisible) || (ratingVisible && !ratingWasVisible)) pickerZIndex.value = nextZIndex()
-})
 
 // Timeline
 interface TimelineItem {
@@ -348,23 +341,14 @@ async function handleToggleFavorite(photoId: number) {
                 <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/>
               </svg>
             </el-button>
-            <!-- Album picker dropdown -->
-            <Teleport to="body">
-              <Transition name="fade">
-                <div v-if="showAlbumPicker" class="picker-dropdown" :style="{ zIndex: pickerZIndex }" @click.self="showAlbumPicker = false">
-                  <div class="picker-panel">
-                    <div class="picker-header">选择相册</div>
-                    <div class="picker-list">
-                      <button v-for="album in albums" :key="album.id" class="picker-item" @click="addToAlbum(album.id)">
-                        <span class="picker-item-name">{{ album.name }}</span>
-                        <span class="picker-item-count">{{ album.photoCount }} 张</span>
-                      </button>
-                      <div v-if="albums.length === 0" class="picker-empty">暂无相册</div>
-                    </div>
-                  </div>
-                </div>
-              </Transition>
-            </Teleport>
+            <el-dialog v-model="showAlbumPicker" append-to-body title="选择相册" width="min(460px, 92vw)">
+              <el-space v-if="albums.length" direction="vertical" fill class="album-picker-list">
+                <el-button v-for="album in albums" :key="album.id" class="album-picker-option" @click="addToAlbum(album.id)">
+                  {{ album.name }}（{{ album.photoCount }} 张）
+                </el-button>
+              </el-space>
+              <el-empty v-else description="暂无相册" :image-size="64" />
+            </el-dialog>
           </div>
           <div class="picker-wrapper">
             <el-button class="toolbar-btn action-btn" circle text @click="showRatingPicker = !showRatingPicker" :disabled="selectedIds.size === 0" title="评分">
@@ -372,26 +356,14 @@ async function handleToggleFavorite(photoId: number) {
                 <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
               </svg>
             </el-button>
-            <!-- Rating picker dropdown -->
-            <Teleport to="body">
-              <Transition name="fade">
-                <div v-if="showRatingPicker" class="picker-dropdown" :style="{ zIndex: pickerZIndex }" @click.self="showRatingPicker = false">
-                  <div class="picker-panel rating-panel">
-                    <div class="picker-header">设置评分</div>
-                    <div class="rating-options">
-                      <button v-for="r in [5, 4, 3, 2, 1]" :key="r" class="rating-option" @click="setBatchRating(r)">
-                        <span class="rating-stars">
-                          <svg v-for="s in 5" :key="s" viewBox="0 0 24 24" :fill="s <= r ? '#ffcc00' : 'none'" :stroke="s <= r ? '#ffcc00' : 'currentColor'" stroke-width="2" width="16" height="16">
-                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-                          </svg>
-                        </span>
-                      </button>
-                      <button class="rating-option clear-rating" @click="setBatchRating(0)">清除评分</button>
-                    </div>
-                  </div>
-                </div>
-              </Transition>
-            </Teleport>
+            <el-dialog v-model="showRatingPicker" append-to-body title="设置批量评分" width="min(360px, 92vw)">
+              <el-space direction="vertical" fill class="album-picker-list">
+                <el-button v-for="rating in [5, 4, 3, 2, 1]" :key="rating" :aria-label="`评分设为 ${rating} 星`" @click="setBatchRating(rating)">
+                  <el-rate :model-value="rating" disabled /><span>{{ rating }} 星</span>
+                </el-button>
+                <el-button @click="setBatchRating(0)">清除评分</el-button>
+              </el-space>
+            </el-dialog>
           </div>
           <el-button class="toolbar-btn delete-btn" circle text type="danger" aria-label="删除所选" @click="batchDelete" :disabled="selectedIds.size === 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -436,10 +408,10 @@ async function handleToggleFavorite(photoId: number) {
 
     <!-- Timeline rail -->
     <div v-if="timelineItems.length > 0 && !selectMode" class="timeline-rail">
-      <button
+      <el-button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"
-        class="timeline-item"
+        class="ep-control timeline-item"
         :class="{ active: activeMonthKey === `${item.year}-${item.month}` }"
         :style="{ flex: item.count }"
         @click="scrollToMonth(item)"
@@ -447,7 +419,7 @@ async function handleToggleFavorite(photoId: number) {
       >
         <span class="timeline-dot"></span>
         <span class="timeline-label">{{ item.label }}</span>
-      </button>
+      </el-button>
     </div>
 
     <!-- Zoom controls -->
@@ -491,6 +463,8 @@ async function handleToggleFavorite(photoId: number) {
 </template>
 
 <style scoped>
+.album-picker-list{width:100%;max-height:50vh;overflow:auto}.album-picker-list :deep(.el-button){width:100%;min-height:40px;height:auto;white-space:normal}.album-picker-list :deep(.el-button>span){gap:8px}
+
 .gallery-wrapper {
   position: relative;
   min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
@@ -564,107 +538,7 @@ async function handleToggleFavorite(photoId: number) {
   position: relative;
 }
 
-.picker-dropdown {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-}
-
-.picker-panel {
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  width: 280px;
-  max-height: 360px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-.picker-header {
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-}
-
-.picker-list {
-  max-height: 280px;
-  overflow-y: auto;
-  padding: 4px 0;
-}
-
-.picker-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-}
-
-.picker-item:hover {
-  background: var(--bg-secondary);
-}
-
-.picker-item-count {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.picker-empty {
-  padding: 24px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
 /* Rating picker */
-.rating-panel {
-  width: 200px;
-}
-
-.rating-options {
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rating-option {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-
-.rating-option:hover {
-  background: var(--bg-secondary);
-}
-
-.rating-stars {
-  display: flex;
-  gap: 2px;
-}
-
-.clear-rating {
-  color: var(--text-tertiary);
-  font-size: 13px;
-  margin-top: 4px;
-}
 
 .toolbar-title {
   flex: 1;

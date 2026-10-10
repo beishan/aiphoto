@@ -11,40 +11,17 @@
       <el-button :loading="loading" @click="load">刷新</el-button>
     </header>
 
-    <div
-      class="nodes-segmented-tabs"
-      role="tablist"
-      aria-label="Mihomo 节点管理分类"
-      @keydown="handleTabKeydown"
-    >
-      <span
-        class="nodes-tab-indicator"
-        :style="{ transform: `translateX(${activeTabIndex * 100}%)` }"
-        aria-hidden="true"
-      />
-      <button
-        v-for="tab in tabs"
-        :id="`mihomo-tab-${tab.key}`"
-        :key="tab.key"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === tab.key"
-        :aria-controls="`mihomo-panel-${tab.key}`"
-        :tabindex="activeTab === tab.key ? 0 : -1"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
-      >
-        <span>{{ tab.label }}</span>
-        <b>{{ tab.key === 'groups' ? groups.length : catalog.nodes.length }}</b>
-      </button>
-    </div>
+    <el-segmented v-model="activeTab" :options="[
+      { label: `节点组（${groups.length}）`, value: 'groups' },
+      { label: `全部节点（${catalog.nodes.length}）`, value: 'nodes' },
+    ]" block aria-label="Mihomo 节点管理分类" />
 
     <section
       v-show="activeTab === 'groups'"
       id="mihomo-panel-groups"
       class="nodes-tab-panel"
       role="tabpanel"
-      aria-labelledby="mihomo-tab-groups"
+      aria-label="备用节点组"
       tabindex="0"
     >
       <div class="tab-panel-heading">
@@ -95,7 +72,7 @@
       id="mihomo-panel-nodes"
       class="nodes-tab-panel"
       role="tabpanel"
-      aria-labelledby="mihomo-tab-nodes"
+      aria-label="全部具体节点"
       tabindex="0"
     >
       <div class="all-nodes-toolbar">
@@ -333,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { settingApi, type CrawlerProxy, type MihomoNodeGroup as SavedGroup, type MihomoProxyNode } from '@/api/settingApi'
 import { parseProxyAddress, formatProxyAddress } from '@/utils/proxyAddress'
@@ -379,11 +356,6 @@ function saveNodeGroup(id: number, groupId: number | null, draft: MihomoNodeGrou
 
 type NodeTab = 'groups' | 'nodes'
 
-const tabs: { key: NodeTab; label: string }[] = [
-  { key: 'groups', label: '节点组' },
-  { key: 'nodes', label: '全部节点' },
-]
-
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref('')
@@ -403,7 +375,6 @@ const draft = ref<MihomoNodeGroupPayload>({
   nodes: [],
 })
 
-const activeTabIndex = computed(() => tabs.findIndex(tab => tab.key === activeTab.value))
 const selectorGroups = computed(() => catalog.value.groups)
 const controlGroupMembers = computed(() => new Set(
   catalog.value.groups.find(group => group.name === draft.value.controlGroup)?.nodes || [],
@@ -613,21 +584,6 @@ async function testNode(name: string) {
   }
 }
 
-function handleTabKeydown(event: KeyboardEvent) {
-  const current = activeTabIndex.value
-  let next = current
-
-  if (event.key === 'ArrowRight') next = (current + 1) % tabs.length
-  else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length
-  else if (event.key === 'Home') next = 0
-  else if (event.key === 'End') next = tabs.length - 1
-  else return
-
-  event.preventDefault()
-  activeTab.value = tabs[next].key
-  void nextTick(() => document.getElementById(`mihomo-tab-${tabs[next].key}`)?.focus())
-}
-
 onMounted(load)
 </script>
 
@@ -701,65 +657,6 @@ onMounted(load)
   letter-spacing: 0.13em;
 }
 
-.nodes-segmented-tabs {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 4px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 13px;
-  background: var(--el-fill-color-light);
-  isolation: isolate;
-}
-
-.nodes-tab-indicator {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  z-index: 0;
-  width: calc((100% - 8px) / 2);
-  box-sizing: border-box;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
-  background: var(--el-bg-color);
-  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.nodes-segmented-tabs button {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--el-text-color-secondary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.nodes-segmented-tabs button.active {
-  color: var(--el-color-primary);
-  font-weight: 700;
-}
-
-.nodes-segmented-tabs button b {
-  min-width: 22px;
-  padding: 2px 6px;
-  border-radius: 99px;
-  background: var(--el-fill-color);
-  color: var(--el-text-color-secondary);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.nodes-segmented-tabs button:focus-visible,
 .nodes-tab-panel:focus-visible {
   outline: 2px solid var(--el-color-primary);
   outline-offset: 2px;
@@ -1106,8 +1003,5 @@ onMounted(load)
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nodes-tab-indicator {
-    transition: none;
-  }
 }
 </style>

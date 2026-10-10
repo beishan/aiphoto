@@ -219,11 +219,11 @@ function closeAddDialog() {
 <template>
   <div class="folders-view">
     <div class="page-header">
-      <button class="back-btn" @click="router.push('/more')">
+      <el-button class="ep-control back-btn" @click="router.push('/more')">
         <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
           <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
         </svg>
-      </button>
+      </el-button>
       <h1 class="page-title">文件夹管理</h1>
     </div>
 
@@ -241,7 +241,7 @@ function closeAddDialog() {
       </svg>
       <h3>暂无文件夹</h3>
       <p>添加 NAS 文件夹路径开始扫描</p>
-      <button class="add-btn" @click="showAdd = true">添加文件夹</button>
+      <el-button type="primary" class="ep-control add-btn" @click="showAdd = true">添加文件夹</el-button>
     </div>
 
     <!-- Folder list -->
@@ -291,8 +291,8 @@ function closeAddDialog() {
           </div>
         </div>
         <div class="folder-actions">
-          <button
-            class="action-btn scan-btn"
+          <el-button
+            class="ep-control action-btn scan-btn"
             :class="{ scanning: folder.scanStatus === 'SCANNING' }"
             :disabled="folder.scanStatus === 'SCANNING'"
             @click="handleScan(folder)"
@@ -302,23 +302,23 @@ function closeAddDialog() {
             </svg>
             <div v-else class="btn-spinner"></div>
             {{ folder.scanStatus === 'SCANNING' ? '扫描中' : '扫描' }}
-          </button>
-          <button class="action-btn delete-btn" @click="(e: Event) => handleDelete(folder, e)">
+          </el-button>
+          <el-button type="danger" class="ep-control action-btn delete-btn" @click="(e: Event) => handleDelete(folder, e)">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
             </svg>
             删除
-          </button>
+          </el-button>
         </div>
       </div>
     </div>
 
     <!-- Add FAB -->
-    <button v-if="!loading" class="fab-add" @click="showAdd = true">
+    <el-button type="primary" v-if="!loading" class="ep-control fab-add" @click="showAdd = true">
       <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
         <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
       </svg>
-    </button>
+    </el-button>
 
     <el-dialog append-to-body v-model="showAdd" title="添加文件夹" width="620px" class="mv-dialog folder-dialog" @closed="closeAddDialog">
 
@@ -336,8 +336,8 @@ function closeAddDialog() {
               <label>文件夹路径</label>
               <!-- Mode toggle -->
               <div class="mode-toggle">
-                <button
-                  class="toggle-btn"
+                <el-button
+                  class="ep-control toggle-btn"
                   :class="{ active: inputMode === 'input' }"
                   @click="handleOpenInput"
                 >
@@ -345,9 +345,9 @@ function closeAddDialog() {
                     <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
                   </svg>
                   手动输入
-                </button>
-                <button
-                  class="toggle-btn"
+                </el-button>
+                <el-button
+                  class="ep-control toggle-btn"
                   :class="{ active: inputMode === 'browse' }"
                   @click="handleOpenBrowse"
                 >
@@ -355,7 +355,7 @@ function closeAddDialog() {
                     <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
                   </svg>
                   点击选择
-                </button>
+                </el-button>
               </div>
 
               <!-- Input mode -->
@@ -367,17 +367,17 @@ function closeAddDialog() {
               <div v-else class="browse-area">
                 <!-- Breadcrumb -->
                 <div class="browse-breadcrumb">
-                  <button class="breadcrumb-item root" @click="navigateToPath('')">
+                  <el-button class="ep-control breadcrumb-item root" @click="navigateToPath('')">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                       <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
                     </svg>
                     根目录
-                  </button>
+                  </el-button>
                   <template v-for="(part, idx) in browsePathParts" :key="idx">
                     <span class="breadcrumb-sep">/</span>
-                    <button class="breadcrumb-item" @click="navigateToPath(part.path)">
+                    <el-button class="ep-control breadcrumb-item" @click="navigateToPath(part.path)">
                       {{ part.name }}
-                    </button>
+                    </el-button>
                   </template>
                 </div>
 
@@ -401,14 +401,14 @@ function closeAddDialog() {
                           <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
                         </svg>
                       </div>
-                      <span class="browse-item-name" @click="navigateToFolder(item)">{{ item.name }}</span>
-                      <button
+                      <el-button link class="ep-control browse-item-name" :disabled="!item.readable" @click="navigateToFolder(item)">{{ item.name }}</el-button>
+                      <el-button
                         v-if="item.readable"
-                        class="browse-item-select"
+                        class="ep-control browse-item-select"
                         @click="selectFolder(item)"
                       >
                         选择
-                      </button>
+                      </el-button>
                     </div>
                   </template>
                 </div>
@@ -420,24 +420,24 @@ function closeAddDialog() {
             <div class="form-group">
               <label>存储模式</label>
               <div class="mode-options">
-                <button
-                  class="mode-btn"
+                <el-button
+                  class="ep-control mode-btn"
                   :class="{ active: newStorageMode === 'COPY' }"
                   @click="newStorageMode = 'COPY'"
                 >
                   <span class="mode-icon">📦</span>
                   <span class="mode-label">复制</span>
                   <span class="mode-desc">复制到本地持久化存储</span>
-                </button>
-                <button
-                  class="mode-btn"
+                </el-button>
+                <el-button
+                  class="ep-control mode-btn"
                   :class="{ active: newStorageMode === 'LINK' }"
                   @click="newStorageMode = 'LINK'"
                 >
                   <span class="mode-icon">🔗</span>
                   <span class="mode-label">链接</span>
                   <span class="mode-desc">只记录原始路径</span>
-                </button>
+                </el-button>
               </div>
             </div>
 

@@ -242,7 +242,7 @@ onMounted(load)
       <div class="proxy-heading"><div><h3>代理列表</h3><p>从上到下依次尝试。拖动手柄或使用上下方向键调整优先级。</p></div><el-button @click="addProxy">添加代理</el-button></div>
       <div class="proxy-list">
         <article v-for="(proxy, index) in proxies" :key="proxy.id" class="proxy-row" @dragover.prevent @drop="dropBefore(proxy.id)">
-          <button class="drag-handle" draggable="true" :aria-label="`调整 ${proxy.name} 的优先级`" @keydown.up.prevent="moveProxy(index, -1)" @keydown.down.prevent="moveProxy(index, 1)" title="拖动或使用上下方向键调整优先级" @dragstart="startDrag(proxy.id)" @dragend="draggedId = null">⋮⋮</button>
+          <el-button class="ep-control drag-handle" draggable="true" :aria-label="`调整 ${proxy.name} 的优先级`" @keydown.up.prevent="moveProxy(index, -1)" @keydown.down.prevent="moveProxy(index, 1)" title="拖动或使用上下方向键调整优先级" @dragstart="startDrag(proxy.id)" @dragend="draggedId = null">⋮⋮</el-button>
           <span class="priority">{{ index + 1 }}</span>
           <div class="proxy-copy"><strong>{{ proxy.name }}</strong><small>{{ proxy.proxyType === "MIHOMO" ? "Mihomo" : "HTTP" }} · {{ proxy.host }}:{{ proxy.port }}<template v-if="proxy.username"> · {{ proxy.username }}</template><template v-if="proxy.hasPassword"> · 已保存密码</template></small><small v-if="proxy.proxyType === 'MIHOMO'">控制 API：{{ proxy.controllerUrl }} · {{ proxy.secretConfigured ? '已保存密钥' : '未配置密钥' }}</small><small v-if="testResults[proxy.id]">{{ testResults[proxy.id].checkedAt }} · {{ testResults[proxy.id].controllerOk == null ? '' : `控制 API ${testResults[proxy.id].controllerOk ? '可用' : '失败'}；` }}{{ testResults[proxy.id].message }}</small></div>
           <el-switch v-model="proxy.enabled" @change="toggleProxy(proxy)" />

@@ -268,9 +268,9 @@ function downloadPhoto() {
           </div>
           <div v-if="showTagPicker" class="tag-picker">
             <div v-if="availableTags.length > 0" class="tag-picker-list">
-              <button v-for="t in availableTags" :key="t.id" class="tag-pick-btn"
+              <el-button v-for="t in availableTags" :key="t.id" class="ep-control tag-pick-btn"
                 :style="{ borderColor: t.color || 'transparent', color: t.color || 'inherit' }"
-                @click="addTag(t)">{{ t.name }}</button>
+                @click="addTag(t)">{{ t.name }}</el-button>
             </div>
             <el-button class="tag-new-btn" size="small" round @click="addNewTag">+ 新建标签</el-button>
           </div>
@@ -278,7 +278,7 @@ function downloadPhoto() {
             <span v-for="tag in photo.tags" :key="tag.id" class="tag-chip"
               :style="tag.color ? { borderColor: tag.color, color: tag.color } : {}">
               {{ tag.name }}
-              <button class="tag-remove" @click="removeTag(tag.id)">×</button>
+              <el-button link class="ep-control tag-remove" @click="removeTag(tag.id)">×</el-button>
             </span>
           </div>
           <p v-else class="note-text">暂无标签</p>
