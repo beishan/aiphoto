@@ -6,17 +6,19 @@ import { settingApi, type CrawlerProxy, type CrawlerProxyRequest } from '@/api/s
 import { parseProxyAddress, formatProxyAddress } from '@/utils/proxyAddress'
 
 import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
-import CrawlerNodeGroupsPanel from './CrawlerNodeGroupsPanel.vue'
+import SystemMihomoNodesPanel from './SystemMihomoNodesPanel.vue'
 
 const props = defineProps<{ proxiesOnly?: boolean }>()
-const showNodeGroups = ref(false)
-const groupProxy = ref<CrawlerProxy | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const proxies = ref<CrawlerProxy[]>([])
 const editingId = ref<number | null>(null)
 const showEditor = ref(false)
 const draggedId = ref<number | null>(null)
+const mergedProxy = computed(() => {
+  const saved = proxies.value.find(proxy => proxy.id === editingId.value)
+  return editor.proxyType === 'MIHOMO' && saved?.proxyType === 'MIHOMO' ? saved : null
+})
 const settings = reactive({
   directFallback: true,
   connectTimeoutSeconds: 10,
@@ -246,16 +248,16 @@ onMounted(load)
           <span class="priority">{{ index + 1 }}</span>
           <div class="proxy-copy"><strong>{{ proxy.name }}</strong><small>{{ proxy.proxyType === "MIHOMO" ? "Mihomo" : "HTTP" }} · {{ proxy.host }}:{{ proxy.port }}<template v-if="proxy.username"> · {{ proxy.username }}</template><template v-if="proxy.hasPassword"> · 已保存密码</template></small><small v-if="proxy.proxyType === 'MIHOMO'">控制 API：{{ proxy.controllerUrl }} · {{ proxy.secretConfigured ? '已保存密钥' : '未配置密钥' }}</small><small v-if="testResults[proxy.id]">{{ testResults[proxy.id].checkedAt }} · {{ testResults[proxy.id].controllerOk == null ? '' : `控制 API ${testResults[proxy.id].controllerOk ? '可用' : '失败'}；` }}{{ testResults[proxy.id].message }}</small></div>
           <el-switch v-model="proxy.enabled" @change="toggleProxy(proxy)" />
-          <div class="proxy-actions"><el-button text :disabled="index === 0" @click="moveProxy(index, -1)">上移</el-button><el-button text :disabled="index === proxies.length - 1" @click="moveProxy(index, 1)">下移</el-button><el-button v-if="proxy.proxyType === 'MIHOMO'" text @click="groupProxy = proxy; showNodeGroups = true">节点与备用组</el-button><el-button text :disabled="testingId != null && testingId !== proxy.id" :loading="testingId === proxy.id" @click="testProxy(proxy)">测试连接</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
+          <div class="proxy-actions"><el-button text :disabled="testingId != null && testingId !== proxy.id" :loading="testingId === proxy.id" @click="testProxy(proxy)">测试连接</el-button><el-button text @click="editProxy(proxy)">编辑</el-button><el-button text type="danger" @click="removeProxy(proxy)">删除</el-button></div>
         </article>
         <el-empty v-if="!proxies.length" description="暂无系统代理，请添加普通 HTTP 或 Mihomo 代理" :image-size="64" />
       </div>
       <small class="proxy-summary">共 {{ proxies.length }} 个代理，{{ enabledCount }} 个启用；Mihomo 通过执行器绑定使用。</small>
     </section>
 
-    <CrawlerNodeGroupsPanel v-model="showNodeGroups" :proxy="groupProxy" />
-    <el-dialog v-model="showEditor" append-to-body :title="editingId == null ? '添加代理' : '编辑代理'" width="min(520px, 92vw)" top="6vh" destroy-on-close>
-      <el-form label-position="top">
+    <el-dialog v-model="showEditor" append-to-body :title="mergedProxy ? `${mergedProxy.name} · 代理配置` : editingId == null ? '添加代理' : '编辑代理'" :width="mergedProxy ? 'min(960px, 96vw)' : 'min(520px, 92vw)'" top="6vh" destroy-on-close>
+      <component :is="mergedProxy ? SystemMihomoNodesPanel : 'div'" v-if="showEditor" :proxy="mergedProxy || undefined">
+      <el-form label-position="top" class="proxy-editor-form">
         <el-form-item label="代理类型"><el-select v-model="editor.proxyType"><el-option label="普通 HTTP 代理" value="HTTP" /><el-option label="Mihomo 代理" value="MIHOMO" /></el-select></el-form-item>
         <el-form-item label="名称"><el-input v-model="editor.name" placeholder="例如：家庭代理 1" /></el-form-item>
         <el-form-item label="代理地址"><el-input v-model="proxyAddress" placeholder="http://192.168.1.10:7890" autocomplete="off" /><small>实际 HTTP 代理出口；支持粘贴含用户名、密码的地址，保存后凭据加密存储。</small></el-form-item>
@@ -267,17 +269,21 @@ onMounted(load)
           <el-form-item label="控制 API 密钥"><el-input v-model="editor.secret" type="password" show-password autocomplete="new-password" :placeholder="editingHasSecret ? '已保存密钥，留空保持' : '未配置密钥'" /></el-form-item>
           <el-checkbox v-if="editingHasSecret" v-model="editor.clearSecret">清除控制 API 密钥</el-checkbox>
           <el-alert type="info" :closable="false" title="代理地址填写 HTTP 出口；控制 API 使用独立地址。建议为每个执行器设置专用 Selector 与入口。" />
+          <el-alert v-if="!mergedProxy" type="info" :closable="false" title="首次保存 Mihomo 代理后，再次点击编辑即可配置节点与备用组。" />
         </template>
         <el-button :loading="testingDraft" @click="testDraft">{{ editor.proxyType === 'MIHOMO' ? '测试控制 API 与代理出口' : '测试代理出口' }}</el-button>
         <el-alert v-if="draftResult" class="draft-test-result" :type="draftResult.proxyOk && draftResult.controllerOk !== false ? 'success' : 'warning'" :closable="false" :title="`${draftResult.controllerOk == null ? '' : `控制 API ${draftResult.controllerOk ? '可用' : '失败'}；`}${draftResult.message}`" />
         <div class="editor-enabled"><span>保存后立即启用</span><el-switch v-model="editor.enabled" /></div>
       </el-form>
-      <template #footer><el-button @click="showEditor = false">取消</el-button><el-button type="primary" :disabled="testingDraft" :loading="saving" @click="saveProxy">保存</el-button></template>
+      </component>
+      <template #footer><el-button @click="showEditor = false">取消</el-button><el-button type="primary" :disabled="testingDraft" :loading="saving" @click="saveProxy">保存代理配置</el-button></template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.proxy-editor-form{width:100%;max-width:640px;margin:0 auto}
+
 .proxy-summary{color:var(--text-secondary)}.draft-test-result{margin-top:12px}.proxy-copy small{overflow-wrap:anywhere}
 
 .crawler-settings{display:grid;gap:18px}.section-heading,.proxy-heading,.fallback-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.section-heading h2,.settings-card h3{margin:0;color:var(--text-primary)}.section-heading p,.proxy-heading p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.settings-card{display:grid;gap:16px;padding:18px;border:1px solid var(--separator);border-radius:16px;background:var(--bg-card)}.setting-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.setting-grid label{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:12px;border-radius:12px;background:var(--bg-secondary)}.setting-grid label>span{grid-column:1/-1;color:var(--text-primary);font-size:12px}.setting-grid small,.fallback-row small,.proxy-copy small{color:var(--text-tertiary);font-size:10px}.fallback-row>div,.proxy-copy{display:grid;gap:4px}.fallback-row strong,.proxy-copy strong{color:var(--text-primary);font-size:12px}.proxy-list{display:grid;gap:8px}.proxy-row{display:grid;grid-template-columns:28px 28px minmax(180px,1fr) auto auto;align-items:center;gap:9px;padding:11px;border:1px solid var(--separator);border-radius:12px;background:var(--bg-secondary)}.drag-handle{border:0;background:none;color:var(--text-tertiary);font-size:18px;cursor:grab}.drag-handle:active{cursor:grabbing}.priority{display:grid;width:24px;height:24px;place-items:center;border-radius:50%;background:var(--bg-tertiary);color:var(--text-secondary);font-size:10px}.proxy-actions{display:flex;flex-wrap:wrap}.editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:12px}.editor-enabled{display:flex;align-items:center;justify-content:space-between;margin-top:16px;color:var(--text-primary);font-size:12px}@media(max-width:800px){.setting-grid{grid-template-columns:1fr}.proxy-row{grid-template-columns:28px 28px minmax(0,1fr) auto}.proxy-actions{grid-column:2/-1}.editor-grid{grid-template-columns:1fr}}

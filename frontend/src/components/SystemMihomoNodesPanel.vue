@@ -1,5 +1,5 @@
 <template>
-  <section v-loading="loading" class="nodes-panel">
+  <section v-loading="loading && activeTab !== 'basic'" class="nodes-panel">
     <header class="nodes-panel-header">
       <div>
         <p class="eyebrow">MIHOMO ROUTING</p>
@@ -11,10 +11,12 @@
       <el-button :loading="loading" @click="load">刷新</el-button>
     </header>
 
-    <el-segmented v-model="activeTab" :options="[
-      { label: `节点组（${groups.length}）`, value: 'groups' },
-      { label: `全部节点（${catalog.nodes.length}）`, value: 'nodes' },
-    ]" block aria-label="Mihomo 节点管理分类" />
+    <el-segmented v-model="activeTab" :options="tabOptions" block aria-label="代理管理分类" />
+
+    <section v-if="hasBasic" v-show="activeTab === 'basic'" class="nodes-tab-panel" role="tabpanel" aria-label="基础配置">
+      <el-alert type="info" :closable="false" title="节点管理使用已保存的代理连接。修改代理入口、控制地址或密钥后，请先保存代理配置。" />
+      <slot />
+    </section>
 
     <section
       v-show="activeTab === 'groups'"
@@ -310,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, useSlots } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { settingApi, type CrawlerProxy, type MihomoNodeGroup as SavedGroup, type MihomoProxyNode } from '@/api/settingApi'
 import { parseProxyAddress, formatProxyAddress } from '@/utils/proxyAddress'
@@ -354,16 +356,22 @@ function saveNodeGroup(id: number, groupId: number | null, draft: MihomoNodeGrou
   return settingApi.saveMihomoGroup(id, groupId, { name: draft.name, controlGroup: draft.controlGroup, host, port, nodes: [...draft.nodes] })
 }
 
-type NodeTab = 'groups' | 'nodes'
+type NodeTab = 'basic' | 'groups' | 'nodes'
+const hasBasic = Boolean(useSlots().default)
 
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref('')
-const activeTab = ref<NodeTab>('groups')
+const activeTab = ref<NodeTab>(hasBasic ? 'basic' : 'groups')
 const nodeSearch = ref('')
 const candidateSearch = ref('')
 const groups = ref<MihomoNodeGroup[]>([])
 const catalog = ref<MihomoCatalog>({ groups: [], nodes: [] })
+const tabOptions = computed(() => [
+  ...(hasBasic ? [{ label: '基础配置', value: 'basic' }] : []),
+  { label: `节点组（${groups.value.length}）`, value: 'groups' },
+  { label: `全部节点（${catalog.value.nodes.length}）`, value: 'nodes' },
+])
 const editorOpen = ref(false)
 const editingId = ref<number>()
 const selectedConfiguredNames = ref<string[]>([])
