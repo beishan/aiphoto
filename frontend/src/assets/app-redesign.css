@@ -443,3 +443,52 @@
     transition: none;
   }
 }
+
+/* Framed sections need their own inset, including settings sections that used
+   to be unframed containers. Keep image cards and full-width menu rows separate. */
+.app-shell .main-content .content-panel {
+  padding: 20px;
+}
+
+.app-shell .main-content .content-panel > .panel-header-row {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.app-shell .main-content .content-panel.folder-settings > .panel-header-row {
+  margin: 0;
+}
+
+.app-shell .main-content .panel-header-row > div {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.app-shell .main-content .panel-header-row .el-button + .el-button {
+  margin-left: 0;
+}
+
+.app-shell .main-content :is(.filter-section, .scan-section, .description-section, .info-section) {
+  min-width: 0;
+  padding: 16px;
+}
+
+.app-shell .main-content .actions-bar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .app-shell .main-content .content-panel {
+    padding: 16px;
+  }
+
+  .app-shell .main-content :is(.filter-section, .scan-section, .description-section, .info-section) {
+    padding: 14px;
+  }
+
+  .app-shell .main-content .filter-section.two-col {
+    flex-direction: column;
+  }
+}

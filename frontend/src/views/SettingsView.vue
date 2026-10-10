@@ -765,9 +765,10 @@ async function loadSystemInfo() {
         </div>
 
         <!-- ====== 扫描文件夹 ====== -->
-        <div v-if="activeSection === 'folders'" class="content-panel">
+        <div v-if="activeSection === 'folders'" class="content-panel folder-settings">
           <div class="panel-header-row">
-            <div style="display: flex; gap: 8px;">
+            <h2 class="folder-settings-title">扫描文件夹</h2>
+            <div class="folder-toolbar">
               <el-button type="primary" :icon="Plus" @click="openFolderDialog">添加目录</el-button>
               <el-button @click="scanAll">扫描全部</el-button>
             </div>
@@ -798,7 +799,7 @@ async function loadSystemInfo() {
             </div>
             <div v-if="f.errorMessage" class="folder-error">{{ f.errorMessage }}</div>
           </div>
-          <div v-if="folders.length === 0" class="empty-text">暂无扫描文件夹，请添加 NAS 目录</div>
+          <el-empty v-if="folders.length === 0" class="folder-empty" description="暂无扫描文件夹，请添加 NAS 目录" :image-size="64" />
         </div>
 
         <!-- ====== 模型管理 ====== -->
@@ -1248,6 +1249,20 @@ async function loadSystemInfo() {
 </template>
 
 <style scoped>
+.content-panel.folder-settings { display: grid; gap: 16px; padding: 20px; }
+.folder-settings .panel-header-row { flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0; }
+.folder-settings-title { margin: 0; color: var(--text-primary); font-size: 17px; font-weight: 650; }
+.folder-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.folder-toolbar :deep(.el-button + .el-button) { margin-left: 0; }
+.folder-settings .folder-card { min-width: 0; margin-bottom: 0; }
+.folder-settings .folder-header, .folder-settings .folder-actions { flex-wrap: wrap; gap: 8px; }
+.folder-settings .folder-info-grid code { overflow-wrap: anywhere; }
+.folder-empty { min-width: 0; padding: 24px 16px; border: 1px dashed var(--separator); border-radius: 14px; background: color-mix(in srgb, var(--bg-secondary) 65%, transparent); }
+@media (max-width: 600px) {
+  .content-panel.folder-settings { gap: 14px; padding: 16px; }
+  .folder-toolbar { width: 100%; }
+}
+
 .settings-nav.el-menu{border-right:0;background:var(--bg-card);--el-menu-item-height:42px;--el-menu-hover-bg-color:var(--accent-soft);--el-menu-bg-color:transparent}.settings-nav :deep(.el-menu-item){gap:8px;border-radius:10px}.settings-nav :deep(.el-menu-item.is-active){background:var(--accent-soft)}
 
 .settings-page {

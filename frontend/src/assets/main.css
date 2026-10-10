@@ -547,6 +547,16 @@ button {
   box-shadow: none !important;
 }
 
+/* Browser autofill paints above the native input background. Keep its fill
+   transparent so the Element Plus wrapper remains the single field surface. */
+:is(.el-input__inner, .el-select__input, .el-range-input, .el-textarea__inner):is(:autofill, :-webkit-autofill) {
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
+}
+
 .el-table {
   --el-table-bg-color: transparent;
   --el-table-tr-bg-color: transparent;
