@@ -45,6 +45,7 @@ import net.coobird.thumbnailator.Thumbnails;
 public class CrawlWorker {
 
     private static final long MAX_HTML_BYTES = 5L * 1024 * 1024;
+    private final com.aiphoto.service.CrawlerExecutorService executorService;
     private final CrawlJobRepository jobRepository;
     private final CrawlRuleRepository ruleRepository;
     private final CrawlPageRepository pageRepository;
@@ -58,8 +59,15 @@ public class CrawlWorker {
     private final CrawlImageSkipRepository imageSkipRepository;
     private final CrawlAssetSourceRepository assetSourceRepository;
 
-    @Async
+    @Async("crawlerTaskExecutor")
     public void discover(Long jobId) {
+        try (var session = executorService.acquire(jobId)) {
+            if (session == null) return;
+            discoverWithExecutor(jobId);
+        }
+    }
+
+    private void discoverWithExecutor(Long jobId) {
         String workerId = queueService.newWorkerId();
         if (!queueService.claim(jobId, workerId)) return;
         CrawlJob job = jobRepository.findById(jobId).orElseThrow();
@@ -107,6 +115,8 @@ public class CrawlWorker {
                             if (!next.isBlank()) queue.addLast(next);
                         }
                     }
+                } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
+                    throw exception;
                 } catch (Exception exception) {
                     discoveryFailures++;
                     log.warn("Crawl job {} could not process list page {}: {}",
@@ -131,8 +141,15 @@ public class CrawlWorker {
         }
     }
 
-    @Async
+    @Async("crawlerTaskExecutor")
     public void download(Long jobId) {
+        try (var session = executorService.acquire(jobId)) {
+            if (session == null) return;
+            downloadWithExecutor(jobId);
+        }
+    }
+
+    private void downloadWithExecutor(Long jobId) {
         String workerId = queueService.newWorkerId();
         if (!queueService.claim(jobId, workerId)) return;
         CrawlJob job = jobRepository.findById(jobId).orElseThrow();
@@ -187,6 +204,9 @@ public class CrawlWorker {
                         }
                     }
                     page.setStatus(CrawlPage.Status.SUCCEEDED);
+                    executorService.current().pageCompleted(page.getId());
+                } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
+                    throw exception;
                 } catch (Exception exception) {
                     failures++;
                     page.setStatus(CrawlPage.Status.FAILED);
@@ -212,6 +232,7 @@ public class CrawlWorker {
             job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
+            if (job.getStatus() == CrawlJob.Status.COMPLETED) executorService.current().taskCompleted(job.getPhase().name());
         } catch (Exception exception) {
             failJob(job, workerId, exception);
         }
@@ -233,7 +254,7 @@ public class CrawlWorker {
     }
 
     private void downloadAsset(
-            Long jobId, Long ownerId, CrawlPage page, CrawlRule rule, String imageUrl) {
+            Long jobId, Long ownerId, CrawlPage page, CrawlRule rule, String imageUrl) throws Exception {
         String normalized = SafeHttpFetcher.normalize(imageUrl);
         String urlHash = SafeHttpFetcher.urlHash(normalized);
         CrawlAsset asset = assetRepository.findByJobIdAndUrlHash(jobId, urlHash).orElse(null);
@@ -294,20 +315,26 @@ public class CrawlWorker {
             asset.setLocalPath(stagingStorage.write(
                     jobId, asset.getId(), resource.bytes(), extension(resource.contentType())));
             asset.setStatus(CrawlAsset.Status.DOWNLOADED);
+        } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
+            throw exception;
         } catch (Exception exception) {
             asset.setStatus(CrawlAsset.Status.FAILED);
             asset.setErrorMessage(shortMessage(exception));
         }
         assetRepository.save(asset);
+        if (asset.getStatus() == CrawlAsset.Status.DOWNLOADED) executorService.current().imageCompleted(asset.getId());
     }
 
     private void failJob(CrawlJob job, String workerId, Exception exception) {
         if (stopped(job.getId())) return;
         if (!queueService.renew(job.getId(), workerId)) return;
         log.warn("Crawl job {} failed: {}", job.getId(), exception.getMessage());
-        job.setStatus(CrawlJob.Status.FAILED);
+        boolean paused = exception instanceof com.aiphoto.service.CrawlerExecutorService.ControlException
+                || exception instanceof InterruptedException;
+        if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
+        job.setStatus(paused ? CrawlJob.Status.PAUSED : CrawlJob.Status.FAILED);
         job.setErrorMessage(shortMessage(exception));
-        job.setFinishedAt(LocalDateTime.now());
+        if (!paused) job.setFinishedAt(LocalDateTime.now());
         clearLease(job);
         jobRepository.save(job);
     }

@@ -142,14 +142,6 @@ function toggleTag(id: number) {
   }
 }
 
-function setMinRating(r: number) {
-  filters.minRating = filters.minRating === r ? 0 : r
-}
-
-function setMaxRating(r: number) {
-  filters.maxRating = filters.maxRating === r ? 0 : r
-}
-
 function toggleHasDescription(val: boolean) {
   filters.hasDescription = filters.hasDescription === val ? null : val
 }
@@ -245,12 +237,12 @@ const fileTypeOptions = [
         </el-input>
       </div>
 
-      <button class="type-toggle" @click="toggleSearchType">
+      <el-button class="ep-control type-toggle" @click="toggleSearchType">
         {{ searchType === 'text' ? '全文' : '语义' }}
-      </button>
+      </el-button>
 
-      <button
-        class="filter-btn"
+      <el-button
+        class="ep-control filter-btn"
         :class="{ active: showFilters || activeFilterCount > 0 }"
         @click="showFilters = !showFilters"
       >
@@ -259,7 +251,7 @@ const fileTypeOptions = [
         </svg>
         <span>筛选</span>
         <span v-if="activeFilterCount > 0" class="filter-badge">{{ activeFilterCount }}</span>
-      </button>
+      </el-button>
     </div>
 
     <!-- Active filter chips -->
@@ -270,9 +262,9 @@ const fileTypeOptions = [
         class="filter-chip"
       >
         <span>{{ chip.label }}</span>
-        <button class="chip-remove" @click="removeFilter(chip.type)">×</button>
+        <el-button link class="ep-control chip-remove" @click="removeFilter(chip.type)">×</el-button>
       </div>
-      <button class="clear-all-btn" @click="clearAllFilters">清除全部</button>
+      <el-button link class="ep-control clear-all-btn" @click="clearAllFilters">清除全部</el-button>
     </div>
 
     <!-- Filter panel -->
@@ -282,10 +274,10 @@ const fileTypeOptions = [
         <div class="filter-section">
           <div class="filter-section-title">标签</div>
           <div class="tag-filter-list">
-            <button
+            <el-button
               v-for="tag in allTags"
               :key="tag.id"
-              class="tag-filter-btn"
+              class="ep-control tag-filter-btn"
               :class="{ active: filters.tagIds.includes(tag.id) }"
               :style="filters.tagIds.includes(tag.id) ? { borderColor: tag.color || '#0a84ff', color: tag.color || '#0a84ff', background: (tag.color || '#0a84ff') + '15' } : {}"
               @click="toggleTag(tag.id)"
@@ -293,7 +285,7 @@ const fileTypeOptions = [
               <span v-if="tag.color" class="tag-dot" :style="{ background: tag.color }"></span>
               {{ tag.name }}
               <span class="tag-filter-count">{{ tag.photoCount }}</span>
-            </button>
+            </el-button>
             <span v-if="allTags.length === 0" class="filter-empty-hint">暂无标签</span>
           </div>
         </div>
@@ -304,27 +296,11 @@ const fileTypeOptions = [
           <div class="rating-filter-row">
             <div class="rating-filter-group">
               <span class="rating-label">最低</span>
-              <div class="star-picker">
-                <button
-                  v-for="s in 5"
-                  :key="s"
-                  class="star-pick"
-                  :class="{ active: s <= filters.minRating }"
-                  @click="setMinRating(s)"
-                >★</button>
-              </div>
+              <el-rate v-model="filters.minRating" clearable aria-label="最低评分" />
             </div>
             <div class="rating-filter-group">
               <span class="rating-label">最高</span>
-              <div class="star-picker">
-                <button
-                  v-for="s in 5"
-                  :key="s"
-                  class="star-pick"
-                  :class="{ active: s <= filters.maxRating }"
-                  @click="setMaxRating(s)"
-                >★</button>
-              </div>
+              <el-rate v-model="filters.maxRating" clearable aria-label="最高评分" />
             </div>
           </div>
         </div>
@@ -336,15 +312,15 @@ const fileTypeOptions = [
             <div class="toggle-filter-item">
               <span class="toggle-label">描述</span>
               <div class="toggle-btns">
-                <button class="toggle-btn" :class="{ active: filters.hasDescription === true }" @click="toggleHasDescription(true)">有</button>
-                <button class="toggle-btn" :class="{ active: filters.hasDescription === false }" @click="toggleHasDescription(false)">无</button>
+                <el-button class="ep-control toggle-btn" :class="{ active: filters.hasDescription === true }" @click="toggleHasDescription(true)">有</el-button>
+                <el-button class="ep-control toggle-btn" :class="{ active: filters.hasDescription === false }" @click="toggleHasDescription(false)">无</el-button>
               </div>
             </div>
             <div class="toggle-filter-item">
               <span class="toggle-label">时间线</span>
               <div class="toggle-btns">
-                <button class="toggle-btn" :class="{ active: filters.inTimeline === true }" @click="toggleInTimeline(true)">在</button>
-                <button class="toggle-btn" :class="{ active: filters.inTimeline === false }" @click="toggleInTimeline(false)">不在</button>
+                <el-button class="ep-control toggle-btn" :class="{ active: filters.inTimeline === true }" @click="toggleInTimeline(true)">在</el-button>
+                <el-button class="ep-control toggle-btn" :class="{ active: filters.inTimeline === false }" @click="toggleInTimeline(false)">不在</el-button>
               </div>
             </div>
           </div>
@@ -397,10 +373,10 @@ const fileTypeOptions = [
 
         <!-- Action buttons -->
         <div class="filter-actions">
-          <button class="btn-clear" @click="clearAllFilters">清除筛选</button>
-          <button class="btn-apply" @click="handleSearch(); showFilters = false">
+          <el-button class="ep-control btn-clear" @click="clearAllFilters">清除筛选</el-button>
+          <el-button type="primary" class="ep-control btn-apply" @click="handleSearch(); showFilters = false">
             {{ activeFilterCount > 0 ? `应用筛选 (${activeFilterCount})` : '应用' }}
-          </button>
+          </el-button>
         </div>
       </div>
     </Transition>
@@ -415,7 +391,7 @@ const fileTypeOptions = [
         <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
       </svg>
       <p>未找到匹配的照片</p>
-      <button v-if="activeFilterCount > 0" class="btn-clear" @click="clearAllFilters(); handleSearch()">清除筛选重试</button>
+      <el-button v-if="activeFilterCount > 0" class="ep-control btn-clear" @click="clearAllFilters(); handleSearch()">清除筛选重试</el-button>
     </div>
 
     <div v-else-if="results.length > 0" class="results-area">
@@ -438,22 +414,22 @@ const fileTypeOptions = [
       <h3>搜索建议</h3>
       <p class="suggestion-hint">试试用自然语言描述你想找的照片，或使用筛选条件精确查找</p>
       <div class="suggestion-tags">
-        <button class="tag" @click="query = '吃美食'; handleSearch()">吃美食</button>
-        <button class="tag" @click="query = '海边风景'; handleSearch()">海边风景</button>
-        <button class="tag" @click="query = '家庭聚会'; handleSearch()">家庭聚会</button>
-        <button class="tag" @click="query = '宠物'; handleSearch()">宠物</button>
-        <button class="tag" @click="query = '日落黄昏'; handleSearch()">日落黄昏</button>
-        <button class="tag" @click="query = '旅行风景'; handleSearch()">旅行风景</button>
+        <el-button class="ep-control tag" @click="query = '吃美食'; handleSearch()">吃美食</el-button>
+        <el-button class="ep-control tag" @click="query = '海边风景'; handleSearch()">海边风景</el-button>
+        <el-button class="ep-control tag" @click="query = '家庭聚会'; handleSearch()">家庭聚会</el-button>
+        <el-button class="ep-control tag" @click="query = '宠物'; handleSearch()">宠物</el-button>
+        <el-button class="ep-control tag" @click="query = '日落黄昏'; handleSearch()">日落黄昏</el-button>
+        <el-button class="ep-control tag" @click="query = '旅行风景'; handleSearch()">旅行风景</el-button>
       </div>
 
       <!-- Quick filter shortcuts -->
       <div class="quick-filters">
         <h4>快捷筛选</h4>
         <div class="quick-filter-row">
-          <button class="quick-filter-btn" @click="filters.inTimeline = true; handleSearch()">时间线照片</button>
-          <button class="quick-filter-btn" @click="filters.hasDescription = true; handleSearch()">有描述的照片</button>
-          <button class="quick-filter-btn" @click="filters.minRating = 4; handleSearch()">4星以上</button>
-          <button class="quick-filter-btn" @click="filters.fileType = 'VIDEO'; handleSearch()">仅视频</button>
+          <el-button class="ep-control quick-filter-btn" @click="filters.inTimeline = true; handleSearch()">时间线照片</el-button>
+          <el-button class="ep-control quick-filter-btn" @click="filters.hasDescription = true; handleSearch()">有描述的照片</el-button>
+          <el-button class="ep-control quick-filter-btn" @click="filters.minRating = 4; handleSearch()">4星以上</el-button>
+          <el-button class="ep-control quick-filter-btn" @click="filters.fileType = 'VIDEO'; handleSearch()">仅视频</el-button>
         </div>
       </div>
     </div>
@@ -698,29 +674,6 @@ const fileTypeOptions = [
 .rating-label {
   font-size: 12px;
   color: var(--text-tertiary);
-}
-
-.star-picker {
-  display: flex;
-  gap: 2px;
-}
-
-.star-pick {
-  font-size: 18px;
-  color: var(--text-tertiary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1;
-}
-
-.star-pick:hover {
-  transform: scale(1.15);
-}
-
-.star-pick.active {
-  color: #ffcc00;
 }
 
 /* Toggle filters */

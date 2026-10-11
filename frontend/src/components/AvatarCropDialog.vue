@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
+
 const OUTPUT_SIZE = 512
 const MIN_ZOOM = 1
 const MAX_ZOOM = 4
@@ -228,18 +229,17 @@ onBeforeUnmount(clearImage)
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="crop-dialog">
-      <div v-if="modelValue" class="crop-overlay" @click.self="closeDialog">
-        <section class="crop-dialog" role="dialog" aria-modal="true" aria-labelledby="crop-dialog-title">
+  <el-dialog :model-value="modelValue" append-to-body destroy-on-close :title="title" class="crop-editor-dialog" width="min(880px, 96vw)" top="5vh" :show-close="false" :close-on-click-modal="!uploading" :close-on-press-escape="!uploading" :before-close="closeDialog" @opened="renderCrop">
+    <template #header>
           <header class="crop-header">
             <div>
               <span class="crop-kicker">{{ editorKicker }}</span>
               <h2 id="crop-dialog-title">{{ title }}</h2>
               <p>{{ tip }}</p>
             </div>
-            <button class="crop-close" type="button" aria-label="关闭图片编辑器" :disabled="uploading" @click="closeDialog">×</button>
+            <el-button class="ep-control crop-close" native-type="button" aria-label="关闭图片编辑器" :disabled="uploading" @click="closeDialog">×</el-button>
           </header>
+    </template>
 
           <div class="crop-body">
             <div class="crop-workbench">
@@ -274,15 +274,16 @@ onBeforeUnmount(clearImage)
               <div class="zoom-control">
                 <div class="zoom-label"><label for="image-zoom">缩放</label><output for="image-zoom">{{ zoomPercent }}%</output></div>
                 <div class="zoom-row">
-                  <button type="button" aria-label="缩小图片" :disabled="zoom <= MIN_ZOOM" @click="adjustZoom(-0.1)">−</button>
-                  <input id="image-zoom" v-model.number="zoom" type="range" :min="MIN_ZOOM" :max="MAX_ZOOM" step="0.01" @input="updateZoom" />
-                  <button type="button" aria-label="放大图片" :disabled="zoom >= MAX_ZOOM" @click="adjustZoom(0.1)">+</button>
+                  <el-button class="ep-control" native-type="button" aria-label="缩小图片" :disabled="zoom <= MIN_ZOOM" @click="adjustZoom(-0.1)">−</el-button>
+                  <el-slider id="image-zoom" v-model="zoom" :min="MIN_ZOOM" :max="MAX_ZOOM" :step="0.01" :show-tooltip="false" aria-label="图片缩放" @input="updateZoom" />
+                  <el-button class="ep-control" native-type="button" aria-label="放大图片" :disabled="zoom >= MAX_ZOOM" @click="adjustZoom(0.1)">+</el-button>
                 </div>
               </div>
-              <button class="reset-crop" type="button" @click="resetCrop">居中并重置缩放</button>
+              <el-button link class="ep-control reset-crop" native-type="button" @click="resetCrop">居中并重置缩放</el-button>
             </aside>
           </div>
 
+    <template #footer>
           <footer class="crop-footer">
             <span>{{ outputDescription }}</span>
             <div>
@@ -290,23 +291,24 @@ onBeforeUnmount(clearImage)
               <el-button type="primary" :loading="uploading" :disabled="!imageReady" @click="confirmCrop">{{ confirmText }}</el-button>
             </div>
           </footer>
-        </section>
-      </div>
-    </Transition>
-  </Teleport>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
-.crop-overlay{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:24px;background:rgba(7,12,20,.72);backdrop-filter:blur(12px) saturate(140%)}
-.crop-dialog{width:min(880px,100%);max-height:calc(100vh - 48px);overflow:auto;color:var(--text-primary);border:1px solid var(--border-color-light);border-radius:var(--radius-xl);background:var(--surface-elevated);box-shadow:var(--shadow-xl),0 30px 80px rgba(0,0,0,.3)}
-.crop-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 28px 20px;border-bottom:1px solid var(--border-color-light)}
+:global(.crop-editor-dialog){display:flex;flex-direction:column;max-height:90vh;padding:0}
+:global(.crop-editor-dialog .el-dialog__header),:global(.crop-editor-dialog .el-dialog__footer){flex-shrink:0}
+:global(.crop-editor-dialog .el-dialog__body){min-height:0;overflow-y:auto}
+
+.zoom-row :deep(.el-slider){min-width:0;width:100%;margin:0 4px}
+
+.crop-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:0}
 .crop-kicker{display:block;margin-bottom:4px;color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}.crop-header h2{margin:0;font-size:22px;line-height:1.25}.crop-header p{margin:6px 0 0;color:var(--text-secondary);font-size:13px}
 .crop-close{width:34px;height:34px;flex:0 0 auto;padding:0;color:var(--text-secondary);font:inherit;font-size:25px;line-height:1;cursor:pointer;border:1px solid transparent;border-radius:50%;background:transparent;transition:160ms ease}.crop-close:hover:not(:disabled){color:var(--text-primary);border-color:var(--border-color);background:var(--surface-hover)}
-.crop-body{display:grid;grid-template-columns:minmax(300px,1fr) 240px;gap:30px;padding:28px}.crop-workbench{min-width:0}.crop-stage{position:relative;width:min(100%,440px);aspect-ratio:1;margin:0 auto;overflow:hidden;cursor:grab;border:1px solid rgba(255,255,255,.32);border-radius:6px;background-color:#17201c;background-image:linear-gradient(45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.035) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.035) 75%);background-position:0 0,0 8px,8px -8px,-8px 0;background-size:16px 16px;box-shadow:0 18px 44px rgba(8,20,14,.2);touch-action:none;user-select:none}.crop-stage:active{cursor:grabbing}.crop-canvas{display:block;width:100%;height:100%;outline:none}.crop-canvas:focus-visible{box-shadow:inset 0 0 0 3px var(--primary-light)}
+.crop-body{display:grid;grid-template-columns:minmax(300px,1fr) 240px;gap:30px;padding:12px 0}.crop-workbench{min-width:0}.crop-stage{position:relative;width:min(100%,440px);aspect-ratio:1;margin:0 auto;overflow:hidden;cursor:grab;border:1px solid rgba(255,255,255,.32);border-radius:6px;background-color:#17201c;background-image:linear-gradient(45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.035) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.035) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.035) 75%);background-position:0 0,0 8px,8px -8px,-8px 0;background-size:16px 16px;box-shadow:0 18px 44px rgba(8,20,14,.2);touch-action:none;user-select:none}.crop-stage:active{cursor:grabbing}.crop-canvas{display:block;width:100%;height:100%;outline:none}.crop-canvas:focus-visible{box-shadow:inset 0 0 0 3px var(--primary-light)}
 .crop-grid{position:absolute;inset:0;pointer-events:none}.crop-grid i{position:absolute;display:block;background:rgba(255,255,255,.3)}.crop-grid i:nth-child(1),.crop-grid i:nth-child(2){top:0;bottom:0;width:1px}.crop-grid i:nth-child(1){left:33.333%}.crop-grid i:nth-child(2){left:66.666%}.crop-grid i:nth-child(3),.crop-grid i:nth-child(4){right:0;left:0;height:1px}.crop-grid i:nth-child(3){top:33.333%}.crop-grid i:nth-child(4){top:66.666%}
 .crop-corner{position:absolute;width:22px;height:22px;pointer-events:none;border-color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}.crop-corner-tl{top:8px;left:8px;border-top:3px solid;border-left:3px solid}.crop-corner-tr{top:8px;right:8px;border-top:3px solid;border-right:3px solid}.crop-corner-bl{bottom:8px;left:8px;border-bottom:3px solid;border-left:3px solid}.crop-corner-br{right:8px;bottom:8px;border-right:3px solid;border-bottom:3px solid}.crop-drag-hint{margin:12px 0 0;color:var(--text-tertiary);font-size:12px;text-align:center}
 .crop-panel{display:flex;flex-direction:column;gap:22px;padding:4px 0}.result-preview{display:flex;align-items:center;gap:14px;padding-bottom:20px;border-bottom:1px solid var(--border-color-light)}.result-preview canvas{width:64px;height:64px;flex:0 0 auto;border:1px solid var(--border-color-light);background:var(--surface-hover);box-shadow:var(--shadow-sm)}.result-preview canvas.circle{border-radius:50%}.result-preview canvas.square{border-radius:14px}.result-preview strong,.result-preview span{display:block}.result-preview strong{font-size:14px}.result-preview span{margin-top:3px;color:var(--text-tertiary);font-size:11px}
-.source-meta,.zoom-label{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-secondary);font-size:12px}.source-meta strong,.zoom-label output{color:var(--text-primary);font-size:12px;font-variant-numeric:tabular-nums}.zoom-label label{font-weight:600}.zoom-row{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:10px;margin-top:10px}.zoom-row button{width:34px;height:34px;padding:0;color:var(--text-primary);font:inherit;font-size:18px;cursor:pointer;border:1px solid var(--border-color);border-radius:10px;background:var(--surface-card)}.zoom-row button:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}.zoom-row button:disabled{cursor:not-allowed;opacity:.4}.zoom-row input{width:100%;accent-color:var(--accent);cursor:pointer}.reset-crop{align-self:flex-start;padding:0;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;border:0;background:transparent}.reset-crop:hover{text-decoration:underline}
-.crop-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 28px;border-top:1px solid var(--border-color-light)}.crop-footer>span{color:var(--text-tertiary);font-size:12px}.crop-footer>div{display:flex;gap:10px}.crop-dialog-enter-active,.crop-dialog-leave-active{transition:opacity 180ms ease}.crop-dialog-enter-active .crop-dialog,.crop-dialog-leave-active .crop-dialog{transition:transform 180ms ease,opacity 180ms ease}.crop-dialog-enter-from,.crop-dialog-leave-to{opacity:0}.crop-dialog-enter-from .crop-dialog,.crop-dialog-leave-to .crop-dialog{opacity:0;transform:translateY(10px) scale(.985)}
-@media(max-width:640px){.crop-overlay{align-items:end;padding:0}.crop-dialog{width:100%;max-height:94vh;border-right:0;border-bottom:0;border-left:0;border-radius:var(--radius-xl) var(--radius-xl) 0 0}.crop-header,.crop-body,.crop-footer{padding-right:18px;padding-left:18px}.crop-body{grid-template-columns:1fr;gap:22px}.crop-stage{width:min(100%,360px)}.crop-panel{gap:16px}.result-preview{display:none}.crop-footer{align-items:stretch;flex-direction:column}.crop-footer>span{text-align:center}.crop-footer>div{display:grid;grid-template-columns:1fr 1.4fr}.crop-footer :deep(.el-button){width:100%;margin-left:0}}
+.source-meta,.zoom-label{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--text-secondary);font-size:12px}.source-meta strong,.zoom-label output{color:var(--text-primary);font-size:12px;font-variant-numeric:tabular-nums}.zoom-label label{font-weight:600}.zoom-row{display:grid;grid-template-columns:34px 1fr 34px;align-items:center;gap:10px;margin-top:10px}.zoom-row button{width:34px;height:34px;padding:0;color:var(--text-primary);font:inherit;font-size:18px;cursor:pointer;border:1px solid var(--border-color);border-radius:10px;background:var(--surface-card)}.zoom-row button:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}.zoom-row button:disabled{cursor:not-allowed;opacity:.4}.reset-crop{align-self:flex-start;padding:0;color:var(--accent);font:inherit;font-size:12px;cursor:pointer;border:0;background:transparent}.reset-crop:hover{text-decoration:underline}
+.crop-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:0}.crop-footer>span{color:var(--text-tertiary);font-size:12px}.crop-footer>div{display:flex;gap:10px}@media(max-width:640px){.crop-body{grid-template-columns:1fr;gap:22px}.crop-stage{width:min(100%,360px)}.crop-panel{gap:16px}.result-preview{display:none}.crop-footer{align-items:stretch;flex-direction:column}.crop-footer>span{text-align:center}.crop-footer>div{display:grid;grid-template-columns:1fr 1.4fr}.crop-footer :deep(.el-button){width:100%;margin-left:0}}
 </style>

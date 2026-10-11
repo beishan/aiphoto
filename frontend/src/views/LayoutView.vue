@@ -8,6 +8,7 @@ import DockIcon, { type DockIconName } from '@/components/DockIcon.vue'
 import RecycleBinPanel from '@/components/RecycleBinPanel.vue'
 import { useDockIconStore } from '@/stores/dockIconStore'
 import { photoApi } from '@/api/photoApi'
+import type { ButtonInstance } from 'element-plus'
 import { MagicStick, Moon, Sunny } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -123,7 +124,7 @@ function getSessionUser(): User | null {
 // Read the cached profile during setup so the very first frame already has the avatar.
 const currentUser = ref<User | null>(getSessionUser())
 const showUserMenu = ref(false)
-const userAvatarRef = ref<HTMLElement | null>(null)
+const userAvatarRef = ref<ButtonInstance | null>(null)
 const userMenuStyle = ref<CSSProperties>({})
 let userMenuPositionFrame: number | undefined
 const showTrashMenu = ref(false)
@@ -144,7 +145,7 @@ function toggleTrashMenu() {
 function updateUserMenuPosition() {
   if (!showUserMenu.value || !userAvatarRef.value) return
 
-  const avatarRect = userAvatarRef.value.getBoundingClientRect()
+  const avatarRect = userAvatarRef.value.$el.getBoundingClientRect()
   const menuWidth = 220
   const viewportPadding = 12
   const left = Math.min(
@@ -331,14 +332,14 @@ function getDockItemStyle(index: number) {
       </RouterLink>
 
       <div class="dock-trash-entry" :class="{ open: showTrashMenu }">
-        <button class="dock-item dock-trash-btn" :style="getDockItemStyle(tabs.length)" aria-label="回收站" @click.stop="toggleTrashMenu">
+        <el-button class="ep-control dock-item dock-trash-btn" :style="getDockItemStyle(tabs.length)" aria-label="回收站" @click.stop="toggleTrashMenu">
           <span class="dock-icon-tile trash-tile" :class="{ custom: dockConfig.iconStyle === 'custom', minimal: dockConfig.iconStyle === 'minimal' }">
             <span class="dock-icon-glass"></span>
             <DockIcon class="dock-icon" :name="trashIcon" :variant="dockConfig.iconStyle" :custom-src="dockIconStore.iconUrls[trashIcon]" />
           </span>
           <span v-if="trashCount" class="trash-count">{{ trashCount > 99 ? '99+' : trashCount }}</span>
           <span class="dock-label" role="tooltip">回收站</span>
-        </button>
+        </el-button>
         <Transition name="popup">
           <section v-if="showTrashMenu" class="trash-popup glass" @click.stop @pointermove.stop>
             <header><div><strong>系统回收站</strong><small>恢复照片，或永久删除媒体文件</small></div><el-button circle text aria-label="关闭" @click="showTrashMenu = false">✕</el-button></header>
@@ -349,13 +350,13 @@ function getDockItemStyle(index: number) {
 
       <!-- User avatar button -->
       <div class="user-avatar-entry">
-        <div ref="userAvatarRef" class="dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
+        <el-button text ref="userAvatarRef" class="ep-control dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
           <div class="avatar-circle">
             <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
             <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
           </div>
           <span class="dock-label" role="tooltip">账户</span>
-        </div>
+        </el-button>
       </div>
     </nav>
 
@@ -373,18 +374,18 @@ function getDockItemStyle(index: number) {
           </div>
         </div>
         <div class="popup-divider"></div>
-        <button class="popup-item" @click="navigateTo('/settings'); closeUserMenu()">
+        <el-button class="ep-control popup-item" @click="navigateTo('/settings'); closeUserMenu()">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
           </svg>
           <span>设置</span>
-        </button>
-        <button class="popup-item danger" @click="handleLogout">
+        </el-button>
+        <el-button type="danger" class="ep-control popup-item danger" @click="handleLogout">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
           </svg>
           <span>退出登录</span>
-        </button>
+        </el-button>
       </div>
     </Transition>
   </div>

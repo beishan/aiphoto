@@ -63,6 +63,58 @@ export interface DownloadTask {
   endTime: string | null
 }
 
+export interface CrawlerExecutorOptions {
+  description: string
+  siteId: number | null
+  frozen: boolean
+  selectionStrategy: 'ORDERED' | 'RANDOM'
+  ordinaryProxies: { proxyId: number; cooldownSeconds: number | null }[]
+  defaultProxyCooldownSeconds: number
+  failureThreshold: number
+  manualNode: string | null
+  failover: boolean
+  rotationSeconds: number
+  rotationPages: number
+  rotationImages: number
+  rotationTasks: number
+  nodeGroupId: number | null
+}
+export interface CrawlerExecutorRequest {
+  name: string
+  enabled: boolean
+  proxyMode: 'DEFAULT' | 'DIRECT' | 'SELECTED' | 'MIHOMO'
+  proxyId: number | null
+  proxyGroup: string
+  nodes: string[]
+  switchMode: 'MANUAL' | 'FAILOVER' | 'REQUESTS' | 'TIME' | 'PAGE' | 'IMAGE' | 'TASK'
+  rotateAfterRequests: number
+  cooldownSeconds: number
+  options: CrawlerExecutorOptions
+}
+export interface ExecutorSwitchEvent { time: string; from: string | null; to: string | null; success: boolean; reason: string }
+export interface ExecutorProxyState { key: string; name: string; available: boolean; failures: number; coolingUntil: string | null; reason: string | null }
+export interface CrawlerExecutor extends CrawlerExecutorRequest {
+  id: number
+  activeJobId: number | null
+  currentNode: string | null
+  completedRequests: number
+  lastError: string | null
+  cooldowns: Record<string, string>
+  activeMillis: number
+  completedPages: number
+  completedImages: number
+  completedTasks: number
+  proxyStates: ExecutorProxyState[]
+  events: ExecutorSwitchEvent[]
+  waitingJobId: number | null
+}
+export interface MihomoNodeGroupRequest { name: string; controlGroup: string; host: string; port: number; nodes: string[] }
+export interface MihomoNodeGroup extends MihomoNodeGroupRequest { id: number; proxyId: number }
+export interface CrawlerExecutionLog {
+  id: number; jobId: number; jobName: string | null; siteName: string | null; phase: string | null; executorName: string; proxyName: string | null; proxyNode: string | null;
+  url: string; failed: boolean; attempts: number; durationMillis: number; description: string; createdAt: string
+}
+export interface MihomoProxyNode { type: string; all?: string[]; now?: string; alive?: boolean; history?: { time: string; delay: number }[] }
 export interface CrawlerProxy {
   id: number
   name: string
@@ -72,6 +124,9 @@ export interface CrawlerProxy {
   hasPassword: boolean
   enabled: boolean
   priority: number
+  proxyType: 'HTTP' | 'MIHOMO'
+  controllerUrl: string | null
+  secretConfigured: boolean
 }
 
 export interface CrawlerSettings {
@@ -91,6 +146,10 @@ export interface CrawlerProxyRequest {
   username: string
   password: string
   clearPassword: boolean
+  proxyType: 'HTTP' | 'MIHOMO'
+  controllerUrl: string
+  secret: string
+  clearSecret: boolean
   enabled: boolean
 }
 
@@ -179,6 +238,31 @@ export const settingApi = {
   getSystemInfo() {
     return http.get<Record<string, unknown>>('/settings/system-info')
   },
+
+  getMihomoGroups(id: number) { return http.get<MihomoNodeGroup[]>(`/settings/crawler/proxies/${id}/groups`) },
+  saveMihomoGroup(proxyId: number, id: number | null, group: MihomoNodeGroupRequest) {
+    return id == null ? http.post<MihomoNodeGroup>(`/settings/crawler/proxies/${proxyId}/groups`, group)
+      : http.put<MihomoNodeGroup>(`/settings/crawler/proxies/${proxyId}/groups/${id}`, group)
+  },
+  deleteMihomoGroup(proxyId: number, id: number) { return http.delete(`/settings/crawler/proxies/${proxyId}/groups/${id}`) },
+  freezeCrawlerExecutor(id: number, frozen: boolean) { return http.put<CrawlerExecutor>(`/settings/crawler/executors/${id}/freeze`, { frozen }) },
+  unbindCrawlerExecutor(id: number) { return http.post<CrawlerExecutor>(`/settings/crawler/executors/${id}/unbind`) },
+  getCrawlerExecutorLogs(id: number, page: number, failedOnly: boolean) {
+    return http.get<{ content: CrawlerExecutionLog[]; totalElements: number }>(`/settings/crawler/executors/${id}/logs`, { params: { page, failedOnly } })
+  },
+  getCrawlerExecutors() { return http.get<CrawlerExecutor[]>('/settings/crawler/executors') },
+  saveCrawlerExecutor(id: number | null, request: CrawlerExecutorRequest) {
+    return id == null ? http.post<CrawlerExecutor>('/settings/crawler/executors', request)
+      : http.put<CrawlerExecutor>(`/settings/crawler/executors/${id}`, request)
+  },
+  deleteCrawlerExecutor(id: number) { return http.delete(`/settings/crawler/executors/${id}`) },
+  previewCrawlerProxy(proxy: CrawlerProxyRequest, id: number | null) {
+    return http.post<{ controllerOk: boolean | null; proxyOk: boolean; message: string }>(
+      '/settings/crawler/proxies/test', proxy, { params: id == null ? {} : { id }, timeout: 30000 })
+  },
+  testCrawlerProxy(id: number) { return http.post<{ controllerOk: boolean | null; proxyOk: boolean; message: string }>(`/settings/crawler/proxies/${id}/test`, {}, { timeout: 30000 }) },
+  getMihomoNodes(id: number) { return http.get<{ proxies: Record<string, MihomoProxyNode> }>(`/settings/crawler/proxies/${id}/nodes`) },
+  testMihomoNode(id: number, node: string) { return http.post<{ delay: number }>(`/settings/crawler/proxies/${id}/delay`, { node }) },
 
   getCrawlerSettings() {
     return http.get<CrawlerSettings>('/settings/crawler')

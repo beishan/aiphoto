@@ -224,15 +224,13 @@ async function handleReclassify() {
       </svg>
     </el-button>
 
-    <el-dialog v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
+    <el-dialog append-to-body v-model="showCreate" title="新建分类" width="440px" class="mv-dialog">
       <el-form label-position="top">
         <el-form-item label="名称" required>
           <el-input v-model="newCategoryName" placeholder="分类名称" maxlength="50" />
         </el-form-item>
         <el-form-item label="颜色">
-          <div class="color-selector">
-            <button v-for="color in colorOptions" :key="color" class="color-btn" :class="{ active: newCategoryColor === color }" :style="{ background: color }" @click="newCategoryColor = color" />
-          </div>
+          <el-color-picker v-model="newCategoryColor" :predefine="colorOptions" aria-label="分类颜色" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -241,7 +239,7 @@ async function handleReclassify() {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showPhotoPicker" :title="`选择模板照片 (${selectedPhotoIds.length}/5)`" width="min(900px, calc(100vw - 24px))" class="mv-dialog picker-dialog" @closed="closePhotoPicker">
+    <el-dialog append-to-body v-model="showPhotoPicker" :title="`选择模板照片 (${selectedPhotoIds.length}/5)`" width="min(900px, calc(100vw - 24px))" class="mv-dialog picker-dialog" @closed="closePhotoPicker">
             <p class="picker-hint">选择 2-5 张代表此分类的照片，AI 将自动找到相似的照片</p>
 
             <div class="picker-grid">
@@ -540,26 +538,6 @@ async function handleReclassify() {
 
 .ios-input:focus {
   border-color: var(--accent);
-}
-
-.color-selector {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.color-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 3px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.color-btn.active {
-  border-color: white;
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .picker-grid {

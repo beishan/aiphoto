@@ -35,6 +35,12 @@ public class CrawlerProxy {
     private Boolean enabled = true;
     @Column(nullable = false)
     private Integer priority = 0;
+    @Column(nullable = false, length = 16)
+    private String proxyType = "HTTP";
+    @Column(length = 500)
+    private String controllerUrl;
+    @Column(name = "secret", columnDefinition = "TEXT")
+    private String secretCiphertext;
     @CreationTimestamp
     private LocalDateTime createdAt;
     @UpdateTimestamp

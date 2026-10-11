@@ -173,16 +173,16 @@ async function handleToggleFavorite(photoId: number) {
 
     <!-- Timeline rail -->
     <div v-if="timelineItems.length > 0" class="timeline-rail">
-      <button
+      <el-button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"
-        class="timeline-item"
+        class="ep-control timeline-item"
         :style="{ flex: item.count }"
         :title="item.label"
       >
         <span class="timeline-dot"></span>
         <span class="timeline-label">{{ item.label }}</span>
-      </button>
+      </el-button>
     </div>
 
     <PhotoViewer

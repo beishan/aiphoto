@@ -32,6 +32,7 @@ const navItems = [
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
+  { key: 'proxy', label: '系统代理配置', icon: '🔗' },
   { key: 'crawler', label: '爬虫设置', icon: '🕸️' },
   { key: 'tags', label: '标签管理', icon: '🏷️' },
   { key: 'photos', label: '照片与视频', icon: '🖼️' },
@@ -52,7 +53,7 @@ const navGroups = computed(() => [
   { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon'] : ['general'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
-  { label: '管理', keys: isCurrentUserAdmin ? ['users', 'storage'] : ['storage'] },
+  { label: '管理', keys: isCurrentUserAdmin ? ['users', 'proxy', 'storage'] : ['storage'] },
   { label: '系统', keys: ['system'] },
 ].map(group => ({
   label: group.label,
@@ -688,23 +689,14 @@ async function loadSystemInfo() {
     </div>
 
     <div class="settings-layout">
-        <nav class="settings-nav" aria-label="设置导航">
-          <div v-for="group in navGroups" :key="group.label" class="settings-nav-group">
-            <div class="settings-nav-title">{{ group.label }}</div>
-            <button
-              v-for="item in group.items"
-              :key="item.key"
-              type="button"
-              class="settings-nav-item"
-              :class="{ active: activeSection === item.key }"
-              :aria-current="activeSection === item.key ? 'page' : undefined"
-              @click="activeSection = item.key"
-            >
+        <el-menu class="settings-nav" :default-active="activeSection" aria-label="设置导航" @select="(key: string) => activeSection = key">
+          <el-menu-item-group v-for="group in navGroups" :key="group.label" :title="group.label">
+            <el-menu-item v-for="item in group.items" :key="item.key" :index="item.key">
               <span class="settings-nav-icon">{{ item.icon }}</span>
               <span>{{ item.label }}</span>
-            </button>
-          </div>
-        </nav>
+            </el-menu-item>
+          </el-menu-item-group>
+        </el-menu>
 
       <!-- Right content -->
       <main class="settings-content">
@@ -722,7 +714,8 @@ async function loadSystemInfo() {
           <SiteFaviconSettingsPanel />
         </div>
 
-        <div v-if="activeSection === 'crawler'" class="content-panel">
+        <div v-if="activeSection === 'proxy' && isCurrentUserAdmin" class="content-panel"><CrawlerSettingsPanel proxies-only /></div>
+        <div v-if="activeSection === 'crawler' && isCurrentUserAdmin" class="content-panel">
           <CrawlerSettingsPanel />
         </div>
 
@@ -779,9 +772,10 @@ async function loadSystemInfo() {
         </div>
 
         <!-- ====== 扫描文件夹 ====== -->
-        <div v-if="activeSection === 'folders'" class="content-panel">
+        <div v-if="activeSection === 'folders'" class="content-panel folder-settings">
           <div class="panel-header-row">
-            <div style="display: flex; gap: 8px;">
+            <h2 class="folder-settings-title">扫描文件夹</h2>
+            <div class="folder-toolbar">
               <el-button type="primary" :icon="Plus" @click="openFolderDialog">添加目录</el-button>
               <el-button @click="scanAll">扫描全部</el-button>
             </div>
@@ -793,10 +787,10 @@ async function loadSystemInfo() {
                 <span class="folder-status" :class="f.scanStatus.toLowerCase()">{{ f.scanStatus }}</span>
               </div>
               <div class="folder-actions">
-                <button class="action-link" @click="toggleFolderEnabled(f.id)">{{ f.enabled ? '禁用' : '启用' }}</button>
-                <button class="action-link" @click="toggleFolderHidden(f.id)">{{ f.hidden ? '显示' : '隐藏' }}</button>
-                <button class="action-link" @click="scanFolder(f.id)">扫描</button>
-                <button class="action-link danger" @click="deleteFolder(f.id, f.name)">删除</button>
+                <el-button link class="ep-control action-link" @click="toggleFolderEnabled(f.id)">{{ f.enabled ? '禁用' : '启用' }}</el-button>
+                <el-button link class="ep-control action-link" @click="toggleFolderHidden(f.id)">{{ f.hidden ? '显示' : '隐藏' }}</el-button>
+                <el-button link class="ep-control action-link" @click="scanFolder(f.id)">扫描</el-button>
+                <el-button link type="danger" class="ep-control action-link danger" @click="deleteFolder(f.id, f.name)">删除</el-button>
               </div>
             </div>
             <div class="folder-info-grid">
@@ -812,7 +806,7 @@ async function loadSystemInfo() {
             </div>
             <div v-if="f.errorMessage" class="folder-error">{{ f.errorMessage }}</div>
           </div>
-          <div v-if="folders.length === 0" class="empty-text">暂无扫描文件夹，请添加 NAS 目录</div>
+          <el-empty v-if="folders.length === 0" class="folder-empty" description="暂无扫描文件夹，请添加 NAS 目录" :image-size="64" />
         </div>
 
         <!-- ====== 模型管理 ====== -->
@@ -825,14 +819,11 @@ async function loadSystemInfo() {
           </div>
 
           <!-- Tab switcher -->
-          <div class="model-tab-bar">
-            <button class="model-tab" :class="{ active: modelViewMode === 'local' }" @click="modelViewMode = 'local'">本地模型</button>
-            <button class="model-tab" :class="{ active: modelViewMode === 'online' }" @click="modelViewMode = 'online'">在线下载</button>
-            <button class="model-tab" :class="{ active: modelViewMode === 'downloads' }" @click="modelViewMode = 'downloads'">
-              下载任务
-              <span v-if="downloadTasks.length > 0" class="tab-count-badge">{{ downloadTasks.length }}</span>
-            </button>
-          </div>
+          <el-segmented v-model="modelViewMode" :options="[
+            { label: '本地模型', value: 'local' },
+            { label: '在线下载', value: 'online' },
+            { label: `下载任务${downloadTasks.length ? `（${downloadTasks.length}）` : ''}`, value: 'downloads' },
+          ]" aria-label="模型管理分类" />
 
           <!-- Local Models Tab -->
           <div v-if="modelViewMode === 'local'">
@@ -899,9 +890,9 @@ async function loadSystemInfo() {
                     <span>{{ formatSize(getActiveDownloadForModel(om.id)!.downloadedSize) }} / {{ formatSize(getActiveDownloadForModel(om.id)!.totalSize) }}</span>
                   </div>
                   <div class="download-progress-actions">
-                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'DOWNLOADING' || getActiveDownloadForModel(om.id)!.status === 'PENDING'" class="action-link" @click="pauseDownload(getActiveDownloadForModel(om.id)!.taskId)">暂停</button>
-                    <button v-if="getActiveDownloadForModel(om.id)!.status === 'PAUSED'" class="action-link" @click="resumeDownload(getActiveDownloadForModel(om.id)!.taskId)">继续</button>
-                    <button class="action-link danger" @click="cancelDownload(getActiveDownloadForModel(om.id)!.taskId)">取消</button>
+                    <el-button link v-if="getActiveDownloadForModel(om.id)!.status === 'DOWNLOADING' || getActiveDownloadForModel(om.id)!.status === 'PENDING'" class="ep-control action-link" @click="pauseDownload(getActiveDownloadForModel(om.id)!.taskId)">暂停</el-button>
+                    <el-button link v-if="getActiveDownloadForModel(om.id)!.status === 'PAUSED'" class="ep-control action-link" @click="resumeDownload(getActiveDownloadForModel(om.id)!.taskId)">继续</el-button>
+                    <el-button link type="danger" class="ep-control action-link danger" @click="cancelDownload(getActiveDownloadForModel(om.id)!.taskId)">取消</el-button>
                   </div>
                 </div>
                 <!-- Download button -->
@@ -935,11 +926,11 @@ async function loadSystemInfo() {
               </div>
               <div v-if="task.errorMessage" class="download-error-msg">{{ task.errorMessage }}</div>
               <div class="download-task-actions">
-                <button v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="action-link" @click="pauseDownload(task.taskId)">暂停</button>
-                <button v-if="task.status === 'PAUSED'" class="action-link" @click="resumeDownload(task.taskId)">继续</button>
-                <button v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="action-link" @click="retryDownload(task.taskId)">重试</button>
-                <button v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="action-link danger" @click="cancelDownload(task.taskId)">取消</button>
-                <button v-if="task.status === 'COMPLETED'" class="action-link" @click="setCurrentModel(task.taskId)">设为当前模型</button>
+                <el-button link v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="ep-control action-link" @click="pauseDownload(task.taskId)">暂停</el-button>
+                <el-button link v-if="task.status === 'PAUSED'" class="ep-control action-link" @click="resumeDownload(task.taskId)">继续</el-button>
+                <el-button link v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="ep-control action-link" @click="retryDownload(task.taskId)">重试</el-button>
+                <el-button link type="danger" v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="ep-control action-link danger" @click="cancelDownload(task.taskId)">取消</el-button>
+                <el-button link v-if="task.status === 'COMPLETED'" class="ep-control action-link" @click="setCurrentModel(task.taskId)">设为当前模型</el-button>
               </div>
             </div>
           </div>
@@ -957,18 +948,9 @@ async function loadSystemInfo() {
               <span class="tag-name">{{ t.name }}</span>
               <span v-if="t.description" class="tag-desc-text">{{ t.description }}</span>
               <span class="tag-photo-count">{{ t.photoCount }} 张</span>
-              <div class="tag-color-picker">
-                <button
-                  v-for="c in presetColors"
-                  :key="c"
-                  class="color-swatch"
-                  :class="{ active: t.color === c }"
-                  :style="{ background: c }"
-                  @click="updateTagColor(t, c)"
-                ></button>
-              </div>
-              <button class="action-link" @click="openEditTagDialog(t)">编辑</button>
-              <button class="action-link danger" @click="deleteTag(t.id, t.name, t.photoCount)">删除</button>
+              <el-color-picker :model-value="t.color || '#0a84ff'" :predefine="presetColors" :aria-label="`设置标签 ${t.name} 的颜色`" @change="(color: string | null) => color && updateTagColor(t, color)" />
+              <el-button link class="ep-control action-link" @click="openEditTagDialog(t)">编辑</el-button>
+              <el-button link type="danger" class="ep-control action-link danger" @click="deleteTag(t.id, t.name, t.photoCount)">删除</el-button>
             </div>
             <div v-if="tags.length === 0" class="empty-text">暂无标签</div>
           </div>
@@ -1037,12 +1019,10 @@ async function loadSystemInfo() {
             <el-button @click="loadTasks()">刷新</el-button>
           </div>
           <!-- Filter tabs -->
-          <div class="task-filter-bar">
-            <button class="task-filter-btn" :class="{ active: taskFilter === 'all' }" @click="taskFilter = 'all'">全部</button>
-            <button class="task-filter-btn" :class="{ active: taskFilter === 'running' }" @click="taskFilter = 'running'">运行中</button>
-            <button class="task-filter-btn" :class="{ active: taskFilter === 'completed' }" @click="taskFilter = 'completed'">已完成</button>
-            <button class="task-filter-btn" :class="{ active: taskFilter === 'failed' }" @click="taskFilter = 'failed'">失败</button>
-          </div>
+          <el-segmented v-model="taskFilter" :options="[
+            { label: '全部', value: 'all' }, { label: '运行中', value: 'running' },
+            { label: '已完成', value: 'completed' }, { label: '失败', value: 'failed' },
+          ]" aria-label="任务状态筛选" />
           <div v-if="filteredTasks.length === 0" class="empty-text">暂无任务记录</div>
           <div v-for="t in filteredTasks" :key="t.id" class="panel-card task-log-card">
             <div class="task-log-header">
@@ -1204,7 +1184,7 @@ async function loadSystemInfo() {
     </div>
 
     <!-- User dialog -->
-    <el-dialog v-model="showUserDialog" class="user-create-dialog" title="新增用户" width="440px" align-center>
+    <el-dialog append-to-body v-model="showUserDialog" class="user-create-dialog" title="新增用户" width="440px" align-center>
       <p class="dialog-intro">创建一个新的家庭成员账户，并设置其访问权限。</p>
       <el-form label-position="top">
         <el-form-item label="用户名"><el-input v-model="newUser.username" placeholder="用户名" /></el-form-item>
@@ -1216,17 +1196,17 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Tag dialog -->
-    <el-dialog v-model="showTagDialog" title="新建标签" width="420px">
+    <el-dialog append-to-body v-model="showTagDialog" title="新建标签" width="420px">
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="newTag.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="newTag.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
-        <el-form-item label="颜色"><el-color-picker v-model="newTag.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: newTag.color === c }" :style="{ background: c }" @click="newTag.color = c"></button></div></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="newTag.color" :predefine="presetColors" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="showTagDialog = false">取消</el-button><el-button type="primary" @click="createTag">创建</el-button></template>
     </el-dialog>
 
     <!-- Folder dialog -->
-    <el-dialog v-model="showFolderDialog" class="folder-picker-dialog" title="添加扫描目录" width="720px" align-center>
+    <el-dialog append-to-body v-model="showFolderDialog" class="folder-picker-dialog" title="添加扫描目录" width="720px" align-center>
       <p class="dialog-intro">浏览服务器可访问的目录，选择需要扫描的照片或书籍目录。</p>
       <div class="folder-picker-layout">
         <section class="folder-tree-panel">
@@ -1264,11 +1244,11 @@ async function loadSystemInfo() {
     </el-dialog>
 
     <!-- Edit tag dialog -->
-    <el-dialog v-model="showEditTagDialog" title="编辑标签" width="420px">
+    <el-dialog append-to-body v-model="showEditTagDialog" title="编辑标签" width="420px">
       <el-form label-position="top">
         <el-form-item label="标签名称"><el-input v-model="editTagData.name" placeholder="标签名称" /></el-form-item>
         <el-form-item label="描述"><el-input v-model="editTagData.description" type="textarea" :rows="3" placeholder="描述（可选）" /></el-form-item>
-        <el-form-item label="颜色"><el-color-picker v-model="editTagData.color" /><div class="color-picker-row"><button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ active: editTagData.color === c }" :style="{ background: c }" @click="editTagData.color = c"></button></div></el-form-item>
+        <el-form-item label="颜色"><el-color-picker v-model="editTagData.color" :predefine="presetColors" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="showEditTagDialog = false">取消</el-button><el-button type="primary" @click="saveEditedTag">保存</el-button></template>
     </el-dialog>
@@ -1276,6 +1256,22 @@ async function loadSystemInfo() {
 </template>
 
 <style scoped>
+.content-panel.folder-settings { display: grid; gap: 16px; padding: 20px; }
+.folder-settings .panel-header-row { flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0; }
+.folder-settings-title { margin: 0; color: var(--text-primary); font-size: 17px; font-weight: 650; }
+.folder-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.folder-toolbar :deep(.el-button + .el-button) { margin-left: 0; }
+.folder-settings .folder-card { min-width: 0; margin-bottom: 0; }
+.folder-settings .folder-header, .folder-settings .folder-actions { flex-wrap: wrap; gap: 8px; }
+.folder-settings .folder-info-grid code { overflow-wrap: anywhere; }
+.folder-empty { min-width: 0; padding: 24px 16px; border: 1px dashed var(--separator); border-radius: 14px; background: color-mix(in srgb, var(--bg-secondary) 65%, transparent); }
+@media (max-width: 600px) {
+  .content-panel.folder-settings { gap: 14px; padding: 16px; }
+  .folder-toolbar { width: 100%; }
+}
+
+.settings-nav.el-menu{border-right:0;background:var(--bg-card);--el-menu-item-height:42px;--el-menu-hover-bg-color:var(--accent-soft);--el-menu-bg-color:transparent}.settings-nav :deep(.el-menu-item){gap:8px;border-radius:10px}.settings-nav :deep(.el-menu-item.is-active){background:var(--accent-soft)}
+
 .settings-page {
   display: flex;
   flex-direction: column;
@@ -1820,38 +1816,6 @@ async function loadSystemInfo() {
 }
 
 /* Model Tab Bar */
-.model-tab-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  padding: 4px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-}
-
-.model-tab {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  position: relative;
-}
-
-.model-tab.active {
-  background: var(--bg-secondary);
-  color: var(--accent);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
 
 .tab-count-badge {
   display: flex;
@@ -2147,23 +2111,6 @@ async function loadSystemInfo() {
   margin-bottom: 12px;
 }
 
-.tag-color-picker {
-  display: flex;
-  gap: 3px;
-}
-
-.color-swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-
-.color-swatch:hover { transform: scale(1.2); }
-.color-swatch.active { border-color: var(--text-primary); }
-
 /* Info grid */
 .info-grid {
   display: flex;
@@ -2228,12 +2175,6 @@ async function loadSystemInfo() {
 
 .dialog-input:focus { border-color: var(--accent); }
 
-.color-picker-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .color-label {
   font-size: 13px;
   color: var(--text-secondary);
@@ -2253,33 +2194,6 @@ async function loadSystemInfo() {
 }
 
 /* Tasks & Logs */
-.task-filter-bar {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  padding: 4px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-}
-
-.task-filter-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: none;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.task-filter-btn.active {
-  background: var(--bg-secondary);
-  color: var(--accent);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
 
 .task-log-card {
   display: flex;
@@ -2579,18 +2493,6 @@ async function loadSystemInfo() {
   overflow: visible;
 }
 
-.settings-nav-group {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.settings-nav-group + .settings-nav-group {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px solid color-mix(in srgb, var(--separator) 76%, transparent);
-}
-
 .settings-nav-group-title {
   padding: 3px 9px 4px;
   color: var(--text-tertiary);
@@ -2877,24 +2779,6 @@ async function loadSystemInfo() {
   white-space: nowrap;
 }
 
-.model-tab-bar,
-.task-filter-bar {
-  position: sticky;
-  top: 8px;
-  z-index: 4;
-  padding: 5px;
-  border: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--bg-tertiary) 90%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-
-.model-tab,
-.task-filter-btn {
-  min-height: 38px;
-  border-radius: 9px;
-}
-
 .online-models-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 14px;
@@ -2917,12 +2801,6 @@ async function loadSystemInfo() {
 
 .tag-name {
   min-width: 0;
-}
-
-.tag-color-picker {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 190px;
 }
 
 .info-item {
@@ -3015,8 +2893,7 @@ async function loadSystemInfo() {
     grid-template-columns: 14px minmax(100px, 1fr) auto auto auto;
   }
 
-  .tag-desc-text,
-  .tag-color-picker {
+  .tag-desc-text {
     display: none;
   }
 }
@@ -3058,10 +2935,6 @@ async function loadSystemInfo() {
     overflow-x: auto;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
-  }
-
-  .settings-nav-group {
-    display: contents;
   }
 
   .settings-nav-group-title {
@@ -3195,12 +3068,6 @@ async function loadSystemInfo() {
     max-width: 100%;
   }
 
-  .model-tab,
-  .task-filter-btn {
-    padding-inline: 7px;
-    font-size: 12px;
-  }
-
   .online-model-meta {
     grid-template-columns: 1fr;
   }
@@ -3290,52 +3157,6 @@ async function loadSystemInfo() {
   background: var(--surface-card);
   backdrop-filter: blur(var(--glass-blur, 20px));
   -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
-}
-
-.settings-nav-group {
-  display: block;
-}
-
-.settings-nav-group + .settings-nav-group {
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color-light);
-}
-
-.settings-nav-title {
-  padding: var(--spacing-xs) var(--spacing-md);
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-}
-
-.settings-nav-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: 10px var(--spacing-md);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 500;
-  text-align: left;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.settings-nav-item:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.settings-nav-item.active {
-  background: var(--primary-gradient);
-  box-shadow: var(--shadow-md);
-  color: #fff;
 }
 
 .settings-nav-icon {
@@ -3632,7 +3453,7 @@ async function loadSystemInfo() {
   line-height: 1.5;
 }
 
-:deep(.user-create-dialog) {
+:global(.user-create-dialog) {
   border: 1px solid var(--glass-border);
   border-radius: 18px;
   background: var(--surface-elevated);
@@ -3658,20 +3479,6 @@ async function loadSystemInfo() {
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
-  }
-
-  .settings-nav-group {
-    display: contents;
-  }
-
-  .settings-nav-title {
-    display: none;
-  }
-
-  .settings-nav-item {
-    width: auto;
-    flex: 0 0 auto;
-    padding: 10px 14px;
   }
 
   .user-management-header {

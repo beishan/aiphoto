@@ -59,19 +59,58 @@ public class CrawlerSettingsService {
     public ProxyView saveProxy(Long id, ProxyRequest request) {
         CrawlerProxy proxy = id == null ? new CrawlerProxy() : proxyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("代理不存在"));
+        configureProxy(proxy, request);
+        if (id == null) proxy.setPriority(proxyRepository.findAllByOrderByPriorityAscIdAsc().size());
+        proxy = proxyRepository.save(proxy);
+        invalidate();
+        return toView(proxy);
+    }
+
+    /** Build a detached candidate so testing never changes saved routing or credentials. */
+    public CrawlerProxy previewProxy(Long id, ProxyRequest request) {
+        CrawlerProxy candidate = new CrawlerProxy();
+        if (id != null) {
+            CrawlerProxy saved = proxyRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("代理不存在"));
+            candidate.setProxyType(saved.getProxyType());
+            candidate.setControllerUrl(saved.getControllerUrl());
+            candidate.setPasswordCiphertext(saved.getPasswordCiphertext());
+            candidate.setSecretCiphertext(saved.getSecretCiphertext());
+        }
+        configureProxy(candidate, request);
+        return candidate;
+    }
+
+    private void configureProxy(CrawlerProxy proxy, ProxyRequest request) {
         proxy.setName(requireText(request.name(), "代理名称", 100));
         proxy.setHost(validateHost(request.host()));
-        proxy.setPort(clamp(request.port(), 1, 65535));
+        if (request.port() == null || request.port() < 1 || request.port() > 65535) {
+            throw new IllegalArgumentException("代理端口必须在 1 至 65535 之间");
+        }
+        proxy.setPort(request.port());
         proxy.setUsername(clean(request.username(), 255));
         if (request.clearPassword()) proxy.setPasswordCiphertext(null);
         else if (request.password() != null && !request.password().isBlank()) {
             proxy.setPasswordCiphertext(secretService.encrypt(request.password()));
         }
+        String type = request.proxyType() == null ? proxy.getProxyType() : request.proxyType();
+        if (!List.of("HTTP", "MIHOMO").contains(type)) throw new IllegalArgumentException("无效代理类型");
+        proxy.setProxyType(type);
+        if ("MIHOMO".equals(type)) {
+            proxy.setControllerUrl(validateControllerUrl(request.controllerUrl() == null
+                    ? proxy.getControllerUrl() : request.controllerUrl()));
+            if (request.clearSecret()) proxy.setSecretCiphertext(null);
+            else if (request.secret() != null && !request.secret().isBlank()) {
+                if (request.secret().length() > 500 || request.secret().contains("\r") || request.secret().contains("\n")) {
+                    throw new IllegalArgumentException("控制 API 密钥过长或包含换行");
+                }
+                proxy.setSecretCiphertext(secretService.encrypt(request.secret()));
+            }
+        } else {
+            proxy.setControllerUrl(null);
+            proxy.setSecretCiphertext(null);
+        }
         proxy.setEnabled(request.enabled());
-        if (id == null) proxy.setPriority(proxyRepository.findAllByOrderByPriorityAscIdAsc().size());
-        proxy = proxyRepository.save(proxy);
-        invalidate();
-        return toView(proxy);
     }
 
     @Transactional
@@ -118,6 +157,7 @@ public class CrawlerSettingsService {
                 setting.getMaxRetries(),
                 setting.getRetryBaseDelayMillis(),
                 proxyRepository.findByEnabledTrueOrderByPriorityAscIdAsc().stream()
+                        .filter(proxy -> "HTTP".equals(proxy.getProxyType()))
                         .map(proxy -> new ProxyConfig(
                                 proxy.getId(), proxy.getHost(), proxy.getPort(),
                                 proxy.getUsername(), secretService.decrypt(proxy.getPasswordCiphertext())))
@@ -135,7 +175,24 @@ public class CrawlerSettingsService {
                 proxy.getId(), proxy.getName(), proxy.getHost(), proxy.getPort(),
                 proxy.getUsername(), proxy.getPasswordCiphertext() != null
                         && !proxy.getPasswordCiphertext().isBlank(),
-                proxy.getEnabled(), proxy.getPriority());
+                proxy.getEnabled(), proxy.getPriority(), proxy.getProxyType(),
+                proxy.getControllerUrl(), proxy.getSecretCiphertext() != null);
+    }
+
+    public static String validateControllerUrl(String value) {
+        if (value == null || value.length() > 500) throw new IllegalArgumentException("请填写控制 API 地址");
+        java.net.URI uri;
+        try { uri = java.net.URI.create(value.trim()); }
+        catch (IllegalArgumentException exception) { throw new IllegalArgumentException("无效控制 API 地址"); }
+        if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))
+                || uri.getHost() == null || uri.getUserInfo() != null
+                || uri.getQuery() != null || uri.getFragment() != null
+                || uri.getPort() == 0 || uri.getPort() > 65535
+                || !(uri.getPath().isEmpty() || "/".equals(uri.getPath()))) {
+            throw new IllegalArgumentException("控制 API 地址必须是 HTTP/HTTPS 地址且不能包含路径、凭据或查询参数");
+        }
+        return uri.getScheme() + "://" + uri.getHost().toLowerCase(java.util.Locale.ROOT)
+                + ":" + (uri.getPort() == -1 ? ("https".equals(uri.getScheme()) ? 443 : 80) : uri.getPort());
     }
 
     private String validateHost(String value) {
@@ -174,10 +231,17 @@ public class CrawlerSettingsService {
             Integer maxRetries, Long retryBaseDelayMillis) {}
     public record ProxyRequest(
             String name, String host, Integer port, String username, String password,
-            boolean clearPassword, boolean enabled) {}
+            boolean clearPassword, boolean enabled, String proxyType,
+            String controllerUrl, String secret, boolean clearSecret) {
+        public ProxyRequest(String name, String host, Integer port, String username, String password,
+                boolean clearPassword, boolean enabled) {
+            this(name, host, port, username, password, clearPassword, enabled, null, null, null, false);
+        }
+    }
     public record ProxyView(
             Long id, String name, String host, Integer port, String username,
-            boolean hasPassword, boolean enabled, Integer priority) {}
+            boolean hasPassword, boolean enabled, Integer priority, String proxyType,
+            String controllerUrl, boolean secretConfigured) {}
     public record SettingsView(
             boolean directFallback, Integer connectTimeoutSeconds,
             Integer requestTimeoutSeconds, Long minRequestIntervalMillis,

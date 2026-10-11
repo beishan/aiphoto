@@ -145,10 +145,10 @@ function onPhotoClick(photo: Photo, index: number) {
           <el-button type="primary" round @click="saveDescription">保存</el-button>
         </div>
       </div>
-      <div v-else class="description-display" @click="startEditDescription">
+      <el-button text v-else class="ep-control description-display" @click="startEditDescription">
         <p v-if="album?.description" class="description-text">{{ album.description }}</p>
         <p v-else class="description-placeholder">点击添加描述...</p>
-      </div>
+      </el-button>
     </div>
 
     <!-- Content -->
@@ -175,15 +175,15 @@ function onPhotoClick(photo: Photo, index: number) {
         @click="onPhotoClick(photo, index)"
       >
         <template #actions>
-          <button
-            class="set-cover-btn"
+          <el-button
+            class="ep-control set-cover-btn"
             title="设为封面"
             @click.stop="handleSetCover(photo.id)"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
               <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
             </svg>
-          </button>
+          </el-button>
         </template>
       </PhotoCard>
     </div>

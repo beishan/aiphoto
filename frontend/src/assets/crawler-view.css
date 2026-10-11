@@ -85,9 +85,14 @@
 
 .workspace-switcher :deep(.el-segmented) {
   width: 100%;
-  padding: 3px;
-  border-radius: 11px;
+  --el-segmented-item-selected-color: var(--accent);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
   background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .workspace-switcher :deep(.el-segmented__group) {
@@ -104,9 +109,11 @@
 }
 
 .workspace-switcher :deep(.el-segmented__item-selected) {
+  box-sizing: border-box;
   border: 1px solid var(--separator);
+  border-radius: 9px;
   background: var(--surface-elevated);
-  box-shadow: 0 5px 14px var(--shadow-color), inset 0 1px 0 color-mix(in srgb, white 65%, transparent);
+  box-shadow: none;
 }
 
 .overview-workspace,
@@ -975,3 +982,5 @@
     transform: none;
   }
 }
+
+.similarity-field :deep(.el-slider) { min-width: 0; width: 100%; padding-inline: 10px; }

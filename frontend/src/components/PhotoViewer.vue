@@ -5,7 +5,7 @@ import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, useZIndex } from 'element-plus'
 
 const router = useRouter()
 
@@ -19,6 +19,8 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
 
+const { nextZIndex } = useZIndex()
+const viewerZIndex = ref(0)
 const photoStore = usePhotoStore()
 const currentIndex = ref(props.initialIndex)
 const showInfo = ref(false)
@@ -42,13 +44,14 @@ watch(() => props.initialIndex, (val) => {
   currentIndex.value = val
 })
 
-watch(() => props.show, (val) => {
+watch(() => props.show, (val, wasVisible) => {
   if (val) {
+    viewerZIndex.value = nextZIndex()
     document.body.style.overflow = 'hidden'
-  } else {
+  } else if (wasVisible) {
     document.body.style.overflow = ''
   }
-})
+}, { immediate: true })
 
 function close() {
   emit('update:show', false)
@@ -176,56 +179,56 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="viewer">
-      <div v-if="show" class="viewer-overlay" @click.self="close">
+      <div v-if="show" class="viewer-overlay" :style="{ zIndex: viewerZIndex }" @click.self="close">
         <!-- Top toolbar -->
         <div class="viewer-topbar glass">
           <div class="topbar-left">
             <span class="counter">{{ currentIndex + 1 }} / {{ photos.length }}</span>
           </div>
           <div class="topbar-right">
-            <button class="toolbar-btn" @click="toggleFavorite">
+            <el-button class="ep-control toolbar-btn" @click="toggleFavorite">
               <svg v-if="currentPhoto?.favorite" viewBox="0 0 24 24" fill="#ff453a" width="22" height="22">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
                 <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
               </svg>
-            </button>
-            <button class="toolbar-btn" @click="openAlbumPicker">
+            </el-button>
+            <el-button class="ep-control toolbar-btn" @click="openAlbumPicker">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-            </button>
-            <button class="toolbar-btn danger" @click="deletePhoto">
+            </el-button>
+            <el-button type="danger" class="ep-control toolbar-btn danger" @click="deletePhoto">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
               </svg>
-            </button>
-            <button class="toolbar-btn" @click="showInfo = !showInfo">
+            </el-button>
+            <el-button class="ep-control toolbar-btn" @click="showInfo = !showInfo">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
               </svg>
-            </button>
-            <button class="toolbar-btn" @click="goToDetail" title="查看详情">
+            </el-button>
+            <el-button class="ep-control toolbar-btn" @click="goToDetail" title="查看详情">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/>
               </svg>
-            </button>
-            <button class="toolbar-btn" @click="close">
+            </el-button>
+            <el-button class="ep-control toolbar-btn" @click="close">
               <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                 <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
               </svg>
-            </button>
+            </el-button>
           </div>
         </div>
 
         <!-- Image area -->
         <div class="viewer-image-area">
-          <button class="nav-btn prev-btn" @click="prev" :disabled="currentIndex <= 0">
+          <el-button class="ep-control nav-btn prev-btn" @click="prev" :disabled="currentIndex <= 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
               <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
             </svg>
-          </button>
+          </el-button>
 
           <div class="viewer-image-wrapper">
             <video
@@ -240,11 +243,11 @@ onUnmounted(() => {
             <img v-else-if="currentPhoto" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
           </div>
 
-          <button class="nav-btn next-btn" @click="next" :disabled="currentIndex >= photos.length - 1">
+          <el-button class="ep-control nav-btn next-btn" @click="next" :disabled="currentIndex >= photos.length - 1">
             <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
               <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
             </svg>
-          </button>
+          </el-button>
         </div>
 
         <!-- Info panel -->
@@ -273,7 +276,7 @@ onUnmounted(() => {
           </div>
         </Transition>
 
-        <el-dialog v-model="showAlbumPicker" title="添加到相册" width="460px" :z-index="10020" class="mv-dialog album-picker-dialog">
+        <el-dialog append-to-body v-model="showAlbumPicker" title="添加到相册" width="460px" class="mv-dialog album-picker-dialog">
               <!-- Create new album -->
               <div v-if="showCreateAlbum" class="create-album-row">
                 <el-input
@@ -289,19 +292,19 @@ onUnmounted(() => {
                   {{ creatingAlbum ? '创建中...' : '创建并添加' }}
                 </el-button>
               </div>
-              <button v-else class="create-album-btn" @click="showCreateAlbum = true">
+              <el-button v-else class="ep-control create-album-btn" @click="showCreateAlbum = true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
                 <span>新建相册</span>
-              </button>
+              </el-button>
 
               <!-- Album list -->
               <div class="album-list" v-if="!loadingAlbums">
-                <button
+                <el-button
                   v-for="album in albums"
                   :key="album.id"
-                  class="album-item"
+                  class="ep-control album-item"
                   @click="addToAlbum(album.id)"
                   :disabled="addingToAlbum"
                 >
@@ -315,7 +318,7 @@ onUnmounted(() => {
                     <span class="album-name">{{ album.name }}</span>
                     <span class="album-count">{{ album.photoCount }} 张</span>
                   </div>
-                </button>
+                </el-button>
               </div>
               <div v-else class="picker-loading">
                 <div class="loading-spinner"></div>
@@ -330,7 +333,6 @@ onUnmounted(() => {
 .viewer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
   background: #000;
   display: flex;
   flex-direction: column;
