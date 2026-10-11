@@ -104,6 +104,8 @@ public class CrawlImportItemService {
 
         AiTask task = new AiTask();
         task.setType(AiTask.TaskType.INDEX);
+        photo.setAiOwnerId(ownerId);
+        photoRepository.save(photo);
         task.setPhotoIdsJson("[" + photo.getId() + "]");
         task = aiTaskRepository.save(task);
         Long taskId = task.getId();

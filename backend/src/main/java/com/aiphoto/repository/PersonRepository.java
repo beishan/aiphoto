@@ -25,4 +25,14 @@ public interface PersonRepository extends JpaRepository<Person, Long> {
     @Modifying
     @Query(value = "UPDATE people SET cover_face_id = :faceId WHERE id = :personId", nativeQuery = true)
     void setCoverFaceId(@Param("personId") Long personId, @Param("faceId") Long faceId);
+
+    @Modifying
+    @Query(value = """
+        UPDATE people SET photo_count = (
+            SELECT COUNT(DISTINCT f.photo_id) FROM face_clusters f
+            JOIN photos p ON p.id = f.photo_id
+            WHERE f.person_id = :personId AND p.deleted_at IS NULL
+        ) WHERE id = :personId
+        """, nativeQuery = true)
+    void refreshPhotoCount(@Param("personId") Long personId);
 }

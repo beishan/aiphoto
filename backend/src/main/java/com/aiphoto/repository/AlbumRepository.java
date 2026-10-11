@@ -9,8 +9,17 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 public interface AlbumRepository extends JpaRepository<Album, Long> {
+    @Query("SELECT DISTINCT a FROM Album a LEFT JOIN FETCH a.photos WHERE a.id = :id")
+    Optional<Album> findWithPhotos(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Album a WHERE a.id = :id")
+    Optional<Album> findForTraining(@Param("id") Long id);
     List<Album> findByOwner(User owner);
     List<Album> findByType(Album.AlbumType type);
     List<Album> findBySharedTrue();

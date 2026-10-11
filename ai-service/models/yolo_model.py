@@ -8,6 +8,7 @@ import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import io
+from media import decode_media
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,21 @@ SCENE_KEYWORDS = {
     "street", "park", "garden", "kitchen", "bedroom", "living room",
 }
 
+ANIMALS = {"bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe"}
+FOODS = {"banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake"}
+
+
+def category_for(name: str) -> str:
+    if name == "person":
+        return "person"
+    if name in ANIMALS:
+        return "animal"
+    if name in FOODS:
+        return "food"
+    if name == "potted plant":
+        return "plant"
+    return "scene" if name.lower() in SCENE_KEYWORDS else "object"
+
 
 class YOLOModel:
     """YOLOv8 model for object detection."""
@@ -34,11 +50,13 @@ class YOLOModel:
             raise FileNotFoundError(f"YOLO model not found: {model_path}")
         logger.info(f"Loading YOLOv8 model: {model_path}")
         self.model = YOLO(model_path)
+        if self.model.task != "detect":
+            raise ValueError("请选择 YOLO 目标检测权重；分类模型不能提供目标框")
         logger.info("YOLOv8 model loaded")
 
     def detect(self, image_data: bytes, confidence_threshold: float = 0.5, filename: str = "") -> list[Detection]:
         """Detect objects in an image."""
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        image = decode_media(image_data, filename)
         results = self.model(image, conf=confidence_threshold, verbose=False)
 
         detections = []
@@ -52,7 +70,7 @@ class YOLOModel:
 
                 if name not in seen_names:
                     seen_names.add(name)
-                    category = "scene" if name.lower() in SCENE_KEYWORDS else "object"
+                    category = category_for(name)
                     detections.append(
                         Detection(name=name, confidence=conf, category=category)
                     )

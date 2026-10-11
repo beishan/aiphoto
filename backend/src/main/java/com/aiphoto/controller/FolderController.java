@@ -18,6 +18,7 @@ import java.util.Map;
 public class FolderController {
 
     private final FolderService folderService;
+    private final com.aiphoto.repository.UserRepository userRepository;
 
     @GetMapping
     public ResponseEntity<List<ScanFolderDTO>> listFolders() {
@@ -25,8 +26,11 @@ public class FolderController {
     }
 
     @PostMapping
-    public ResponseEntity<ScanFolderDTO> addFolder(@RequestBody ScanFolderDTO dto) {
-        return ResponseEntity.ok(folderService.addFolder(dto));
+    public ResponseEntity<ScanFolderDTO> addFolder(@RequestBody ScanFolderDTO dto,
+            org.springframework.security.core.Authentication authentication) {
+        Long userId = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在")).getId();
+        return ResponseEntity.ok(folderService.addFolder(dto, userId));
     }
 
     @GetMapping("/{id}")

@@ -5,6 +5,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,6 +27,21 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Override
     @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NULL")
     Optional<Photo> findById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NULL")
+    Optional<Photo> findForIndexing(@Param("id") Long id);
+
+    @Query("""
+        SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND (
+            (:clip = true AND p.embedding IS NULL) OR
+            (:faces = true AND p.facesIndexed = false) OR
+            (:tags = true AND p.tagsIndexed = false) OR
+            (:caption = true AND p.captionIndexed = false)) ORDER BY p.id
+        """)
+    List<Photo> findNeedingIndexing(@Param("clip") boolean clip,
+            @Param("faces") boolean faces, @Param("tags") boolean tags,
+            @Param("caption") boolean caption);
 
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.id IN :ids")
@@ -58,8 +75,16 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query(value = "SELECT pg_advisory_xact_lock(hashtext(:hash))", nativeQuery = true)
     void lockFileHash(@Param("hash") String hash);
 
-    @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND embedding <=> CAST(:query_vector AS vector) < :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
+    @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND embedding <=> CAST(:query_vector AS vector) <= :threshold ORDER BY embedding <=> CAST(:query_vector AS vector) LIMIT :limit", nativeQuery = true)
     List<Photo> findByVectorSimilarity(@Param("query_vector") String queryVector, @Param("threshold") double threshold, @Param("limit") int limit);
+
+    @Query(value = """
+        SELECT p.* FROM photos p WHERE p.deleted_at IS NULL AND p.embedding IS NOT NULL
+        AND p.embedding <=> CAST(:query_vector AS vector) <= :threshold
+        ORDER BY p.embedding <=> CAST(:query_vector AS vector)
+        """, nativeQuery = true)
+    List<Photo> findAllByVectorSimilarity(@Param("query_vector") String queryVector,
+            @Param("threshold") double threshold);
 
     @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND to_tsvector('simple', coalesce(note, '') || ' ' || coalesce(ai_caption, '')) @@ plainto_tsquery('simple', :query)", nativeQuery = true)
     Page<Photo> fullTextSearch(@Param("query") String query, Pageable pageable);

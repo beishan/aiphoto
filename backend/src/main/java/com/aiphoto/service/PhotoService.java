@@ -106,6 +106,7 @@ public class PhotoService {
         photo.setFileSize((long) data.length);
         photo.setMediaType(detectMediaType(originalFilename));
         photo.setOriginalFilename(originalFilename);
+        photo.setAiOwnerId(userId);
 
         try {
             Metadata metadata = ImageMetadataReader.readMetadata(new java.io.ByteArrayInputStream(data));
@@ -122,7 +123,15 @@ public class PhotoService {
         aiTask.setPhotoIdsJson("[" + photo.getId() + "]");
         aiTask = aiTaskRepository.save(aiTask);
 
-        photoIndexingService.indexPhotos(aiTask.getId(), List.of(photo.getId()));
+        Long indexTaskId = aiTask.getId();
+        Long indexPhotoId = photo.getId();
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        photoIndexingService.indexPhotos(indexTaskId, List.of(indexPhotoId));
+                    }
+                });
 
         return toDTO(photo);
     }

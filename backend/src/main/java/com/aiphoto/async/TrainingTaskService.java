@@ -1,133 +1,92 @@
 package com.aiphoto.async;
 
 import com.aiphoto.ai.AiServiceClient;
+import com.aiphoto.ai.AiThresholds;
 import com.aiphoto.dto.TaskProgressDTO;
-import com.aiphoto.entity.*;
-import com.aiphoto.repository.*;
+import com.aiphoto.entity.AiTask;
+import com.aiphoto.repository.AiTaskRepository;
 import com.aiphoto.storage.LocalStorageService;
 import com.aiphoto.websocket.ProgressWebSocketHandler;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TrainingTaskService {
-
     private final AiServiceClient aiServiceClient;
-    private final AlbumRepository albumRepository;
-    private final TrainingSetRepository trainingSetRepository;
-    private final PhotoRepository photoRepository;
     private final AiTaskRepository aiTaskRepository;
     private final ProgressWebSocketHandler progressHandler;
     private final LocalStorageService storageService;
+    private final TrainingResultService resultService;
+    private final ObjectMapper objectMapper;
 
     @Async
     public void trainAlbum(Long taskId, Long albumId, Double threshold) {
-        log.info("Processing training task for album: {}", albumId);
-
         AiTask task = aiTaskRepository.findById(taskId).orElse(null);
         if (task == null) return;
-
         task.setStatus(AiTask.TaskStatus.RUNNING);
         aiTaskRepository.save(task);
-
         try {
-            Album album = albumRepository.findById(albumId)
-                    .orElseThrow(() -> new RuntimeException("Album not found"));
-
-            List<Photo> positiveSamples = album.getPhotos();
-            List<List<Float>> embeddings = new ArrayList<>();
-
-            for (int i = 0; i < positiveSamples.size(); i++) {
-                Photo photo = positiveSamples.get(i);
-                byte[] data = storageService.downloadBytes(photo.getFilePath());
-                AiServiceClient.EmbeddingResponse response = aiServiceClient.embed(data, photo.getOriginalFilename());
-                embeddings.add(response.getEmbedding());
-
-                int progress = (int) ((i + 1) * 50.0 / positiveSamples.size());
-                task.setProgress(progress);
+            double similarity = threshold == null ? 0.75 : threshold;
+            AiThresholds.distance(similarity);
+            var samples = resultService.samples(albumId);
+            float[] centroid = new float[512];
+            for (int i = 0; i < samples.size(); i++) {
+                var photo = samples.get(i);
+                float[] embedding = photo.getEmbedding();
+                if (embedding == null) {
+                    byte[] data = storageService.downloadBytes(photo.getFilePath());
+                    embedding = IndexResultService.vector(aiServiceClient.embed(data, photo.getOriginalFilename()).getEmbedding());
+                }
+                if (embedding.length != centroid.length) throw new IllegalArgumentException("训练样本向量维度不兼容");
+                for (int j = 0; j < centroid.length; j++) centroid[j] += embedding[j] / samples.size();
+                task.setProgress((i + 1) * 80 / samples.size());
                 aiTaskRepository.save(task);
-
-                progressHandler.sendProgress(createProgressDTO(task, "Extracting features: " + (i + 1) + "/" + positiveSamples.size()));
+                send(task, "提取训练样本 " + (i + 1) + "/" + samples.size());
             }
-
-            // Compute prototype vector (centroid)
-            int dim = embeddings.get(0).size();
-            float[] centroid = new float[dim];
-            for (List<Float> emb : embeddings) {
-                for (int j = 0; j < dim; j++) {
-                    centroid[j] += emb.get(j);
-                }
-            }
-            for (int j = 0; j < dim; j++) {
-                centroid[j] /= embeddings.size();
-            }
-            List<Float> centroidList = new ArrayList<>();
-            for (float v : centroid) centroidList.add(v);
-
-            // Save training set
-            TrainingSet trainingSet = trainingSetRepository.findByAlbumId(album.getId())
-                    .orElse(new TrainingSet());
-            trainingSet.setAlbum(album);
-            trainingSet.setPrototypeVector(centroid);
-            trainingSet.setThreshold(threshold != null ? threshold : 0.75);
-            trainingSetRepository.save(trainingSet);
-
-            // Scan all photos and find matches above threshold
-            String vectorStr = vectorToString(centroidList);
-            double thr = trainingSet.getThreshold();
-            List<Photo> allPhotos = photoRepository.findAll();
-            int matched = 0;
-            for (int i = 0; i < allPhotos.size(); i++) {
-                Photo p = allPhotos.get(i);
-                if (p.getEmbedding() != null && !album.getPhotos().contains(p)) {
-                    List<Photo> similar = photoRepository.findByVectorSimilarity(vectorStr, 1.0 - thr, 1);
-                    if (!similar.isEmpty() && similar.get(0).getId().equals(p.getId())) {
-                        album.getPhotos().add(p);
-                        matched++;
-                    }
-                }
-                int progress = 50 + (int) ((i + 1) * 50.0 / allPhotos.size());
-                task.setProgress(progress);
-                if (i % 10 == 0) {
-                    aiTaskRepository.save(task);
-                    progressHandler.sendProgress(createProgressDTO(task, "Scanning: " + (i + 1) + "/" + allPhotos.size()));
-                }
-            }
-            albumRepository.save(album);
-
+            double norm = 0;
+            for (float value : centroid) norm += value * (double) value;
+            if (!Double.isFinite(norm) || norm <= 0) throw new IllegalArgumentException("训练样本无法生成有效原型向量");
+            for (int j = 0; j < centroid.length; j++) centroid[j] /= (float) Math.sqrt(norm);
+            int matched = resultService.complete(albumId, centroid, similarity);
+            task.setResultJson(json(Map.of("samples", samples.size(), "matched", matched)));
             task.setStatus(AiTask.TaskStatus.COMPLETED);
             task.setProgress(100);
-            aiTaskRepository.save(task);
-            progressHandler.sendProgress(createProgressDTO(task, "Training completed"));
-        } catch (Exception e) {
-            log.error("Training task failed", e);
+        } catch (Exception exception) {
+            log.error("Album training failed", exception);
             task.setStatus(AiTask.TaskStatus.FAILED);
-            task.setResultJson("{\"error\": \"" + e.getMessage() + "\"}");
+            task.setResultJson(json(Map.of("error", exception.getMessage() == null
+                    ? exception.getClass().getSimpleName() : exception.getMessage())));
+        } finally {
+            task.setFinishedAt(LocalDateTime.now());
             aiTaskRepository.save(task);
+            send(task, task.getStatus() == AiTask.TaskStatus.COMPLETED ? "训练完成" : "训练失败");
         }
     }
 
-    private TaskProgressDTO createProgressDTO(AiTask task, String message) {
+    private String json(Object result) {
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (JsonProcessingException exception) {
+            return "{\"error\":\"无法保存训练结果\"}";
+        }
+    }
+
+    private void send(AiTask task, String message) {
         TaskProgressDTO dto = new TaskProgressDTO();
         dto.setTaskId(task.getId());
         dto.setType(task.getType().name());
         dto.setStatus(task.getStatus().name());
         dto.setProgress(task.getProgress());
         dto.setMessage(message);
-        return dto;
-    }
-
-    private String vectorToString(List<Float> vector) {
-        return "[" + vector.stream()
-                .map(String::valueOf)
-                .collect(Collectors.joining(",")) + "]";
+        progressHandler.sendProgress(dto);
     }
 }

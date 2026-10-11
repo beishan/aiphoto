@@ -104,8 +104,12 @@ public class AlbumService {
     }
 
     public Map<String, Object> trainAlbum(Long albumId, Double threshold) {
-        Album album = albumRepository.findById(albumId)
+        com.aiphoto.ai.AiThresholds.distance(threshold == null ? 0.75 : threshold);
+        Album album = albumRepository.findWithPhotos(albumId)
                 .orElseThrow(() -> new RuntimeException("Album not found"));
+        if (album.getPhotos().stream().noneMatch(photo -> photo.getDeletedAt() == null)) {
+            throw new IllegalArgumentException("请先向相册添加训练样本");
+        }
 
         AiTask aiTask = new AiTask();
         aiTask.setType(AiTask.TaskType.TRAIN);

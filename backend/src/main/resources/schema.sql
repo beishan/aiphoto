@@ -550,6 +550,23 @@ CREATE TABLE IF NOT EXISTS photo_sources (
 CREATE INDEX IF NOT EXISTS idx_photo_sources_photo ON photo_sources(photo_id);
 
 -- Default admin user (password: admin123)
+-- AI stage completion is saved atomically with results, so retries can resume safely.
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS faces_indexed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS tags_indexed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS caption_indexed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS ai_owner_id BIGINT;
+ALTER TABLE scan_folders ADD COLUMN IF NOT EXISTS ai_owner_id BIGINT;
+UPDATE photos p SET faces_indexed = TRUE
+WHERE faces_indexed = FALSE AND EXISTS (SELECT 1 FROM face_clusters f WHERE f.photo_id = p.id);
+UPDATE photos SET caption_indexed = TRUE
+WHERE caption_indexed = FALSE AND ai_caption IS NOT NULL AND btrim(ai_caption) <> '';
+-- Repair historical counts without deleting faces or changing manual assignments.
+UPDATE people person SET photo_count = (
+    SELECT COUNT(DISTINCT face.photo_id) FROM face_clusters face
+    JOIN photos photo ON photo.id = face.photo_id
+    WHERE face.person_id = person.id AND photo.deleted_at IS NULL
+);
+
 INSERT INTO users (username, password_hash, role) VALUES
     ('admin', '$2a$10$ZIEvrdNQ8X8Nr88UCEypDOVaKM5KIt.0w.UPJaQqpiwwhIB5UtqzW', 'ADMIN')
 ON CONFLICT (username) DO NOTHING;

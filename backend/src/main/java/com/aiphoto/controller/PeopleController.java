@@ -18,6 +18,7 @@ import java.util.Map;
 public class PeopleController {
 
     private final FaceService faceService;
+    private final com.aiphoto.repository.UserRepository userRepository;
 
     @GetMapping
     public ResponseEntity<List<PersonDTO>> listPeople() {
@@ -50,8 +51,10 @@ public class PeopleController {
     }
 
     @PostMapping("/recluster")
-    public ResponseEntity<Map<String, Object>> recluster() {
-        int merged = faceService.recluster();
+    public ResponseEntity<Map<String, Object>> recluster(org.springframework.security.core.Authentication authentication) {
+        Long userId = userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在")).getId();
+        int merged = faceService.recluster(userId);
         return ResponseEntity.ok(Map.of("merged", merged));
     }
 

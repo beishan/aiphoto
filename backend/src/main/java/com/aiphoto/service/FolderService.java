@@ -58,7 +58,7 @@ public class FolderService {
     );
 
     @Transactional
-    public ScanFolderDTO addFolder(ScanFolderDTO dto) {
+    public ScanFolderDTO addFolder(ScanFolderDTO dto, Long userId) {
         if (dto.getPath() == null || dto.getPath().isBlank()) {
             throw new IllegalArgumentException("请选择扫描目录");
         }
@@ -77,6 +77,7 @@ public class FolderService {
         }
 
         ScanFolder folder = new ScanFolder();
+        folder.setAiOwnerId(userId);
         folder.setName(dto.getName() == null || dto.getName().isBlank() ? normalizedPath : dto.getName().trim());
         folder.setPath(normalizedPath);
         folder.setDescription(dto.getDescription() == null || dto.getDescription().isBlank() ? null : dto.getDescription().trim());
@@ -250,6 +251,7 @@ public class FolderService {
 
             // Save photo entity
             Photo photo = createPhotoEntity(data, filename, objectName, hashMd5, folder.getId());
+            photo.setAiOwnerId(folder.getAiOwnerId());
             photoRepository.save(photo);
 
             // Trigger AI indexing
@@ -258,6 +260,7 @@ public class FolderService {
         } else {
             // LINK mode - just record the path
             Photo photo = createPhotoEntity(data, filename, imagePath.toAbsolutePath().toString(), hashMd5, folder.getId());
+            photo.setAiOwnerId(folder.getAiOwnerId());
             photoRepository.save(photo);
 
             // Trigger AI indexing

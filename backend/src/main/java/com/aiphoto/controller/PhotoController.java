@@ -252,8 +252,8 @@ public class PhotoController {
     }
 
     @PostMapping("/index-all")
-    public ResponseEntity<Map<String, Object>> indexAllPhotos() {
-        List<Photo> photos = photoRepository.findByEmbeddingIsNull();
+    public ResponseEntity<Map<String, Object>> indexAllPhotos(Authentication authentication) {
+        List<Photo> photos = photoIndexingService.findPendingPhotos();
         if (photos.isEmpty()) {
             return ResponseEntity.ok(Map.of("taskId", 0, "count", 0, "message", "No photos to index"));
         }
@@ -265,7 +265,7 @@ public class PhotoController {
         aiTask.setPhotoIdsJson(photoIds.toString());
         aiTask = aiTaskRepository.save(aiTask);
 
-        photoIndexingService.indexPhotos(aiTask.getId(), photoIds);
+        photoIndexingService.indexPhotos(aiTask.getId(), photoIds, getUserId(authentication));
 
         return ResponseEntity.ok(Map.of("taskId", aiTask.getId(), "count", photoIds.size()));
     }

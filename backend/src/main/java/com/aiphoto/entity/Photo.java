@@ -52,6 +52,18 @@ public class Photo {
     @Column(columnDefinition = "vector(512)")
     private float[] embedding;
 
+    @Column(nullable = false)
+    private boolean facesIndexed;
+
+    @Column(nullable = false)
+    private boolean tagsIndexed;
+
+    @Column(nullable = false)
+    private boolean captionIndexed;
+
+    /** User whose settings apply to background indexing; null for legacy imports. */
+    private Long aiOwnerId;
+
     private Integer width;
 
     private Integer height;

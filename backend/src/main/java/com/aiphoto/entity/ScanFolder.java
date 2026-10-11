@@ -27,6 +27,8 @@ public class ScanFolder {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    private Long aiOwnerId;
+
     @Column(nullable = false, length = 10)
     @Enumerated(EnumType.STRING)
     private StorageMode storageMode = StorageMode.COPY;

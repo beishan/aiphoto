@@ -90,6 +90,18 @@ public class ModelManagementService {
         return resolved;
     }
 
+    public Path prepareDownloadedTarget(String relativePath) throws IOException {
+        Path target = resolve(relativePath);
+        Files.createDirectories(target.getParent());
+        ensureInsideRoot(target);
+        return target;
+    }
+
+    public void copyDownloadedFile(Path source, String relativePath) throws IOException {
+        Path target = prepareDownloadedTarget(relativePath);
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
     private void ensureInsideRoot(Path path) {
         Path root = Path.of(configuredRoot).toAbsolutePath().normalize();
         if (!path.startsWith(root)) {

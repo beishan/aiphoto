@@ -45,3 +45,9 @@ ai-service/models_cache/
 
 # Local AI models (large files)
 ai-models/
+
+# Workspace verification dependency caches
+.m2/
+.pnpm-store/
+.ai-test-deps/
+.pip-cache/

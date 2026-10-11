@@ -9,6 +9,7 @@ import numpy as np
 import insightface
 import torch
 from insightface.app import FaceAnalysis
+from media import decode_media
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +50,8 @@ class InsightFaceModel:
 
     def detect(self, image_data: bytes, filename: str = "") -> list[FaceDetection]:
         """Detect faces and extract embeddings."""
-        nparr = np.frombuffer(image_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if img is None:
-            raise ValueError("Failed to decode image")
+        image = decode_media(image_data, filename)
+        img = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
 
         faces = self.app.get(img)
 

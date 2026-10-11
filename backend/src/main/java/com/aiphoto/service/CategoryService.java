@@ -192,42 +192,7 @@ public class CategoryService {
         categoryRepository.updatePhotoCount(categoryId);
     }
 
-    /**
-     * Reclassify all existing photos into system categories based on their YOLO tags.
-     * YOLO category -> system category icon mapping.
-     */
-    private static final Map<String, String> YOLO_TO_CATEGORY_ICON = Map.of(
-            "person", "person",
-            "animal", "animal",
-            "food", "food"
-    );
-    private static final Map<String, String> YOLO_NAME_OVERRIDE = Map.of(
-            "potted plant", "plant"
-    );
-
-    /**
-     * YOLO name -> category mapping for updating existing tags.
-     */
-    private static final Map<String, String> YOLO_NAME_TO_CATEGORY = Map.ofEntries(
-            Map.entry("person", "person"),
-            Map.entry("bird", "animal"), Map.entry("cat", "animal"), Map.entry("dog", "animal"),
-            Map.entry("horse", "animal"), Map.entry("sheep", "animal"), Map.entry("cow", "animal"),
-            Map.entry("elephant", "animal"), Map.entry("bear", "animal"), Map.entry("zebra", "animal"),
-            Map.entry("giraffe", "animal"),
-            Map.entry("bottle", "food"), Map.entry("wine glass", "food"), Map.entry("cup", "food"),
-            Map.entry("fork", "food"), Map.entry("knife", "food"), Map.entry("spoon", "food"),
-            Map.entry("bowl", "food"), Map.entry("banana", "food"), Map.entry("apple", "food"),
-            Map.entry("sandwich", "food"), Map.entry("orange", "food"), Map.entry("broccoli", "food"),
-            Map.entry("carrot", "food"), Map.entry("hot dog", "food"), Map.entry("pizza", "food"),
-            Map.entry("donut", "food"), Map.entry("cake", "food"),
-            Map.entry("potted plant", "furniture"),
-            Map.entry("chair", "furniture"), Map.entry("couch", "furniture"),
-            Map.entry("bed", "furniture"), Map.entry("dining table", "furniture"),
-            Map.entry("bicycle", "vehicle"), Map.entry("car", "vehicle"), Map.entry("motorcycle", "vehicle"),
-            Map.entry("airplane", "vehicle"), Map.entry("bus", "vehicle"), Map.entry("train", "vehicle"),
-            Map.entry("boat", "vehicle")
-    );
-
+    /** Repair legacy tags and assign their photos using the shared YOLO mapping. */
     @Transactional
     public int reclassifyAll() {
         List<Category> systemCategories = categoryRepository.findByIsSystemTrue();
@@ -245,8 +210,9 @@ public class CategoryService {
         aiTags.addAll(tagRepository.findByType(Tag.TagType.OBJECT));
         aiTags.addAll(tagRepository.findByType(Tag.TagType.SCENE));
         for (Tag tag : aiTags) {
-            if (tag.getCategory() == null || tag.getCategory().isEmpty()) {
-                String inferredCategory = YOLO_NAME_TO_CATEGORY.get(tag.getName());
+            if (tag.getCategory() == null || tag.getCategory().isEmpty()
+                    || "object".equals(tag.getCategory()) || "scene".equals(tag.getCategory())) {
+                String inferredCategory = com.aiphoto.ai.YoloCategories.category(tag.getName(), tag.getCategory());
                 if (inferredCategory != null) {
                     tag.setCategory(inferredCategory);
                     tagRepository.save(tag);
@@ -262,17 +228,7 @@ public class CategoryService {
             // Refresh tag to get updated category
             tag = tagRepository.findById(tag.getId()).orElse(tag);
 
-            // Determine which system category this tag matches
-            // First check name override (e.g., "potted plant" -> "plant")
-            String matchedIcon = YOLO_NAME_OVERRIDE.get(tag.getName());
-            if (matchedIcon == null && tag.getCategory() != null) {
-                // Check category field (e.g., "person", "animal", "food")
-                matchedIcon = YOLO_TO_CATEGORY_ICON.get(tag.getCategory());
-            }
-            if (matchedIcon == null) {
-                // Fallback: check name field
-                matchedIcon = YOLO_TO_CATEGORY_ICON.get(tag.getName());
-            }
+            String matchedIcon = com.aiphoto.ai.YoloCategories.icon(tag.getName(), tag.getCategory());
             if (matchedIcon == null) continue;
 
             Category category = iconToCategory.get(matchedIcon);

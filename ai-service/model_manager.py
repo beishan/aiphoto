@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from threading import RLock
 from typing import Any
+from contextlib import contextmanager
+from model_validation import validate_model_path
 
 import torch
 
@@ -77,9 +79,12 @@ class ModelManager:
         for name in MODEL_TYPES:
             setting = self.config[name]
             if setting.get("enabled"):
-                path = self.resolve_path(str(setting.get("path", "")))
-                if not path.exists():
-                    self.errors[name] = f"本地模型不存在: {path}"
+                try:
+                    path = self.resolve_path(str(setting.get("path", "")))
+                    validate_model_path(name, path)
+                    self.errors[name] = None
+                except (ValueError, OSError) as exc:
+                    self.errors[name] = str(exc)
 
     def reload(self, name: str) -> dict[str, Any]:
         if name not in MODEL_TYPES:
@@ -92,10 +97,9 @@ class ModelManager:
             if not setting.get("enabled"):
                 return self.model_status(name)
 
-            path = self.resolve_path(str(setting.get("path", "")))
             try:
-                if not path.exists():
-                    raise FileNotFoundError(f"本地模型不存在: {path}")
+                path = self.resolve_path(str(setting.get("path", "")))
+                validate_model_path(name, path)
                 self._make_room(name)
                 if name == "clip":
                     self.models[name] = CLIPModel(str(path))
@@ -120,6 +124,13 @@ class ModelManager:
             if model is not None:
                 self._touch(name)
             return model
+
+    @contextmanager
+    def use(self, name: str):
+        """Keep a model resident until inference ends, including concurrent reloads."""
+        with self.lock:
+            model = self.get(name)
+            yield model
 
     def _make_room(self, requested_name: str) -> None:
         while sum(model is not None for model in self.models.values()) >= self.max_loaded_models:
@@ -147,28 +158,49 @@ class ModelManager:
     def update(self, name: str, path: str, enabled: bool) -> dict[str, Any]:
         if name not in MODEL_TYPES:
             raise ValueError(f"不支持的模型类型: {name}")
-        self.resolve_path(path)
+        resolved = self.resolve_path(path)
+        if enabled:
+            validate_model_path(name, resolved)
         with self.lock:
+            previous = self.config[name].copy()
+            was_loaded = self.models[name] is not None
             self.config[name] = {"path": path, "enabled": enabled}
+            result = self.reload(name)
+            if result["error"]:
+                self.config[name] = previous
+                self._unload(name)
+                if was_loaded:
+                    self.reload(name)
+                else:
+                    self.errors[name] = None
+                    self.load_enabled()
+                return result
             self._save_config()
-        return self.reload(name)
+            return result
 
     def model_status(self, name: str) -> dict[str, Any]:
         setting = self.config[name]
-        path = self.resolve_path(str(setting.get("path", "")))
+        try:
+            path = self.resolve_path(str(setting.get("path", "")))
+            exists = path.exists()
+            error = self.errors[name]
+        except (ValueError, OSError) as exc:
+            exists = False
+            error = str(exc)
         return {
             "name": name,
             "enabled": bool(setting.get("enabled")),
             "path": str(setting.get("path", "")),
-            "exists": path.exists(),
+            "exists": exists,
             "loaded": self.models[name] is not None,
-            "error": self.errors[name],
+            "error": error,
         }
 
     def status(self) -> dict[str, Any]:
-        return {
-            "root": str(self.root),
-            "offline": True,
-            "maxLoadedModels": self.max_loaded_models,
-            "models": [self.model_status(name) for name in MODEL_TYPES],
-        }
+        with self.lock:
+            return {
+                "root": str(self.root),
+                "offline": True,
+                "maxLoadedModels": self.max_loaded_models,
+                "models": [self.model_status(name) for name in MODEL_TYPES],
+            }

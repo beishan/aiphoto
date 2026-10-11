@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 import io
+from media import decode_media
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +26,13 @@ class BLIPModel:
         self.model.eval()
         logger.info(f"BLIP-2 model loaded on {self.device}")
 
-    def generate_caption(self, image_data: bytes, max_length: int = 100) -> str:
+    def generate_caption(self, image_data: bytes, max_length: int = 100, filename: str = "") -> str:
         """Generate a caption for an image."""
-        image = Image.open(io.BytesIO(image_data)).convert("RGB")
+        image = decode_media(image_data, filename)
 
-        inputs = self.processor(images=image, return_tensors="pt").to(self.device)
+        inputs = self.processor(images=image, return_tensors="pt").to(
+            self.device, torch.float16 if self.device == "cuda" else torch.float32
+        )
 
         with torch.no_grad():
             generated_ids = self.model.generate(

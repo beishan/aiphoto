@@ -1,6 +1,7 @@
 package com.aiphoto.service;
 
 import com.aiphoto.ai.AiServiceClient;
+import com.aiphoto.ai.AiThresholds;
 import com.aiphoto.dto.PhotoDTO;
 import com.aiphoto.dto.SearchRequest;
 import com.aiphoto.entity.Photo;
@@ -30,25 +31,6 @@ public class SearchService {
     private final AiServiceClient aiServiceClient;
     private final SettingService settingService;
 
-    // Chinese to English mapping for better CLIP search
-    private static final Map<String, String> ZH_TO_EN = Map.ofEntries(
-            Map.entry("宠物", "pet animal cat dog"),
-            Map.entry("猫", "cat kitty"),
-            Map.entry("狗", "dog puppy"),
-            Map.entry("美食", "food meal restaurant"),
-            Map.entry("吃", "eating food dining"),
-            Map.entry("风景", "landscape scenery nature"),
-            Map.entry("海边", "beach ocean sea"),
-            Map.entry("日落", "sunset sunset sky"),
-            Map.entry("家庭", "family people together"),
-            Map.entry("人物", "person people portrait"),
-            Map.entry("建筑", "building architecture house"),
-            Map.entry("旅行", "travel journey"),
-            Map.entry("山", "mountain hill"),
-            Map.entry("花", "flower floral"),
-            Map.entry("树", "tree forest")
-    );
-
     public Page<PhotoDTO> search(SearchRequest request, Long userId) {
         PageRequest pageRequest = PageRequest.of(request.getPage(), request.getSize());
 
@@ -72,7 +54,7 @@ public class SearchService {
         // If has query, use text or semantic search, then apply filters
         if ("semantic".equals(request.getType()) && request.getQuery() != null && !request.getQuery().isBlank()) {
             String thresholdStr = settingService.getSetting(userId, "ai_search_similarity_threshold");
-            double threshold = thresholdStr != null ? Double.parseDouble(thresholdStr) / 100.0 : 0.8;
+            double threshold = AiThresholds.distance(AiThresholds.similarity(thresholdStr, 0.8));
             return semanticSearch(request, threshold, pageRequest, hasFilters);
         } else if (request.getQuery() != null && !request.getQuery().isBlank()) {
             return fullTextSearch(request, pageRequest, hasFilters);
@@ -91,7 +73,7 @@ public class SearchService {
     private Page<PhotoDTO> semanticSearch(SearchRequest request, Double threshold, PageRequest pageRequest, boolean hasFilters) {
         log.info("Semantic search for: {} (threshold: {})", request.getQuery(), threshold);
 
-        String searchQuery = ZH_TO_EN.getOrDefault(request.getQuery(), request.getQuery());
+        String searchQuery = request.getQuery().trim();
 
         AiServiceClient.EmbeddingResponse resp = aiServiceClient.embedText(searchQuery);
         String vectorStr = vectorToString(resp.getEmbedding());

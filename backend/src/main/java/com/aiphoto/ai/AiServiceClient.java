@@ -24,6 +24,32 @@ public class AiServiceClient {
 
     private final RestTemplate restTemplate;
 
+    public ModelOverview modelStatus() {
+        ModelOverview overview = restTemplate.getForObject(aiServiceUrl + "/models", ModelOverview.class);
+        if (overview == null || overview.getModels() == null) {
+            throw new IllegalStateException("AI 服务未返回模型状态");
+        }
+        return overview;
+    }
+
+    @Data
+    public static class ModelOverview {
+        private List<ModelState> models;
+
+        public boolean enabled(String name) {
+            return models.stream().anyMatch(model -> name.equals(model.getName()) && model.isEnabled());
+        }
+    }
+
+    @Data
+    public static class ModelState {
+        private String name;
+        private boolean enabled;
+        private boolean exists;
+        private boolean loaded;
+        private String error;
+    }
+
     /**
      * Generate CLIP embedding for an image.
      */

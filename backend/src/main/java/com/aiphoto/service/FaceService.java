@@ -72,8 +72,8 @@ public class FaceService {
         faceClusterRepository.saveAll(sourceFaces);
 
         // Update photo count
-        target.setPhotoCount(target.getPhotoCount() + source.getPhotoCount());
-        personRepository.save(target);
+        faceClusterRepository.flush();
+        personRepository.refreshPhotoCount(targetId);
 
         // Delete source
         personRepository.delete(source);
@@ -113,11 +113,13 @@ public class FaceService {
                 .orElseThrow(() -> new RuntimeException("Face not found"));
         Person person = personRepository.findById(personId)
                 .orElseThrow(() -> new RuntimeException("Person not found"));
+        Long previousPersonId = face.getPerson() == null ? null : face.getPerson().getId();
         face.setPerson(person);
-        faceClusterRepository.save(face);
-        // Update photo count
-        person.setPhotoCount(faceClusterRepository.findByPerson(person).size());
-        personRepository.save(person);
+        faceClusterRepository.saveAndFlush(face);
+        personRepository.refreshPhotoCount(personId);
+        if (previousPersonId != null && !previousPersonId.equals(personId)) {
+            personRepository.refreshPhotoCount(previousPersonId);
+        }
     }
 
     @Transactional
@@ -135,9 +137,11 @@ public class FaceService {
      * Reads threshold from settings (ai_face_cluster_threshold), default 0.5.
      */
     @Transactional
-    public int recluster() {
-        String thresholdStr = settingService.getSetting(1L, "ai_face_cluster_threshold");
-        double threshold = thresholdStr != null ? Double.parseDouble(thresholdStr) / 100.0 : 0.5;
+    public int recluster(Long userId) {
+        faceClusterRepository.lockClustering();
+        String thresholdStr = settingService.getSetting(userId, "ai_face_cluster_threshold");
+        double threshold = com.aiphoto.ai.AiThresholds.distance(
+                com.aiphoto.ai.AiThresholds.similarity(thresholdStr, 0.5));
         List<Person> persons = personRepository.findAll();
         if (persons.size() < 2) return 0;
 
@@ -169,7 +173,7 @@ public class FaceService {
                     if (e2 == null) continue;
 
                     double distance = cosineDistance(e1, e2);
-                    if (distance < threshold) {
+                    if (distance <= threshold) {
                         log.info("Merging person {} into {} (distance: {})", p2.getId(), p1.getId(), distance);
                         // Merge p2 into p1
                         List<FaceCluster> p2Faces = faceClusterRepository.findByPerson(p2);
@@ -177,8 +181,8 @@ public class FaceService {
                             face.setPerson(p1);
                         }
                         faceClusterRepository.saveAll(p2Faces);
-                        p1.setPhotoCount(p1.getPhotoCount() + p2.getPhotoCount());
-                        personRepository.save(p1);
+                        faceClusterRepository.flush();
+                        personRepository.refreshPhotoCount(p1.getId());
                         personRepository.delete(p2);
 
                         // Update centroids - recompute for p1

@@ -378,7 +378,7 @@ const typeToAiName: Record<string, ModelName | null> = {
   image_classification: 'yolo',
   image_caption: 'blip',
   ocr: null,
-  similar_image: null,
+  similar_image: 'clip',
   duplicate_detection: null,
   content_safety: null,
 }
@@ -481,11 +481,15 @@ async function retryDownload(taskId: string) {
 
 async function setCurrentModel(taskId: string) {
   try {
-    await settingApi.setCurrentModel(taskId)
+    const { data } = await settingApi.setCurrentModel(taskId)
+    if (data.status !== 'INSTALLED') throw new Error(data.errorMessage || '模型未成功加载')
     message.success('已设为当前模型')
     await refreshDownloads()
     await loadModels()
-  } catch { message.error('操作失败') }
+  } catch (error: any) {
+    message.error(error.response?.data?.message || error.message || '模型激活失败')
+    await refreshDownloads()
+  }
 }
 
 async function refreshDownloads() {
@@ -561,7 +565,10 @@ function getModelStatusForType(typeKey: string): { loaded: boolean; exists: bool
 }
 
 function getModelStatusText(typeKey: string): string {
+  if (typeKey === 'duplicate_detection') return '内置功能'
+  if (!typeToAiName[typeKey]) return '暂未支持'
   const status = getModelStatusForType(typeKey)
+  if (!status.enabled) return '未启用'
   if (status.loaded) return '使用中'
   if (status.error) return '加载失败'
   if (status.exists && status.enabled) return '已安装'
@@ -857,14 +864,14 @@ async function loadSystemInfo() {
                 </div>
               </template>
               <div v-else class="model-not-supported-hint">
-                <span class="info-label">此模型类型尚未集成到 AI 服务</span>
-                <el-button @click="modelViewMode = 'online'">前往在线下载</el-button>
+                <span class="info-label">{{ item.key === 'duplicate_detection' ? '重复照片检测使用内置哈希，无需安装模型' : '此功能暂未接入，下载模型不会启用此功能' }}</span>
               </div>
             </div>
           </div>
 
           <!-- Online Catalog Tab -->
           <div v-if="modelViewMode === 'online'">
+            <p class="info-label">这里只列出可安装并运行的模型。BLIP-2 请在本地模型页配置完整模型目录。</p>
             <div class="online-models-grid">
               <div v-for="om in onlineModels" :key="om.id" class="panel-card online-model-card">
                 <div class="online-model-top">
@@ -876,7 +883,7 @@ async function loadSystemInfo() {
                 </div>
                 <div class="online-model-meta">
                   <div><span class="info-label">版本</span><span>v{{ om.version }}</span></div>
-                  <div><span class="info-label">大小</span><span>{{ formatSize(om.size) }}</span></div>
+                  <div><span class="info-label">大小</span><span>{{ om.size > 0 ? formatSize(om.size) : '下载时获取' }}</span></div>
                   <div><span class="info-label">设备</span><span>{{ om.device }}</span></div>
                   <div><span class="info-label">精度</span><span>{{ om.precision }}</span></div>
                   <div><span class="info-label">性能</span><span>{{ om.performance }}</span></div>
