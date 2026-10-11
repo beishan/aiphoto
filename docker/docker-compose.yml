@@ -10,6 +10,8 @@ services:
     build:
       context: ../backend
       dockerfile: ../docker/postgres.Dockerfile
+      args:
+        POSTGRES_BASE_IMAGE: ${POSTGRES_BASE_IMAGE:-docker.m.daocloud.io/pgvector/pgvector:pg16}
       labels:
         com.aiphoto.managed: "true"
     container_name: aiphoto-postgres
@@ -33,7 +35,7 @@ services:
     networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-aiphoto-ai:0.16.1}
+    image: ${AI_IMAGE:-aiphoto-ai:0.16.2}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
@@ -66,7 +68,7 @@ services:
     networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.1}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.2}
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -123,7 +125,7 @@ services:
     networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.1}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.2}
     build:
       context: ../frontend
       dockerfile: Dockerfile

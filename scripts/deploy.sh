@@ -288,6 +288,30 @@ cleanup_dangling_images() {
         --filter 'label=com.aiphoto.managed=true' >/dev/null 2>&1 || true
 }
 
+retry_image_build() {
+    local attempt=1 max_attempts=3 status log_file
+    log_file="$(mktemp)"
+    while true; do
+        if "$@" 2>&1 | tee "${log_file}"; then
+            rm -f "${log_file}"
+            return 0
+        else
+            status=$?
+        fi
+        # Retry transient registry/transport errors, never application compilation
+        # or test failures. Completed layers remain available to the next attempt.
+        if ((attempt >= max_attempts)) || ! grep -Eqi \
+            'unexpected status from (HEAD|GET) request.*(429|500|502|503|504)|TLS handshake timeout|i/o timeout|connection reset by peer|temporary failure in name resolution' \
+            "${log_file}"; then
+            rm -f "${log_file}"
+            return "${status}"
+        fi
+        echo "镜像源临时故障，5 秒后重试构建（$((attempt + 1))/${max_attempts}），复用已完成的缓存层。" >&2
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+}
+
 deploy_release() {
     record_previous_images
     backup_database
@@ -321,11 +345,11 @@ case "${ACTION}" in
         echo "Docker Compose 配置校验通过。"
         ;;
     test)
-        docker build --file "${PROJECT_DIR}/backend/Dockerfile" --target test \
+        retry_image_build docker build --file "${PROJECT_DIR}/backend/Dockerfile" --target test \
             --tag "aiphoto-backend-test:${RELEASE_TAG:-local}" "${PROJECT_DIR}/backend"
         ;;
     build)
-        compose build postgres backend frontend ai-service
+        retry_image_build compose build postgres backend frontend ai-service
         ;;
     deploy)
         deploy_release

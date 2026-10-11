@@ -134,6 +134,20 @@ Maven 的依赖预取、测试和打包共用 aiphoto-maven BuildKit 下载缓�
 
 参考：[Docker 构建缓存优化](https://docs.docker.com/build/cache/optimize/)。
 
+## 镜像源临时故障（0.16.2）
+
+如果构建显示 unexpected status from HEAD request ... 502 Bad Gateway，失败来自镜像仓库请求。Compose 并行构建中的其他服务可能显示 CANCELED，这是整体构建取消的结果。
+
+后端测试镜像及 Build Images 对镜像仓库 429/500/502/503/504、TLS 握手超时、I/O 超时、连接重置和临时 DNS 故障最多尝试 3 次，间隔 5 秒。重试复用已经完成的缓存层；编译/测试失败、镜像 404、鉴权失败不会因此重试，重试耗尽保留错误退出状态。
+
+PostgreSQL 基础镜像不再写死，可在 Jenkins Secret file 环境配置中设置：
+
+~~~bash
+POSTGRES_BASE_IMAGE=docker.io/pgvector/pgvector:pg16
+~~~
+
+默认仍为 docker.m.daocloud.io/pgvector/pgvector:pg16。也可填写 NAS 可访问的可信镜像源，但须提供包含 pgvector 的 PostgreSQL 16 镜像。镜像源持续故障时调整配置后重新运行 Jenkins；不自动切换到未经验证的镜像源，也不替换数据库卷。
+
 ## 7. 运维命令
 
 在仓库中指定生产环境文件：
