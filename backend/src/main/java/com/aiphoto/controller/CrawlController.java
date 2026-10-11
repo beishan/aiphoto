@@ -39,6 +39,18 @@ public class CrawlController {
     private final CrawlSimilarityService similarityService;
     private final CrawlImageSkipService imageSkipService;
     private final UserRepository userRepository;
+    private final com.aiphoto.service.CrawlerSettingsService crawlerSettingsService;
+
+    @GetMapping("/inspection-proxies")
+    public List<com.aiphoto.service.CrawlerSettingsService.InspectionProxyView> inspectionProxies() {
+        return crawlerSettingsService.inspectionProxies();
+    }
+
+    @PostMapping("/sites/inspect")
+    public CrawlService.SiteInfo inspectSite(
+            @RequestBody CrawlSite site, Authentication authentication) throws Exception {
+        return crawlService.inspectSite(site, userId(authentication));
+    }
 
     @GetMapping("/sites")
     public List<CrawlSite> listSites(Authentication authentication) {
@@ -79,8 +91,11 @@ public class CrawlController {
 
     @PostMapping("/rules/preview")
     public CrawlService.PreviewResult preview(
-            @RequestBody CrawlRule rule, Authentication authentication) throws Exception {
-        return crawlService.preview(rule, userId(authentication));
+            @RequestBody CrawlRule rule,
+            @RequestParam(required = false) String inspectionProxyMode,
+            @RequestParam(required = false) Long inspectionProxyId,
+            Authentication authentication) throws Exception {
+        return crawlService.preview(rule, userId(authentication), inspectionProxyMode, inspectionProxyId);
     }
 
     @GetMapping("/jobs")

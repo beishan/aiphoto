@@ -24,6 +24,8 @@ public class CrawlSite {
     private String name;
     @Column(nullable = false, length = 2048)
     private String startUrl;
+    @Column(columnDefinition = "TEXT")
+    private String discoveryUrls;
     @Column(nullable = false, length = 1000)
     private String allowedHosts;
     private Integer maxListPages = 100;
@@ -31,6 +33,9 @@ public class CrawlSite {
     private Integer maxImages = 5000;
     private Long maxFileBytes = 20L * 1024 * 1024;
     private Long minRequestIntervalMillis = 1000L;
+    @Column(nullable = false, length = 16)
+    private String inspectionProxyMode = "DEFAULT";
+    private Long inspectionProxyId;
     private Boolean scheduleEnabled = false;
     @JsonFormat(pattern = "HH:mm")
     private LocalTime dailyScanTime = LocalTime.of(3, 0);

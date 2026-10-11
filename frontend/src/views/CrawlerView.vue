@@ -6,11 +6,17 @@ import {
   List, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, Warning,
 } from '@element-plus/icons-vue'
 import { crawlApi } from '@/api/crawlApi'
+import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
+import type { InspectionProxy, CrawlSiteInfo } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
 import type { Album, CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
 
+const inspectionProxies = ref<InspectionProxy[]>([])
+const inspectionBusy = ref<'edit' | 'create' | ''>('')
+const siteInfo = ref<CrawlSiteInfo | null>(null)
+const createSiteInfo = ref<CrawlSiteInfo | null>(null)
 const sites = ref<CrawlSite[]>([])
 const rules = ref<CrawlRule[]>([])
 const activeSiteId = ref<number | null>(null)
@@ -62,12 +68,14 @@ type TabKey = 'overview' | 'sites' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
+  discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
   name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
   maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
   scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
 const createSiteForm = reactive<CrawlSite>({
+  discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
   name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
   maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
   scheduleEnabled: false, dailyScanTime: '03:00',
@@ -105,6 +113,35 @@ const duplicateHashes = computed(() => {
     .filter(asset => asset.fileHashMd5 && asset.exactDuplicateCount > 1)
     .map(asset => asset.fileHashMd5))
 })
+
+async function loadInspectionProxies() {
+  try { inspectionProxies.value = (await crawlApi.inspectionProxies()).data }
+  catch { ElMessage.error('代理列表加载失败，请重试') }
+}
+
+async function inspectSite(target: 'edit' | 'create') {
+  if (inspectionBusy.value) return
+  const model = target === 'edit' ? siteForm : createSiteForm
+  const snapshot = { ...model }
+  inspectionBusy.value = target
+  try {
+    const { data } = await crawlApi.inspectSite(snapshot)
+    if (model.id !== snapshot.id || model.startUrl !== snapshot.startUrl || model.allowedHosts !== snapshot.allowedHosts
+      || model.inspectionProxyMode !== snapshot.inspectionProxyMode
+      || model.inspectionProxyId !== snapshot.inspectionProxyId) return
+    if (target === 'edit') siteInfo.value = data
+    else createSiteInfo.value = data
+    if (!model.name && data.title) model.name = data.title.slice(0, 200)
+    ElMessage.success('已获取网站信息')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '获取网站信息失败')
+  } finally { inspectionBusy.value = '' }
+}
+
+watch(() => [siteForm.id, siteForm.startUrl, siteForm.discoveryUrls, siteForm.allowedHosts, siteForm.inspectionProxyMode, siteForm.inspectionProxyId],
+  () => { siteInfo.value = null; previewUrls.value = []; previewImageUrls.value = []; previewImageError.value = '' })
+watch(() => [createSiteForm.startUrl, createSiteForm.allowedHosts, createSiteForm.inspectionProxyMode, createSiteForm.inspectionProxyId],
+  () => { createSiteInfo.value = null })
 
 async function loadSites() {
   sites.value = (await crawlApi.sites()).data
@@ -219,13 +256,18 @@ async function saveRule(showMessage = true) {
 
 async function testRule() {
   busy.value = 'preview'
+  const siteSnapshot = { ...siteForm }
+  const ruleSnapshot = { ...form }
   try {
-    const { data } = await crawlApi.preview({ ...form })
+    const { data } = await crawlApi.preview(ruleSnapshot, siteSnapshot)
+    if (siteForm.id !== siteSnapshot.id || form.id !== ruleSnapshot.id
+      || siteForm.inspectionProxyMode !== siteSnapshot.inspectionProxyMode
+      || siteForm.inspectionProxyId !== siteSnapshot.inspectionProxyId) return
     Object.assign(form, data.rule)
     previewUrls.value = data.detailUrls
     previewImageUrls.value = data.imageUrls
     previewImageError.value = data.imagePreviewError || ''
-    data.detailUrls.length ? ElMessage.success(`测试命中 ${data.detailUrls.length} 个图片页链接，首页提取 ${data.imageUrls.length} 张图片`)
+    data.detailUrls.length ? ElMessage.success(`测试命中 ${data.detailUrls.length} 个图片页链接，首个图片页提取 ${data.imageUrls.length} 张图片`)
       : ElMessage.warning('当前页面没有命中图片页链接')
   } catch (error: any) { ElMessage.error(error?.response?.data?.message || error?.message || '规则测试失败') }
   finally { busy.value = '' }
@@ -272,6 +314,7 @@ function selectJobById(id: string) {
 
 function resetCreateSiteForm() {
   Object.assign(createSiteForm, {
+    discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
     id: undefined, name: '', startUrl: '', allowedHosts: '', maxListPages: 100,
     maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
     minRequestIntervalMillis: 1000,
@@ -283,6 +326,7 @@ function applyT66yPreset() {
   Object.assign(createSiteForm, {
     name: 't66y 图片版',
     startUrl: 'https://t66y.com/thread0806.php?fid=16',
+    discoveryUrls: 'https://t66y.com/thread0806.php?fid=16',
     allowedHosts: 't66y.com,23img.com,23lmg.com',
     maxListPages: 100,
     maxDetailPages: 5000,
@@ -307,12 +351,16 @@ async function saveSite() {
   if (!siteForm.allowedHosts) {
     try { siteForm.allowedHosts = new URL(siteForm.startUrl).hostname } catch { /* backend validates */ }
   }
-  const { data } = await crawlApi.saveSite({ ...siteForm })
-  Object.assign(siteForm, data)
-  activeSiteId.value = data.id || null
-  await loadSites()
-  await loadRules()
-  ElMessage.success('网站基础配置已保存')
+  try {
+    const { data } = await crawlApi.saveSite({ ...siteForm })
+    Object.assign(siteForm, data)
+    activeSiteId.value = data.id || null
+    await loadSites()
+    await loadRules()
+    ElMessage.success('网站基础配置已保存')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '网站配置保存失败')
+  }
 }
 
 async function createSite() {
@@ -656,6 +704,7 @@ function changeAssetPage(page: number) {
 }
 onMounted(async () => {
   const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
+  await loadInspectionProxies()
   albums.value = albumResult.data
   tags.value = tagResult.data
   await loadJobDetail()
@@ -755,9 +804,21 @@ onUnmounted(() => {
           <el-form v-if="activeSiteId" :model="siteForm" label-position="top" class="mac-form">
             <el-row :gutter="16">
               <el-col :xs="24" :md="10"><el-form-item label="网站名称"><el-input v-model="siteForm.name" placeholder="例如：家庭活动图库" /></el-form-item></el-col>
-              <el-col :xs="24" :md="14"><el-form-item label="起始列表页"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
+              <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
               <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
             </el-row>
+            <el-divider content-position="left">发现页配置</el-divider>
+            <el-form-item label="发现页入口">
+              <el-input v-model="siteForm.discoveryUrls" type="textarea" :rows="3"
+                placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
+            </el-form-item>
+            <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
+            <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
+              :proxies="inspectionProxies" :loading="inspectionBusy === 'edit'"
+              @refresh="loadInspectionProxies" @inspect="inspectSite('edit')" />
+            <el-alert v-if="siteInfo" type="success" :closable="false" :title="siteInfo.title || '网页未提供标题'">
+              <template #default><p>{{ siteInfo.description || '网页未提供简介' }}</p><p>{{ siteInfo.finalUrl }}</p></template>
+            </el-alert>
             <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;安全上限</el-divider>
             <el-row :gutter="16">
               <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
@@ -967,9 +1028,21 @@ onUnmounted(() => {
       <el-form :model="createSiteForm" label-position="top" class="mac-form site-dialog-form">
         <el-row :gutter="16">
           <el-col :xs="24" :md="10"><el-form-item label="网站名称" required><el-input v-model="createSiteForm.name" autofocus placeholder="例如：家庭活动图库" /></el-form-item></el-col>
-          <el-col :xs="24" :md="14"><el-form-item label="起始列表页" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
+          <el-col :xs="24" :md="14"><el-form-item label="网站入口" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="createSiteForm.allowedHosts" placeholder="留空时自动使用起始 URL 的域名；多个域名用逗号分隔" /></el-form-item></el-col>
         </el-row>
+        <el-divider content-position="left">发现页配置</el-divider>
+        <el-form-item label="发现页入口">
+          <el-input v-model="createSiteForm.discoveryUrls" type="textarea" :rows="3"
+            placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
+        </el-form-item>
+        <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
+        <SiteInspectionNetwork v-model:mode="createSiteForm.inspectionProxyMode" v-model:proxy-id="createSiteForm.inspectionProxyId"
+          :proxies="inspectionProxies" :loading="inspectionBusy === 'create'"
+          @refresh="loadInspectionProxies" @inspect="inspectSite('create')" />
+        <el-alert v-if="createSiteInfo" type="success" :closable="false" :title="createSiteInfo.title || '网页未提供标题'">
+          <template #default><p>{{ createSiteInfo.description || '网页未提供简介' }}</p><p>{{ createSiteInfo.finalUrl }}</p></template>
+        </el-alert>
         <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;单次任务安全上限</el-divider>
         <el-row :gutter="16">
           <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="createSiteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>

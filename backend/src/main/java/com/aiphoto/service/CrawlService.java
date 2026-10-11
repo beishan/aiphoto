@@ -42,6 +42,7 @@ public class CrawlService {
     private final ObjectMapper objectMapper;
     private final CrawlStagingStorageService stagingStorage;
     private final PhotoRepository photoRepository;
+    private final CrawlerSettingsService crawlerSettingsService;
 
     public List<CrawlSite> listSites(Long ownerId) {
         return siteRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId);
@@ -53,6 +54,10 @@ public class CrawlService {
                 : getSite(input.getId(), ownerId);
         String startUrl = requireText(input.getStartUrl(), "起始 URL");
         URI start = validateStartUrl(startUrl);
+        String proxyMode = crawlerSettingsService.validateInspectionProxy(
+                input.getInspectionProxyMode(), input.getInspectionProxyId());
+        site.setInspectionProxyMode(proxyMode);
+        site.setInspectionProxyId("SELECTED".equals(proxyMode) ? input.getInspectionProxyId() : null);
         site.setOwnerId(ownerId);
         site.setName(requireText(input.getName(), "网站名称"));
         site.setStartUrl(SafeHttpFetcher.normalize(startUrl));
@@ -62,6 +67,10 @@ public class CrawlService {
                 .map(String::trim).anyMatch(start.getHost()::equalsIgnoreCase);
         if (!startAllowed) throw new IllegalArgumentException("允许域名必须包含起始网站域名");
         site.setAllowedHosts(allowedHosts);
+        List<String> discoveryUrls = validatedDiscoveryUrls(
+                input.getDiscoveryUrls(), site.getStartUrl(), allowedHosts);
+        site.setDiscoveryUrls(input.getDiscoveryUrls() == null || input.getDiscoveryUrls().isBlank()
+                ? null : String.join("\n", discoveryUrls));
         site.setMaxListPages(clamp(input.getMaxListPages(), 1, 1000, 100));
         site.setMaxDetailPages(clamp(input.getMaxDetailPages(), 1, 20000, 1000));
         site.setMaxImages(clamp(input.getMaxImages(), 1, 50000, 5000));
@@ -102,6 +111,11 @@ public class CrawlService {
     }
 
     public PreviewResult preview(CrawlRule input, Long ownerId) throws Exception {
+        return preview(input, ownerId, null, null);
+    }
+
+    public PreviewResult preview(
+            CrawlRule input, Long ownerId, String proxyMode, Long proxyId) throws Exception {
         CrawlRule rule = new CrawlRule();
         if (input.getId() != null) {
             getRule(input.getId(), ownerId);
@@ -109,9 +123,12 @@ public class CrawlService {
         }
         CrawlSite site = getSite(input.getSiteId(), ownerId);
         copyValidatedRule(input, rule, site, ownerId);
-        SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                rule.getStartUrl(), rule.getAllowedHosts(), MAX_HTML_BYTES,
-                rule.getMinRequestIntervalMillis());
+        var network = crawlerSettingsService.inspectionNetwork(
+                proxyMode == null ? site.getInspectionProxyMode() : proxyMode,
+                proxyMode == null ? site.getInspectionProxyId() : proxyId);
+        SafeHttpFetcher.FetchedResource resource = fetcher.fetchForInspection(
+                rule.getDiscoveryUrls().get(0), rule.getAllowedHosts(), MAX_HTML_BYTES,
+                rule.getMinRequestIntervalMillis(), network);
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -130,7 +147,7 @@ public class CrawlService {
         List<String> imageUrls = List.of();
         String imagePreviewError = null;
         try {
-            imageUrls = previewImages(rule, detailUrls);
+            imageUrls = previewImages(rule, detailUrls, network);
         } catch (Exception exception) {
             imagePreviewError = exception.getMessage() == null
                     ? exception.getClass().getSimpleName() : exception.getMessage();
@@ -138,11 +155,12 @@ public class CrawlService {
         return new PreviewResult(rule, detailUrls, imageUrls, imagePreviewError);
     }
 
-    private List<String> previewImages(CrawlRule rule, List<String> detailUrls) throws Exception {
+    private List<String> previewImages(CrawlRule rule, List<String> detailUrls,
+            CrawlerSettingsService.NetworkSnapshot network) throws Exception {
         if (detailUrls.isEmpty()) return List.of();
-        SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
+        SafeHttpFetcher.FetchedResource resource = fetcher.fetchForInspection(
                 detailUrls.get(0), rule.getAllowedHosts(), MAX_HTML_BYTES,
-                rule.getMinRequestIntervalMillis());
+                rule.getMinRequestIntervalMillis(), network);
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
@@ -160,6 +178,27 @@ public class CrawlService {
         }
         return images.stream().distinct().toList();
     }
+
+    public SiteInfo inspectSite(CrawlSite input, Long ownerId) throws Exception {
+        if (input.getId() != null) getSite(input.getId(), ownerId);
+        String startUrl = requireText(input.getStartUrl(), "起始 URL");
+        URI start = validateStartUrl(startUrl);
+        String hosts = input.getAllowedHosts() == null || input.getAllowedHosts().isBlank()
+                ? start.getHost() : input.getAllowedHosts();
+        var network = crawlerSettingsService.inspectionNetwork(
+                input.getInspectionProxyMode(), input.getInspectionProxyId());
+        long interval = input.getMinRequestIntervalMillis() == null ? 1000L
+                : Math.max(0L, Math.min(input.getMinRequestIntervalMillis(), 60_000L));
+        var resource = fetcher.fetchForInspection(startUrl, hosts, MAX_HTML_BYTES, interval, network);
+        requireHtml(resource.contentType());
+        Document document = Jsoup.parse(
+                new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
+        Element description = document.selectFirst("meta[name=description], meta[property=og:description]");
+        return new SiteInfo(document.title(), description == null ? "" : description.attr("content"),
+                resource.finalUri().toString());
+    }
+
+    public record SiteInfo(String title, String description, String finalUrl) {}
 
     private void copyValidatedRule(
             CrawlRule input, CrawlRule rule, CrawlSite site, Long ownerId) {
@@ -197,8 +236,36 @@ public class CrawlService {
         return start;
     }
 
+    private List<String> validatedDiscoveryUrls(String value, String fallback, String allowedHosts) {
+        if (value == null || value.isBlank()) return List.of(SafeHttpFetcher.normalize(fallback));
+        if (value.length() > 50_000) throw new IllegalArgumentException("发现页配置过长");
+        java.util.Set<String> hosts = java.util.Arrays.stream(allowedHosts.split(","))
+                .map(String::trim).map(host -> host.toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.LinkedHashSet<String> urls = new java.util.LinkedHashSet<>();
+        for (String line : value.split("\\R")) {
+            String url = line.trim();
+            if (url.isEmpty()) continue;
+            if (url.length() > 2048) throw new IllegalArgumentException("发现页 URL 不能超过 2048 个字符");
+            URI uri;
+            try {
+                uri = validateStartUrl(url);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException("发现页 URL 无效：" + exception.getMessage());
+            }
+            if (!hosts.contains(uri.getHost().toLowerCase(java.util.Locale.ROOT))) {
+                throw new IllegalArgumentException("发现页域名必须在允许访问的域名中：" + uri.getHost());
+            }
+            urls.add(SafeHttpFetcher.normalize(url));
+            if (urls.size() > 20) throw new IllegalArgumentException("最多配置 20 个发现页入口");
+        }
+        return List.copyOf(urls);
+    }
+
     private void applySiteConfig(CrawlRule rule, CrawlSite site) {
         rule.setStartUrl(site.getStartUrl());
+        rule.setDiscoveryUrls(validatedDiscoveryUrls(
+                site.getDiscoveryUrls(), site.getStartUrl(), site.getAllowedHosts()));
         rule.setAllowedHosts(site.getAllowedHosts());
         rule.setMaxListPages(site.getMaxListPages());
         rule.setMaxDetailPages(site.getMaxDetailPages());

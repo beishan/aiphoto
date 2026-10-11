@@ -143,6 +143,9 @@ export interface ScanFolder {
 }
 
 export interface CrawlSite {
+  discoveryUrls: string | null
+  inspectionProxyMode: 'DEFAULT' | 'DIRECT' | 'SELECTED'
+  inspectionProxyId: number | null
   id?: number
   name: string
   startUrl: string

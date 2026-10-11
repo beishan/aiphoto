@@ -80,7 +80,11 @@ public class CrawlWorker {
         ArrayDeque<String> queue = new ArrayDeque<>();
         Set<String> visited = new HashSet<>();
         int discoveryFailures = 0;
-        queue.add(rule.getStartUrl());
+        if (rule.getDiscoveryUrls() == null || rule.getDiscoveryUrls().isEmpty()) {
+            queue.add(rule.getStartUrl());
+        } else {
+            queue.addAll(rule.getDiscoveryUrls());
+        }
         try {
             while (!queue.isEmpty() && visited.size() < rule.getMaxListPages()
                     && pageRepository.countByJobId(jobId) < rule.getMaxDetailPages()) {
@@ -371,10 +375,12 @@ public class CrawlWorker {
     }
 
     private long pageHostInterval(String url, CrawlRule rule) {
-        URI start = URI.create(rule.getStartUrl());
         URI target = URI.create(url);
-        return start.getHost() != null && start.getHost().equalsIgnoreCase(target.getHost())
-                ? rule.getMinRequestIntervalMillis() : 0L;
+        java.util.List<String> entries = rule.getDiscoveryUrls() == null || rule.getDiscoveryUrls().isEmpty()
+                ? java.util.List.of(rule.getStartUrl()) : rule.getDiscoveryUrls();
+        boolean discoveryHost = entries.stream().map(URI::create)
+                .anyMatch(entry -> entry.getHost() != null && entry.getHost().equalsIgnoreCase(target.getHost()));
+        return discoveryHost ? rule.getMinRequestIntervalMillis() : 0L;
     }
 
     private void recordSource(CrawlAsset asset, CrawlPage page) {

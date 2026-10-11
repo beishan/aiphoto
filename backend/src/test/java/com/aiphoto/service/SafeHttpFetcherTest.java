@@ -63,4 +63,55 @@ class SafeHttpFetcherTest {
         assertThat(SafeHttpFetcher.retryDelayMillis(0, 1000, "5")).isEqualTo(5000);
         assertThat(SafeHttpFetcher.retryDelayMillis(10, 1000, "invalid")).isEqualTo(60_000);
     }
+    @Test
+    void inspectionDirectDoesNotConsultOrUpdateTaskExecutor() throws Exception {
+        assertInspectionRoute(true, 200);
+    }
+
+    @Test
+    void inspectionSelectedDoesNotConsultOrUpdateTaskExecutor() throws Exception {
+        assertInspectionRoute(false, 200);
+    }
+
+    @Test
+    void inspectionSelectedFailureNeverFallsBackToDirect() throws Exception {
+        assertInspectionRoute(false, 502);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertInspectionRoute(boolean direct, int status) throws Exception {
+        var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
+        var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
+        var fetcher = new SafeHttpFetcher(settings, executors);
+        var selectedClient = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
+        var otherClient = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
+        java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(status);
+        org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(new byte[] {1}));
+        if (status == 200) {
+            org.mockito.Mockito.when(response.headers()).thenReturn(
+                    java.net.http.HttpHeaders.of(java.util.Map.of("content-type", java.util.List.of("text/html")), (a, b) -> true));
+        }
+        org.mockito.Mockito.when(selectedClient.send(
+                org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenReturn(response);
+        var clients = (java.util.Map<String, java.net.http.HttpClient>)
+                org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
+        String proxyKey = "proxy:7:localhost:7890:null:0:5";
+        clients.put(direct ? "direct:5" : proxyKey, selectedClient);
+        clients.put(direct ? proxyKey : "direct:5", otherClient);
+        var network = new CrawlerSettingsService.NetworkSnapshot(direct, 5, 10, 0, 0, 0,
+                direct ? java.util.List.of() : java.util.List.of(
+                        new CrawlerSettingsService.ProxyConfig(7L, "localhost", 7890, null, null)));
+
+        if (status == 200) {
+            assertThat(fetcher.fetchForInspection("http://8.8.8.8/", "8.8.8.8", 10, 0, network).bytes())
+                    .containsExactly((byte) 1);
+        } else {
+            assertThatThrownBy(() -> fetcher.fetchForInspection("http://8.8.8.8/", "8.8.8.8", 10, 0, network))
+                    .isInstanceOf(java.io.IOException.class);
+        }
+        org.mockito.Mockito.verifyNoInteractions(settings, executors, otherClient);
+    }
 }

@@ -74,13 +74,24 @@ public class SafeHttpFetcher {
         }
     }
 
+    public FetchedResource fetchForInspection(
+            String url, String allowedHosts, long maxBytes, long siteMinRequestIntervalMillis,
+            CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
+        return fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, null, settings);
+    }
+
     private FetchedResource fetchResource(String url, String allowedHosts, long maxBytes,
             long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session) throws Exception {
+        return fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, session,
+                session == null ? crawlerSettingsService.networkSnapshot() : session.network());
+    }
+
+    private FetchedResource fetchResource(String url, String allowedHosts, long maxBytes,
+            long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session,
+            CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
         Set<String> hosts = parseHosts(allowedHosts);
         URI uri = URI.create(url);
         validate(uri, hosts);
-        CrawlerSettingsService.NetworkSnapshot settings = session == null
-                ? crawlerSettingsService.networkSnapshot() : session.network();
         long requestIntervalMillis = Math.max(
                 settings.minRequestIntervalMillis(), siteMinRequestIntervalMillis);
         for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
@@ -92,7 +103,7 @@ public class SafeHttpFetcher {
                     .header("Accept", "text/html,image/*;q=0.9,*/*;q=0.1")
                     .GET()
                     .build();
-            HttpResponse<InputStream> response = sendWithRetry(request, settings);
+            HttpResponse<InputStream> response = sendWithRetry(request, settings, session);
             int status = response.statusCode();
             if (status >= 300 && status < 400) {
                 String location = response.headers().firstValue("location")
@@ -119,14 +130,14 @@ public class SafeHttpFetcher {
     }
 
     private HttpResponse<InputStream> sendWithRetry(
-            HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
+            HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings,
+            CrawlerExecutorService.Session session) throws Exception {
         IOException lastFailure = null;
-        var session = executorService.current();
         int retries = session != null && session.managedMihomo() ? Math.max(1, settings.maxRetries()) : settings.maxRetries();
         for (int attempt = 0; attempt <= retries; attempt++) {
             try {
                 if (attempt > 0) awaitRateLimit(request.uri().getHost(), settings.minRequestIntervalMillis());
-                HttpResponse<InputStream> response = send(request, settings);
+                HttpResponse<InputStream> response = send(request, settings, session);
                 if (!(isRetryableStatus(response.statusCode()) || (session != null && session.managedMihomo()
                         && (response.statusCode() == 401 || response.statusCode() == 403 || response.statusCode() == 451))) || attempt >= retries) {
                     return response;
@@ -179,14 +190,14 @@ public class SafeHttpFetcher {
     }
 
     private HttpResponse<InputStream> send(
-            HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
+            HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings,
+            CrawlerExecutorService.Session session) throws Exception {
         IOException lastFailure = null;
-        var session = executorService.current();
         for (CrawlerSettingsService.ProxyConfig proxy : settings.proxies()) {
             if (session != null && !session.managedMihomo() && !session.ordinaryAvailable(proxy.id())) continue;
             try {
                 if (session != null) session.proxyAttempt(proxy.id());
-                HttpResponse<InputStream> response = proxyClient(proxy, settings.connectTimeoutSeconds())
+                HttpResponse<InputStream> response = proxyClient(proxy, settings.connectTimeoutSeconds(), session)
                         .send(request, HttpResponse.BodyHandlers.ofInputStream());
                 if (!isProxyFailureStatus(response.statusCode())) {
                     if (session != null && !session.managedMihomo()) {
@@ -232,7 +243,8 @@ public class SafeHttpFetcher {
     }
 
     private HttpClient proxyClient(
-            CrawlerSettingsService.ProxyConfig proxy, int connectTimeoutSeconds) {
+            CrawlerSettingsService.ProxyConfig proxy, int connectTimeoutSeconds,
+            CrawlerExecutorService.Session session) {
         String key = "proxy:" + proxy.id() + ":" + proxy.host() + ":" + proxy.port()
                 + ":" + proxy.username() + ":" + java.util.Objects.hashCode(proxy.password())
                 + ":" + connectTimeoutSeconds;
@@ -255,7 +267,7 @@ public class SafeHttpFetcher {
             }
             return builder.build();
         };
-        if (executorService.current() != null && executorService.current().managedMihomo()) {
+        if (session != null && session.managedMihomo()) {
             HttpClient client = factory.get();
             managedClients.get().add(client);
             return client;

@@ -162,4 +162,44 @@ class CrawlerSettingsServiceTest {
         proxy.setPriority(priority);
         return proxy;
     }
+    @Test
+    void inspectionDefaultPreservesSystemPolicy() {
+        when(proxyRepository.findByEnabledTrueOrderByPriorityAscIdAsc()).thenReturn(List.of());
+        assertThat(service.inspectionNetwork("DEFAULT", null)).isSameAs(service.networkSnapshot());
+    }
+
+    @Test
+    void inspectionDirectIgnoresSystemProxyPool() {
+        var network = service.inspectionNetwork("DIRECT", null);
+        assertThat(network.directFallback()).isTrue();
+        assertThat(network.proxies()).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(proxyRepository, secretService);
+    }
+
+    @Test
+    void inspectionSelectedUsesOnlyChosenMihomoHttpEntryWithCredentials() {
+        CrawlerProxy proxy = new CrawlerProxy();
+        proxy.setId(7L); proxy.setHost("localhost"); proxy.setPort(7890);
+        proxy.setProxyType("MIHOMO"); proxy.setUsername("user"); proxy.setPasswordCiphertext("cipher");
+        when(proxyRepository.findById(7L)).thenReturn(Optional.of(proxy));
+        when(secretService.decrypt("cipher")).thenReturn("password");
+
+        var network = service.inspectionNetwork("SELECTED", 7L);
+
+        assertThat(network.directFallback()).isFalse();
+        assertThat(network.proxies()).containsExactly(
+                new CrawlerSettingsService.ProxyConfig(7L, "localhost", 7890, "user", "password"));
+        verify(proxyRepository, org.mockito.Mockito.never()).findByEnabledTrueOrderByPriorityAscIdAsc();
+    }
+
+    @Test
+    void inspectionRejectsDisabledMissingAndInvalidProxies() {
+        CrawlerProxy proxy = new CrawlerProxy(); proxy.setEnabled(false);
+        when(proxyRepository.findById(7L)).thenReturn(Optional.of(proxy));
+        when(proxyRepository.findById(8L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.inspectionNetwork("SELECTED", 7L)).hasMessageContaining("停用");
+        assertThatThrownBy(() -> service.inspectionNetwork("SELECTED", 8L)).hasMessageContaining("删除");
+        assertThatThrownBy(() -> service.inspectionNetwork("SELECTED", null)).hasMessageContaining("请选择");
+        assertThatThrownBy(() -> service.inspectionNetwork("UNKNOWN", null)).hasMessageContaining("无效");
+    }
 }

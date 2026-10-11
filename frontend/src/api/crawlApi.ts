@@ -26,7 +26,12 @@ export interface CrawlImportItem {
   updatedAt: string
 }
 
+export interface InspectionProxy { id: number; name: string; enabled: boolean; proxyType: 'HTTP' | 'MIHOMO' }
+export interface CrawlSiteInfo { title: string; description: string; finalUrl: string }
+
 export const crawlApi = {
+  inspectionProxies: () => http.get<InspectionProxy[]>('/crawl/inspection-proxies'),
+  inspectSite: (site: CrawlSite) => http.post<CrawlSiteInfo>('/crawl/sites/inspect', site, { timeout: 120000 }),
   sites: () => http.get<CrawlSite[]>('/crawl/sites'),
   saveSite: (site: CrawlSite) => site.id
     ? http.put<CrawlSite>(`/crawl/sites/${site.id}`, site)
@@ -35,7 +40,10 @@ export const crawlApi = {
   saveRule: (rule: CrawlRule) => rule.id
     ? http.put<CrawlRule>(`/crawl/rules/${rule.id}`, rule)
     : http.post<CrawlRule>('/crawl/rules', rule),
-  preview: (rule: CrawlRule) => http.post<{ rule: CrawlRule; detailUrls: string[]; imageUrls: string[]; imagePreviewError: string | null }>('/crawl/rules/preview', rule),
+  preview: (rule: CrawlRule, site: CrawlSite) => http.post<{ rule: CrawlRule; detailUrls: string[]; imageUrls: string[]; imagePreviewError: string | null }>('/crawl/rules/preview', rule, {
+    params: { inspectionProxyMode: site.inspectionProxyMode, inspectionProxyId: site.inspectionProxyId ?? undefined },
+    timeout: 120000,
+  }),
   jobs: () => http.get<CrawlJob[]>('/crawl/jobs'),
   createJob: (ruleId: number) => http.post<{ jobId: number }>('/crawl/jobs', { ruleId }),
   job: (id: number) => http.get<CrawlJob>(`/crawl/jobs/${id}`),

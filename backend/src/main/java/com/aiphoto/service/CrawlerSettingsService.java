@@ -166,6 +166,51 @@ public class CrawlerSettingsService {
         return snapshot;
     }
 
+    public List<InspectionProxyView> inspectionProxies() {
+        return proxyRepository.findAllByOrderByPriorityAscIdAsc().stream()
+                .map(proxy -> new InspectionProxyView(
+                        proxy.getId(), proxy.getName(), Boolean.TRUE.equals(proxy.getEnabled()),
+                        proxy.getProxyType()))
+                .toList();
+    }
+
+    public String validateInspectionProxy(String mode, Long proxyId) {
+        String normalized = mode == null ? "DEFAULT" : mode;
+        if (!List.of("DEFAULT", "DIRECT", "SELECTED").contains(normalized)) {
+            throw new IllegalArgumentException("无效的网站测试代理方式");
+        }
+        if ("SELECTED".equals(normalized)) requireInspectionProxy(proxyId);
+        return normalized;
+    }
+
+    private CrawlerProxy requireInspectionProxy(Long id) {
+        if (id == null) throw new IllegalArgumentException("请选择网站测试使用的代理");
+        CrawlerProxy proxy = proxyRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("网站测试代理已删除，请重新选择"));
+        if (!Boolean.TRUE.equals(proxy.getEnabled())) {
+            throw new IllegalArgumentException("网站测试代理已停用，请重新选择");
+        }
+        return proxy;
+    }
+
+    public NetworkSnapshot inspectionNetwork(String mode, Long proxyId) {
+        String normalized = validateInspectionProxy(mode, proxyId);
+        if ("DEFAULT".equals(normalized)) return networkSnapshot();
+        CrawlerSetting setting = currentSetting();
+        List<ProxyConfig> proxies = List.of();
+        if ("SELECTED".equals(normalized)) {
+            CrawlerProxy proxy = requireInspectionProxy(proxyId);
+            proxies = List.of(new ProxyConfig(proxy.getId(), proxy.getHost(), proxy.getPort(),
+                    proxy.getUsername(), secretService.decrypt(proxy.getPasswordCiphertext())));
+        }
+        return new NetworkSnapshot("DIRECT".equals(normalized),
+                setting.getConnectTimeoutSeconds(), setting.getRequestTimeoutSeconds(),
+                setting.getMinRequestIntervalMillis(), setting.getMaxRetries(),
+                setting.getRetryBaseDelayMillis(), proxies);
+    }
+
+    public record InspectionProxyView(Long id, String name, boolean enabled, String proxyType) {}
+
     private CrawlerSetting currentSetting() {
         return settingRepository.findById(1L).orElseGet(CrawlerSetting::new);
     }

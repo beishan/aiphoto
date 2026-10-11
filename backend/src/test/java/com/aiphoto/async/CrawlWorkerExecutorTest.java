@@ -62,4 +62,58 @@ class CrawlWorkerExecutorTest {
         verify(session).close();
         verifyNoInteractions(jobs, fetcher);
     }
+    @Test
+    void discoveryVisitsAllConfiguredEntriesAndDeduplicatesPagination() throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule();
+        rule.setStartUrl("https://example.com/");
+        rule.setAllowedHosts("example.com"); rule.setDetailSelector("a.detail"); rule.setNextSelector("a.next");
+        rule.setSiteId(2L);
+        rule.setDiscoveryUrls(java.util.List.of("https://example.com/a", "https://example.com/b"));
+        when(executors.acquire(1L)).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(fetcher.fetch(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            String url = invocation.getArgument(0);
+            String body = "<a class='detail' href='/detail'>Detail</a><a class='next' href='/b'>Next</a>";
+            return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "text/html",
+                    body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        });
+
+        worker.discover(1L);
+
+        verify(fetcher).fetch("https://example.com/a", "example.com", 5242880L, 1000L);
+        verify(fetcher).fetch("https://example.com/b", "example.com", 5242880L, 1000L);
+        verify(fetcher, times(2)).fetch(anyString(), any(), anyLong(), anyLong());
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.COMPLETED);
+        verify(session).close();
+    }
+
+    @Test
+    void oneFailedEntryDoesNotPreventOtherEntriesFromDiscovery() throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
+        rule.setAllowedHosts("example.com"); rule.setDetailSelector("a");
+        rule.setDiscoveryUrls(java.util.List.of("https://example.com/a", "https://example.com/b"));
+        when(executors.acquire(1L)).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(fetcher.fetch("https://example.com/a", "example.com", 5242880L, 1000L))
+                .thenThrow(new java.io.IOException("unavailable"));
+        when(fetcher.fetch("https://example.com/b", "example.com", 5242880L, 1000L))
+                .thenReturn(new SafeHttpFetcher.FetchedResource(java.net.URI.create("https://example.com/b"),
+                        "text/html", "<p>OK</p>".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        worker.discover(1L);
+
+        verify(fetcher).fetch("https://example.com/b", "example.com", 5242880L, 1000L);
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.PARTIAL);
+        assertThat(job.getFailCount()).isEqualTo(1);
+    }
 }

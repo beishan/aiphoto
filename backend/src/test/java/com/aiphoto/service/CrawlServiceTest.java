@@ -40,6 +40,7 @@ class CrawlServiceTest {
     @Mock private SafeHttpFetcher fetcher;
     @Mock private CrawlStagingStorageService stagingStorage;
     @Mock private PhotoRepository photoRepository;
+    @Mock private CrawlerSettingsService crawlerSettingsService;
     private CrawlService crawlService;
 
     @BeforeEach
@@ -53,7 +54,183 @@ class CrawlServiceTest {
                 fetcher,
                 new ObjectMapper(),
                 stagingStorage,
-                photoRepository);
+                photoRepository,
+                crawlerSettingsService);
+    }
+
+    @Test
+    void savesIndependentInspectionProxy() {
+        CrawlSite site = inspectionSite();
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+
+        assertThat(crawlService.saveSite(site, 9L).getInspectionProxyId()).isEqualTo(7L);
+        assertThat(site.getInspectionProxyMode()).isEqualTo("SELECTED");
+    }
+
+    @Test
+    void previewUsesSameInspectionNetworkForListAndDetail() throws Exception {
+        CrawlSite site = inspectionSite();
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
+        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/", "<a href='/detail'>detail</a>"));
+        when(fetcher.fetchForInspection("https://example.com/detail", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/detail", "<img src='/original.jpg'>"));
+        CrawlRule rule = new CrawlRule();
+        rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
+
+        var result = crawlService.preview(rule, 9L);
+
+        assertThat(result.detailUrls()).containsExactly("https://example.com/detail");
+        assertThat(result.imageUrls()).containsExactly("https://example.com/original.jpg");
+        verify(fetcher, never()).fetch(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void previewUsesDraftProxyWithoutSavingSite() throws Exception {
+        CrawlSite site = inspectionSite();
+        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, List.of());
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(crawlerSettingsService.inspectionNetwork("DIRECT", null)).thenReturn(network);
+        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/", "<p>No links</p>"));
+        CrawlRule rule = new CrawlRule();
+        rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
+
+        crawlService.preview(rule, 9L, "DIRECT", null);
+
+        assertThat(site.getInspectionProxyMode()).isEqualTo("SELECTED");
+        verify(siteRepository, never()).save(site);
+    }
+
+    @Test
+    void inspectionReturnsMetadataUsingDraftProxy() throws Exception {
+        CrawlSite site = inspectionSite();
+        site.setId(null); site.setAllowedHosts("");
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
+        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/", "<title>Example</title><meta name='description' content='Gallery'>"));
+
+        var info = crawlService.inspectSite(site, 9L);
+
+        assertThat(info.title()).isEqualTo("Example");
+        assertThat(info.description()).isEqualTo("Gallery");
+        org.mockito.Mockito.verifyNoInteractions(siteRepository, jobRepository);
+    }
+
+    @Test
+    void inspectionRejectsAnotherOwnersSiteBeforeAnyRequest() {
+        CrawlSite site = inspectionSite();
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> crawlService.inspectSite(site, 9L))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.mockito.Mockito.verifyNoInteractions(fetcher, crawlerSettingsService);
+    }
+
+    @Test
+    void discoveryPagesAreNormalizedDeduplicatedAndSavedInOrder() {
+        CrawlSite site = inspectionSite();
+        site.setDiscoveryUrls(" https://EXAMPLE.com:443/a#first \nhttps://example.com/b\nhttps://example.com/a#other");
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+
+        assertThat(crawlService.saveSite(site, 9L).getDiscoveryUrls())
+                .isEqualTo("https://example.com/a\nhttps://example.com/b");
+    }
+
+    @Test
+    void blankDiscoveryPagesRemainEmptyAndFollowChangedSiteEntry() {
+        CrawlSite site = inspectionSite();
+        site.setDiscoveryUrls(" \n ");
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+
+        assertThat(crawlService.saveSite(site, 9L).getDiscoveryUrls()).isNull();
+    }
+
+    @Test
+    void discoveryPageValidationRejectsUnauthorizedHostsAndInvalidUrls() {
+        CrawlSite site = inspectionSite();
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        for (String invalid : List.of("https://other.com/list", "/relative", "ftp://example.com/list",
+                "https://user:password@example.com/list", "https://example.com:8443/list")) {
+            site.setDiscoveryUrls(invalid);
+            assertThatThrownBy(() -> crawlService.saveSite(site, 9L))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("发现页");
+        }
+        verify(siteRepository, never()).save(site);
+    }
+
+    @Test
+    void discoveryPageCountIsBounded() {
+        CrawlSite site = inspectionSite();
+        site.setDiscoveryUrls(java.util.stream.IntStream.range(0, 21)
+                .mapToObj(i -> "https://example.com/list/" + i).collect(java.util.stream.Collectors.joining("\n")));
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        assertThatThrownBy(() -> crawlService.saveSite(site, 9L)).hasMessageContaining("20");
+    }
+
+    @Test
+    void rulePreviewUsesFirstDiscoveryPageInsteadOfSiteEntry() throws Exception {
+        CrawlSite site = inspectionSite();
+        site.setDiscoveryUrls("https://example.com/list/a\nhttps://example.com/list/b");
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
+        when(fetcher.fetchForInspection("https://example.com/list/a", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/list/a", "<a href='/detail'>detail</a>"));
+        when(fetcher.fetchForInspection("https://example.com/detail", "example.com", 5242880L, 1000L, network))
+                .thenReturn(html("https://example.com/detail", "<img src='/image.jpg'>"));
+        CrawlRule rule = new CrawlRule();
+        rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
+
+        var preview = crawlService.preview(rule, 9L);
+
+        assertThat(preview.detailUrls()).containsExactly("https://example.com/detail");
+        assertThat(preview.rule().getDiscoveryUrls()).containsExactly(
+                "https://example.com/list/a", "https://example.com/list/b");
+    }
+
+    @Test
+    void taskSnapshotKeepsDiscoveryPagesWhenWebsiteChanges() throws Exception {
+        CrawlSite site = inspectionSite();
+        site.setDiscoveryUrls("https://example.com/a\nhttps://example.com/b");
+        CrawlRule rule = new CrawlRule();
+        rule.setId(3L); rule.setSiteId(2L); rule.setEnabled(true);
+        when(ruleRepository.findByIdAndOwnerId(3L, 9L)).thenReturn(Optional.of(rule));
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(jobRepository.save(org.mockito.ArgumentMatchers.any(CrawlJob.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CrawlJob job = crawlService.createJob(3L, 9L);
+        site.setDiscoveryUrls("https://example.com/c");
+        CrawlRule snapshot = new ObjectMapper().readValue(job.getRuleSnapshot(), CrawlRule.class);
+
+        assertThat(snapshot.getDiscoveryUrls()).containsExactly(
+                "https://example.com/a", "https://example.com/b");
+    }
+
+    private CrawlSite inspectionSite() {
+        CrawlSite site = new CrawlSite();
+        site.setId(2L); site.setName("Example"); site.setStartUrl("https://example.com/");
+        site.setAllowedHosts("example.com"); site.setInspectionProxyMode("SELECTED");
+        site.setInspectionProxyId(7L);
+        return site;
+    }
+
+    private SafeHttpFetcher.FetchedResource html(String url, String body) {
+        return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "text/html",
+                body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     @Test

@@ -24,6 +24,8 @@ public class CrawlRule {
     private Boolean enabled = false;
     @Transient
     private String startUrl;
+    @Transient
+    private java.util.List<String> discoveryUrls = java.util.List.of();
     @Column(nullable = false, length = 500)
     private String detailSelector;
     @Column(length = 1000)

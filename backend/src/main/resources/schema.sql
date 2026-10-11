@@ -314,6 +314,10 @@ ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS min_request_interval_millis BIG
 ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS schedule_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS daily_scan_time TIME NOT NULL DEFAULT '03:00:00';
 ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS last_scheduled_scan_date DATE;
+-- Website inspection uses its own network configuration, independent of task executors.
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS inspection_proxy_mode VARCHAR(16) NOT NULL DEFAULT 'DEFAULT';
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS inspection_proxy_id BIGINT;
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS discovery_urls TEXT;
 
 CREATE TABLE IF NOT EXISTS crawl_rules (
     id BIGSERIAL PRIMARY KEY,
