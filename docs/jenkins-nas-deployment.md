@@ -120,6 +120,20 @@ http://192.168.31.155:8391/
 http://192.168.31.155:8392/actuator/health
 ```
 
+## 镜像构建缓存（0.16.1）
+
+后端安装 FFmpeg 的层位于 APP_VERSION 环境变量与镜像标签之前，发布版本号变化不会再使 apk 安装层失效。原来版本元数据位于 apk 之前，每次升级都可能重新安装 96 个依赖包；前端大包警告只是构建提示，日志中的主要等待发生在后端 FFmpeg 下载。
+
+Maven 的依赖预取、测试和打包共用 aiphoto-maven BuildKit 下载缓存；pom.xml 的版本变更仍会运行 Maven，但已下载的依赖与插件可复用。测试仍在 Jenkins Backend Test 阶段执行，镜像打包阶段使用 maven.test.skip=true，避免重复编译测试代码。
+
+前端先在独立阶段仅将 package.json、package-lock.json 的应用根版本统一为占位值，再安装依赖。只修改应用版本时，这两个输入文件的内容保持一致，可复用 npm ci 层；依赖或其他配置改变仍会使该层失效。应用构建前 COPY 原始文件恢复真实版本。npm 另有 aiphoto-npm 下载缓存，安装使用 prefer-offline 并关闭安装阶段的 audit/fund 网络操作。
+
+缓存依赖于相同 Docker daemon/BuildKit builder，Jenkins cleanWs 仅清理工作目录，不会清除这些 Docker 缓存。现有发布清理保留当前及上一版镜像，没有执行 docker builder prune。若 Jenkins 改用不同节点或 builder，或外部定时任务清理构建缓存，将重新安装；首次采用新 Dockerfile 也需要建立缓存。基础镜像或依赖变更时重建属于正常行为。
+
+下一次及后续发布应重点查看后端 RUN apk add --no-cache ffmpeg 是否显示 CACHED；仅版本变化时前端 npm ci 应显示 CACHED。Maven 缓存命中时不应重复大量下载依赖。首次安装、真实镜像构建与具体节省时间需在 Jenkins 上验收。
+
+参考：[Docker 构建缓存优化](https://docs.docker.com/build/cache/optimize/)。
+
 ## 7. 运维命令
 
 在仓库中指定生产环境文件：
