@@ -31,6 +31,9 @@ const previewImageError = ref('')
 const previewImages = reactive<Record<number, string>>({})
 const busy = ref('')
 const siteDialogVisible = ref(false)
+const siteConfigurationVisible = ref(false)
+const siteConfigurationTab = ref<'basic' | 'rules'>('basic')
+const siteConfigurationLoading = ref(false)
 const siteSaveBusy = ref(false)
 const albums = ref<Album[]>([])
 const tags = ref<Tag[]>([])
@@ -298,9 +301,18 @@ async function selectSite(site: CrawlSite) {
   await loadRules()
 }
 
-function selectSiteById(id: string) {
-  const site = sites.value.find(item => item.id === Number(id))
-  if (site) void selectSite(site)
+async function openSiteConfiguration(site: CrawlSite, tab: 'basic' | 'rules' = 'basic') {
+  siteConfigurationTab.value = tab
+  siteConfigurationLoading.value = true
+  siteConfigurationVisible.value = true
+  try {
+    await selectSite(site)
+  } catch (error: any) {
+    siteConfigurationVisible.value = false
+    ElMessage.error(error?.response?.data?.message || '加载网站配置失败')
+  } finally {
+    siteConfigurationLoading.value = false
+  }
 }
 
 function selectRuleById(id: string) {
@@ -398,6 +410,8 @@ async function createSite() {
       const rule = await saveRule(false)
       if (rule) useRule(rule)
     }
+    siteConfigurationTab.value = 'rules'
+    siteConfigurationVisible.value = true
     ElMessage.success('网站已创建')
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '网站创建失败')
@@ -421,6 +435,7 @@ async function startDiscovery() {
     const { data } = await crawlApi.createJob(rule.id)
     activeJobId.value = data.jobId
     activeTab.value = 'tasks'
+    siteConfigurationVisible.value = false
     await loadJobs()
     await loadJobDetail()
     ElMessage.success('已开始发现图片页链接')
@@ -784,103 +799,21 @@ onUnmounted(() => {
       </el-card>
     </section>
 
-    <section v-else-if="activeTab === 'sites'" class="source-workspace" role="tabpanel">
-      <el-card class="source-sidebar surface-card" shadow="never">
-        <template #header><div class="card-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2></div><el-button type="primary" :icon="Plus" circle aria-label="新增网站" @click="openNewSiteDialog" /></div></template>
-        <el-scrollbar max-height="620px">
-          <el-menu v-if="sites.length" :default-active="String(activeSiteId || '')" class="source-menu" @select="selectSiteById">
-            <el-menu-item v-for="site in sites" :key="site.id" :index="String(site.id)">
-              <span class="source-avatar">{{ site.name.slice(0, 1) }}</span>
-              <div class="menu-copy"><strong>{{ site.name }}</strong><small>{{ site.startUrl }}</small></div>
-            </el-menu-item>
-          </el-menu>
-          <el-empty v-else description="还没有采集网站" :image-size="72"><el-button type="primary" link @click="openNewSiteDialog">立即添加</el-button></el-empty>
-        </el-scrollbar>
-      </el-card>
-
-      <div class="source-main">
-        <el-card class="site-editor surface-card" shadow="never">
-          <template #header><div class="card-heading"><div><p class="eyebrow">SITE SETTINGS</p><h2>{{ activeSiteId ? '网站配置' : '选择网站' }}</h2><p v-if="activeSiteId">入口、访问边界与单次任务上限。</p></div><el-button v-if="activeSiteId" type="primary" :icon="CircleCheck" round @click="saveSite">保存更改</el-button></div></template>
-          <el-form v-if="activeSiteId" :model="siteForm" label-position="top" class="mac-form">
-            <el-row :gutter="16">
-              <el-col :xs="24" :md="10"><el-form-item label="网站名称"><el-input v-model="siteForm.name" placeholder="例如：家庭活动图库" /></el-form-item></el-col>
-              <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
-              <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
-            </el-row>
-            <el-divider content-position="left">发现页配置</el-divider>
-            <el-form-item label="发现页入口">
-              <el-input v-model="siteForm.discoveryUrls" type="textarea" :rows="3"
-                placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
-            </el-form-item>
-            <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
-            <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
-              :proxies="inspectionProxies" :loading="inspectionBusy === 'edit'"
-              @refresh="loadInspectionProxies" @inspect="inspectSite('edit')" />
-            <el-alert v-if="siteInfo" type="success" :closable="false" :title="siteInfo.title || '网页未提供标题'">
-              <template #default><p>{{ siteInfo.description || '网页未提供简介' }}</p><p>{{ siteInfo.finalUrl }}</p></template>
-            </el-alert>
-            <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;安全上限</el-divider>
-            <el-row :gutter="16">
-              <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
-              <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
-              <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
-              <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="siteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
-            </el-row>
-            <el-divider content-position="left">每日新增扫描</el-divider>
-            <el-row :gutter="16">
-              <el-col :xs="24" :sm="8"><el-form-item label="启用定时扫描"><el-switch v-model="siteForm.scheduleEnabled" /></el-form-item></el-col>
-              <el-col :xs="24" :sm="8"><el-form-item label="每天执行时间"><el-time-select v-model="siteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!siteForm.scheduleEnabled" /></el-form-item></el-col>
-              <el-col :xs="24" :sm="8"><el-form-item label="上次自动扫描"><el-input :model-value="siteForm.lastScheduledScanDate || '尚未执行'" disabled /></el-form-item></el-col>
-            </el-row>
-            <el-alert type="info" show-icon :closable="false" title="定时任务只发现此前没有记录过的新链接，完成后仍由你确认是否下载。" />
-          </el-form>
-          <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
-        </el-card>
-
-        <el-card class="rule-editor surface-card" shadow="never">
-          <template #header><div class="card-heading"><div><p class="eyebrow">PARSING RULES</p><h2>解析规则</h2><p>定义怎样发现详情页并提取原图。</p></div><el-button :icon="Plus" round :disabled="!activeSiteId" @click="newRule">新增规则</el-button></div></template>
-          <el-empty v-if="!activeSiteId" description="选择网站后配置解析规则" :image-size="76" />
-          <div v-else class="rule-workspace">
-            <aside class="rule-sidebar">
-              <el-menu v-if="rules.length" :default-active="String(form.id || '')" class="source-menu" @select="selectRuleById">
-                <el-menu-item v-for="rule in rules" :key="rule.id" :index="String(rule.id)">
-                  <div class="menu-copy"><strong>{{ rule.name }}</strong><small>{{ rule.enabled ? '当前生效规则' : '已停用' }}</small></div>
-                  <el-tag v-if="rule.enabled" size="small" type="success" effect="light" round>生效</el-tag>
-                </el-menu-item>
-              </el-menu>
-              <el-empty v-else description="暂无规则" :image-size="56" />
-            </aside>
-            <el-form :model="form" label-position="top" class="mac-form rule-form">
-              <el-row :gutter="16">
-                <el-col :xs="24" :md="16"><el-form-item label="规则名称"><el-input v-model="form.name" placeholder="例如：默认图片解析" /></el-form-item></el-col>
-                <el-col :xs="24" :md="8"><el-form-item label="任务状态"><el-switch v-model="form.enabled" inline-prompt active-text="生效" inactive-text="停用" /></el-form-item></el-col>
-              </el-row>
-              <el-divider content-position="left">链接发现</el-divider>
-              <el-row :gutter="16">
-                <el-col :xs="24" :md="12"><el-form-item label="图片页链接选择器"><el-input v-model="form.detailSelector" placeholder="CSS 选择器" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="列表下一页选择器"><el-input v-model="form.nextSelector" placeholder="可留空" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="URL 必须包含"><el-input v-model="form.detailUrlIncludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="URL 排除片段"><el-input v-model="form.detailUrlExcludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
-              </el-row>
-              <el-divider content-position="left">原图提取</el-divider>
-              <el-row :gutter="16">
-                <el-col :xs="24" :md="12"><el-form-item label="图片选择器"><el-input v-model="form.imageSelector" placeholder="例如 img.gallery-image" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="图片属性优先级"><el-input v-model="form.imageAttributes" placeholder="data-original,data-src,src" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="图片 URL 必须包含"><el-input v-model="form.imageUrlIncludes" placeholder="可留空" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="图片 URL 排除片段"><el-input v-model="form.imageUrlExcludes" placeholder="例如 thumb,avatar" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="详情下一页选择器"><el-input v-model="form.detailNextSelector" placeholder="可留空" /></el-form-item></el-col>
-                <el-col :xs="24" :md="12"><el-form-item label="每个详情页组上限"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" controls-position="right" /></el-form-item></el-col>
-              </el-row>
-              <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">开始扫描</el-button></div>
-            </el-form>
+    <section v-else-if="activeTab === 'sites'" class="site-catalog surface-card" role="tabpanel">
+      <div class="card-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>按网站管理采集入口、访问配置与解析规则。</p></div><el-button type="primary" :icon="Plus" round @click="openNewSiteDialog">新增网站</el-button></div>
+      <div v-if="sites.length" class="site-grid">
+        <article v-for="site in sites" :key="site.id" class="site-card">
+          <div class="site-top">
+            <span class="source-avatar">{{ site.name.slice(0, 1) }}</span>
+            <div class="site-identity"><h3><button type="button" class="site-name-button" @click="openSiteConfiguration(site)">{{ site.name }}</button></h3><a :href="site.startUrl" target="_blank" rel="noopener noreferrer">{{ site.startUrl }}</a></div>
+            <el-tag :type="site.scheduleEnabled ? 'success' : 'info'" size="small" round>{{ site.scheduleEnabled ? '定时扫描' : '手动扫描' }}</el-tag>
           </div>
-          <el-alert v-if="previewImageError" class="preview-error" type="warning" show-icon :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
-          <el-collapse v-if="previewUrls.length || previewImageUrls.length" class="preview-collapse">
-            <el-collapse-item v-if="previewUrls.length" :title="`图片页链接预览（${previewUrls.length}）`" name="pages"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
-            <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
-          </el-collapse>
-        </el-card>
+          <div class="site-stats"><span><b>{{ site.maxListPages }}</b> 列表页</span><span><b>{{ site.maxDetailPages }}</b> 图片页</span><span><b>{{ site.maxImages }}</b> 张图片</span></div>
+          <p class="site-health-line">请求间隔 {{ site.minRequestIntervalMillis }} ms · {{ site.scheduleEnabled ? `每天 ${site.dailyScanTime || '03:00'} 扫描` : '未开启定时扫描' }}</p>
+          <footer><el-button type="primary" plain :icon="Setting" @click="openSiteConfiguration(site)">网站设置</el-button><el-button :icon="EditPen" @click="openSiteConfiguration(site, 'rules')">解析规则</el-button></footer>
+        </article>
       </div>
+      <el-empty v-else description="尚未配置采集网站"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
     </section>
 
     <section v-else-if="activeTab === 'tasks'" class="task-workspace" role="tabpanel">
@@ -1019,6 +952,99 @@ onUnmounted(() => {
         <el-pagination v-if="skipTotal > 50" class="pagination" layout="prev, pager, next, total" :current-page="skipPage + 1" :page-size="50" :total="skipTotal" @current-change="changeSkipPage" />
       </el-card>
     </section>
+
+    <el-dialog v-model="siteConfigurationVisible" :title="`${siteForm.name || '采集网站'} · 配置`" width="min(1040px, calc(100vw - 28px))" top="5vh" class="site-configuration-dialog" append-to-body destroy-on-close>
+      <div v-loading="siteConfigurationLoading" class="site-configuration-content">
+        <el-tabs v-model="siteConfigurationTab" class="site-configuration-tabs" stretch>
+          <el-tab-pane label="网站设置" name="basic" />
+          <el-tab-pane label="解析规则" name="rules" />
+        </el-tabs>
+        <div v-if="!siteConfigurationLoading" class="site-configuration-panels">
+          <el-card v-show="siteConfigurationTab === 'basic'" class="site-editor surface-card" shadow="never">
+            <template #header><div class="card-heading"><div><p class="eyebrow">SITE SETTINGS</p><h2>{{ activeSiteId ? '网站配置' : '选择网站' }}</h2><p v-if="activeSiteId">入口、访问边界与单次任务上限。</p></div><el-button v-if="activeSiteId" type="primary" :icon="CircleCheck" round @click="saveSite">保存更改</el-button></div></template>
+            <el-form v-if="activeSiteId" :model="siteForm" label-position="top" class="mac-form">
+              <el-row :gutter="16">
+                <el-col :xs="24" :md="10"><el-form-item label="网站名称"><el-input v-model="siteForm.name" placeholder="例如：家庭活动图库" /></el-form-item></el-col>
+                <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
+                <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
+              </el-row>
+              <el-divider content-position="left">发现页配置</el-divider>
+              <el-form-item label="发现页入口">
+                <el-input v-model="siteForm.discoveryUrls" type="textarea" :rows="3"
+                  placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
+              </el-form-item>
+              <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
+              <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
+                :proxies="inspectionProxies" :loading="inspectionBusy === 'edit'"
+                @refresh="loadInspectionProxies" @inspect="inspectSite('edit')" />
+              <el-alert v-if="siteInfo" type="success" :closable="false" :title="siteInfo.title || '网页未提供标题'">
+                <template #default><p>{{ siteInfo.description || '网页未提供简介' }}</p><p>{{ siteInfo.finalUrl }}</p></template>
+              </el-alert>
+              <el-divider content-position="left"><el-icon><Setting /></el-icon>&nbsp;安全上限</el-divider>
+              <el-row :gutter="16">
+                <el-col :xs="24" :sm="8"><el-form-item label="列表页"><el-input-number v-model="siteForm.maxListPages" :min="1" :max="1000" controls-position="right" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="siteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
+              </el-row>
+              <el-divider content-position="left">每日新增扫描</el-divider>
+              <el-row :gutter="16">
+                <el-col :xs="24" :sm="8"><el-form-item label="启用定时扫描"><el-switch v-model="siteForm.scheduleEnabled" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="每天执行时间"><el-time-select v-model="siteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!siteForm.scheduleEnabled" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="上次自动扫描"><el-input :model-value="siteForm.lastScheduledScanDate || '尚未执行'" disabled /></el-form-item></el-col>
+              </el-row>
+              <el-alert type="info" show-icon :closable="false" title="定时任务只发现此前没有记录过的新链接，完成后仍由你确认是否下载。" />
+            </el-form>
+            <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
+          </el-card>
+
+          <el-card v-show="siteConfigurationTab === 'rules'" class="rule-editor surface-card" shadow="never">
+            <template #header><div class="card-heading"><div><p class="eyebrow">PARSING RULES</p><h2>解析规则</h2><p>定义怎样发现详情页并提取原图。</p></div><el-button :icon="Plus" round :disabled="!activeSiteId" @click="newRule">新增规则</el-button></div></template>
+            <el-empty v-if="!activeSiteId" description="选择网站后配置解析规则" :image-size="76" />
+            <div v-else class="rule-workspace">
+              <aside class="rule-sidebar">
+                <el-menu v-if="rules.length" :default-active="String(form.id || '')" class="source-menu" @select="selectRuleById">
+                  <el-menu-item v-for="rule in rules" :key="rule.id" :index="String(rule.id)">
+                    <div class="menu-copy"><strong>{{ rule.name }}</strong><small>{{ rule.enabled ? '当前生效规则' : '已停用' }}</small></div>
+                    <el-tag v-if="rule.enabled" size="small" type="success" effect="light" round>生效</el-tag>
+                  </el-menu-item>
+                </el-menu>
+                <el-empty v-else description="暂无规则" :image-size="56" />
+              </aside>
+              <el-form :model="form" label-position="top" class="mac-form rule-form">
+                <el-row :gutter="16">
+                  <el-col :xs="24" :md="16"><el-form-item label="规则名称"><el-input v-model="form.name" placeholder="例如：默认图片解析" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="8"><el-form-item label="任务状态"><el-switch v-model="form.enabled" inline-prompt active-text="生效" inactive-text="停用" /></el-form-item></el-col>
+                </el-row>
+                <el-divider content-position="left">链接发现</el-divider>
+                <el-row :gutter="16">
+                  <el-col :xs="24" :md="12"><el-form-item label="图片页链接选择器"><el-input v-model="form.detailSelector" placeholder="CSS 选择器" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="列表下一页选择器"><el-input v-model="form.nextSelector" placeholder="可留空" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="URL 必须包含"><el-input v-model="form.detailUrlIncludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="URL 排除片段"><el-input v-model="form.detailUrlExcludes" placeholder="多个片段用逗号分隔" /></el-form-item></el-col>
+                </el-row>
+                <el-divider content-position="left">原图提取</el-divider>
+                <el-row :gutter="16">
+                  <el-col :xs="24" :md="12"><el-form-item label="图片选择器"><el-input v-model="form.imageSelector" placeholder="例如 img.gallery-image" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="图片属性优先级"><el-input v-model="form.imageAttributes" placeholder="data-original,data-src,src" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="图片 URL 必须包含"><el-input v-model="form.imageUrlIncludes" placeholder="可留空" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="图片 URL 排除片段"><el-input v-model="form.imageUrlExcludes" placeholder="例如 thumb,avatar" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="详情下一页选择器"><el-input v-model="form.detailNextSelector" placeholder="可留空" /></el-form-item></el-col>
+                  <el-col :xs="24" :md="12"><el-form-item label="每个详情页组上限"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" controls-position="right" /></el-form-item></el-col>
+                </el-row>
+                <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">开始扫描</el-button></div>
+              </el-form>
+            </div>
+            <el-alert v-if="previewImageError" class="preview-error" type="warning" show-icon :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
+            <el-collapse v-if="previewUrls.length || previewImageUrls.length" class="preview-collapse">
+              <el-collapse-item v-if="previewUrls.length" :title="`图片页链接预览（${previewUrls.length}）`" name="pages"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
+              <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
+            </el-collapse>
+          </el-card>
+        </div>
+      </div>
+      <template #footer><el-button round @click="siteConfigurationVisible = false">关闭</el-button></template>
+    </el-dialog>
 
     <el-dialog append-to-body v-model="siteDialogVisible" class="site-dialog" width="min(680px, calc(100vw - 28px))" destroy-on-close align-center @closed="resetCreateSiteForm">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Connection /></el-icon></span><div><h2>新增采集网站</h2><p>设置采集入口与访问边界，创建后再配置解析规则。</p></div></div></template>

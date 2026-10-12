@@ -13,7 +13,7 @@
 
     <groupId>com.aiphoto</groupId>
     <artifactId>aiphoto-backend</artifactId>
-    <version>0.16.2</version>
+    <version>0.16.3</version>
     <name>aiphoto Backend</name>
     <description>aiphoto AI Photo Album Backend</description>
 
