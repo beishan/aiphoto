@@ -148,6 +148,20 @@ POSTGRES_BASE_IMAGE=docker.io/pgvector/pgvector:pg16
 
 默认仍为 docker.m.daocloud.io/pgvector/pgvector:pg16。也可填写 NAS 可访问的可信镜像源，但须提供包含 pgvector 的 PostgreSQL 16 镜像。镜像源持续故障时调整配置后重新运行 Jenkins；不自动切换到未经验证的镜像源，也不替换数据库卷。
 
+### 前端 nginx / Node 镜像源（0.16.4）
+
+若 nginx:alpine 的元数据请求持续返回 502，在 Jenkins Secret file 生产环境配置中增加或修改：
+
+~~~bash
+FRONTEND_NGINX_BASE_IMAGE=docker.io/library/nginx:alpine
+# Node 镜像源也有故障时单独覆盖：
+FRONTEND_NODE_BASE_IMAGE=docker.io/library/node:20-alpine
+~~~
+
+重新运行 Jenkins 后生效。两个变量默认保留 DaoCloud；也支持指定 NAS 可访问的可信镜像仓库。Docker Hub 是否可达需在 NAS 上确认。上述变量同时适用于根目录和生产 Compose，Node 的两个构建阶段使用同一镜像配置，保留依赖缓存结构。
+
+现有构建重试已覆盖该 nginx HEAD 请求的 502；若日志最后仍然失败，请检查此前是否出现“镜像源临时故障”及 2/3、3/3 的尝试。重试耗尽后需等待镜像源恢复或调整上述配置，页面代码编译不受此次元数据错误影响。
+
 ## 7. 运维命令
 
 在仓库中指定生产环境文件：

@@ -1,6 +1,9 @@
+ARG FRONTEND_NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
+ARG FRONTEND_NGINX_BASE_IMAGE=docker.m.daocloud.io/library/nginx:alpine
+
 # Normalize release-only fields in a separate stage. Dependencies downstream
 # receive identical files when only the application version changes.
-FROM docker.m.daocloud.io/library/node:20-alpine AS dependency-manifests
+FROM ${FRONTEND_NODE_BASE_IMAGE} AS dependency-manifests
 
 WORKDIR /app
 
@@ -8,7 +11,7 @@ COPY package.json package-lock.json ./
 RUN node -e 'const fs = require("fs"); for (const name of ["package.json", "package-lock.json"]) { const data = JSON.parse(fs.readFileSync(name, "utf8")); data.version = "0.0.0"; if (data.packages && data.packages[""]) data.packages[""].version = "0.0.0"; fs.writeFileSync(name, JSON.stringify(data, null, 2) + "\n"); }'
 
 # Stage 1: Build
-FROM docker.m.daocloud.io/library/node:20-alpine AS build
+FROM ${FRONTEND_NODE_BASE_IMAGE} AS build
 WORKDIR /app
 COPY --from=dependency-manifests /app/package.json /app/package-lock.json ./
 RUN --mount=type=cache,id=aiphoto-npm,target=/root/.npm,sharing=locked \
@@ -19,9 +22,9 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve with nginx
-FROM docker.m.daocloud.io/library/nginx:alpine
+FROM ${FRONTEND_NGINX_BASE_IMAGE}
 
-ARG APP_VERSION=0.16.3
+ARG APP_VERSION=0.16.4
 LABEL org.opencontainers.image.title="aiphoto Frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
 

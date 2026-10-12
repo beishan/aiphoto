@@ -35,7 +35,7 @@ services:
     networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-aiphoto-ai:0.16.3}
+    image: ${AI_IMAGE:-aiphoto-ai:0.16.4}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
@@ -68,7 +68,7 @@ services:
     networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.3}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.4}
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -125,12 +125,14 @@ services:
     networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.3}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.4}
     build:
       context: ../frontend
       dockerfile: Dockerfile
       args:
         APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+        FRONTEND_NODE_BASE_IMAGE: ${FRONTEND_NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
+        FRONTEND_NGINX_BASE_IMAGE: ${FRONTEND_NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
       labels:
         com.aiphoto.managed: "true"
     container_name: aiphoto-frontend

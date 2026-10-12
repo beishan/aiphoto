@@ -24,7 +24,7 @@ FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
 # Keep system dependencies before release metadata so a version bump reuses FFmpeg.
 RUN apk add --no-cache ffmpeg
 
-ARG APP_VERSION=0.16.3
+ARG APP_VERSION=0.16.4
 ENV APP_VERSION=${APP_VERSION}
 LABEL org.opencontainers.image.title="aiphoto Backend" \
       org.opencontainers.image.version="${APP_VERSION}"
