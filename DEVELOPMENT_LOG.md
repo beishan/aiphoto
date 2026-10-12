@@ -8,6 +8,26 @@
 - 记录日期、需求内容、主要改动、验证结果，以及必要的兼容性或部署说明。
 - 纯调查、答疑或未产生项目变更的工作无需记录。
 
+## 0.16.5 - 2026-10-12
+
+### 需求
+
+- 处理 AI 服务 PyTorch 基础镜像继续遭遇 DaoCloud 502 的问题，补齐所有服务的镜像源配置。
+
+### 主要改动
+
+- AI 和后端 Dockerfile 支持 AI_BASE_IMAGE、BACKEND_MAVEN_BASE_IMAGE、BACKEND_JRE_BASE_IMAGE，保留原模型、CUDA 和 Java 版本及依赖缓存顺序。
+- 两套 Compose 透传新参数，根目录 PostgreSQL 镜像支持 POSTGRES_BASE_IMAGE，与生产部署一致。
+- Jenkins 后端测试独立构建读取生产环境文件中的 Maven 镜像配置，未配置时保留 Dockerfile 原默认镜像。
+- 环境示例和部署文档提供所有服务统一切换 Docker Hub 的完整配置，明确已有 Jenkins Secret file 需要手动更新；版本同步为 0.16.5。
+
+### 验证
+
+- 两套 Compose 的所有服务镜像默认值及 Docker Hub 覆盖值验证通过。
+- 模拟部署脚本 test 动作，验证独立后端测试构建正确传递默认 Maven 镜像与 Secret file 覆盖值。
+- Bash 语法、版本一致性及 Git 空白检查通过。
+- 本机 Docker 引擎未运行，未进行真实拉取与构建；目标镜像源的连通性需在 NAS 验收。
+
 ## 0.16.4 - 2026-10-12
 
 ### 需求

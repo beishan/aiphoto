@@ -1,5 +1,8 @@
+ARG BACKEND_MAVEN_BASE_IMAGE=docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21
+ARG BACKEND_JRE_BASE_IMAGE=docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
+
 # Stage 1: Build with Maven
-FROM docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21 AS build-base
+FROM ${BACKEND_MAVEN_BASE_IMAGE} AS build-base
 
 WORKDIR /app
 
@@ -19,12 +22,12 @@ RUN --mount=type=cache,id=aiphoto-maven,target=/root/.m2/repository,sharing=lock
     mvn clean package -Dmaven.test.skip=true -B
 
 # Stage 2: Run
-FROM docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
+FROM ${BACKEND_JRE_BASE_IMAGE}
 
 # Keep system dependencies before release metadata so a version bump reuses FFmpeg.
 RUN apk add --no-cache ffmpeg
 
-ARG APP_VERSION=0.16.4
+ARG APP_VERSION=0.16.5
 ENV APP_VERSION=${APP_VERSION}
 LABEL org.opencontainers.image.title="aiphoto Backend" \
       org.opencontainers.image.version="${APP_VERSION}"

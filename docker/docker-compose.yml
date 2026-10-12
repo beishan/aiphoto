@@ -35,12 +35,13 @@ services:
     networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-aiphoto-ai:0.16.4}
+    image: ${AI_IMAGE:-aiphoto-ai:0.16.5}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
       args:
         APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+        AI_BASE_IMAGE: ${AI_BASE_IMAGE:-docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime}
       labels:
         com.aiphoto.managed: "true"
     container_name: aiphoto-ai
@@ -68,12 +69,14 @@ services:
     networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.4}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.16.5}
     build:
       context: ../backend
       dockerfile: Dockerfile
       args:
         APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+        BACKEND_MAVEN_BASE_IMAGE: ${BACKEND_MAVEN_BASE_IMAGE:-docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21}
+        BACKEND_JRE_BASE_IMAGE: ${BACKEND_JRE_BASE_IMAGE:-docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine}
       labels:
         com.aiphoto.managed: "true"
     container_name: aiphoto-backend
@@ -125,7 +128,7 @@ services:
     networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.4}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.16.5}
     build:
       context: ../frontend
       dockerfile: Dockerfile

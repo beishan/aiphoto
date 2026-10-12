@@ -162,6 +162,21 @@ FRONTEND_NODE_BASE_IMAGE=docker.io/library/node:20-alpine
 
 现有构建重试已覆盖该 nginx HEAD 请求的 502；若日志最后仍然失败，请检查此前是否出现“镜像源临时故障”及 2/3、3/3 的尝试。重试耗尽后需等待镜像源恢复或调整上述配置，页面代码编译不受此次元数据错误影响。
 
+### AI 与后端镜像源（0.16.5）
+
+DaoCloud 同时影响多个基础镜像时，可在 Jenkins Secret file 中一次性覆盖所有服务：
+
+~~~bash
+AI_BASE_IMAGE=docker.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+BACKEND_MAVEN_BASE_IMAGE=docker.io/library/maven:3.9-eclipse-temurin-21
+BACKEND_JRE_BASE_IMAGE=docker.io/library/eclipse-temurin:21-jre-alpine
+FRONTEND_NODE_BASE_IMAGE=docker.io/library/node:20-alpine
+FRONTEND_NGINX_BASE_IMAGE=docker.io/library/nginx:alpine
+POSTGRES_BASE_IMAGE=docker.io/pgvector/pgvector:pg16
+~~~
+
+保存 Secret file 后重新运行 Jenkins。AI 镜像保留 PyTorch 2.3.0 / CUDA 12.1 / cuDNN 8，后端保留 Java 21。两套 Compose 均支持以上参数；Jenkins Backend Test 的独立 docker build 同样读取 BACKEND_MAVEN_BASE_IMAGE，避免测试阶段仍访问旧镜像源。默认值继续保留 DaoCloud，修改仓库示例文件不会自动更新已有 Jenkins Secret file。Docker Hub 不可达时，将对应值改为 NAS 可访问的可信同版本镜像。
+
 ## 7. 运维命令
 
 在仓库中指定生产环境文件：

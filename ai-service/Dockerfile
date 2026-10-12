@@ -1,4 +1,6 @@
-FROM docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+ARG AI_BASE_IMAGE=docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+FROM ${AI_BASE_IMAGE}
 
 WORKDIR /app
 
@@ -24,7 +26,7 @@ RUN --mount=type=cache,id=aiphoto-ai-pip,target=/root/.cache/pip,sharing=locked 
 
 # Keep release metadata after the expensive dependency layer. Changing only the
 # application version must not invalidate downloaded and installed Python packages.
-ARG APP_VERSION=0.16.4
+ARG APP_VERSION=0.16.5
 ENV APP_VERSION=${APP_VERSION}
 LABEL org.opencontainers.image.title="aiphoto AI Service" \
       org.opencontainers.image.version="${APP_VERSION}"

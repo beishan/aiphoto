@@ -345,7 +345,10 @@ case "${ACTION}" in
         echo "Docker Compose 配置校验通过。"
         ;;
     test)
+        backend_maven_base_image="$(effective_value BACKEND_MAVEN_BASE_IMAGE)"
+        backend_maven_base_image="${backend_maven_base_image:-docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21}"
         retry_image_build docker build --file "${PROJECT_DIR}/backend/Dockerfile" --target test \
+            --build-arg "BACKEND_MAVEN_BASE_IMAGE=${backend_maven_base_image}" \
             --tag "aiphoto-backend-test:${RELEASE_TAG:-local}" "${PROJECT_DIR}/backend"
         ;;
     build)
