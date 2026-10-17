@@ -35,7 +35,7 @@ services:
     networks: [aiphoto-network]
 
   ai-service:
-    image: ${AI_IMAGE:-aiphoto-ai:0.18.32}
+    image: ${AI_IMAGE:-aiphoto-ai:0.18.33}
     build:
       context: ../ai-service
       dockerfile: Dockerfile
@@ -69,7 +69,7 @@ services:
     networks: [aiphoto-network]
 
   backend:
-    image: ${BACKEND_IMAGE:-aiphoto-backend:0.18.32}
+    image: ${BACKEND_IMAGE:-aiphoto-backend:0.18.33}
     build:
       context: ../backend
       dockerfile: Dockerfile
@@ -128,7 +128,7 @@ services:
     networks: [aiphoto-network]
 
   frontend:
-    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.18.32}
+    image: ${FRONTEND_IMAGE:-aiphoto-frontend:0.18.33}
     build:
       context: ../frontend
       dockerfile: Dockerfile
