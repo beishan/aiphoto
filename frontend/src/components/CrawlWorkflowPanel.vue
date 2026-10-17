@@ -178,10 +178,10 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 
 <template>
   <section class="workflow-panel surface-card crawler-controls" v-loading="loading" role="tabpanel">
-    <header class="workflow-heading">
-      <div><p class="eyebrow">{{ mode === 'scans' ? 'DISCOVERY SOURCES' : mode === 'pages' ? 'COLLECTION PAGES' : 'SITE QUEUES' }}</p>
-        <h2>{{ mode === 'scans' ? '扫描页' : mode === 'pages' ? '待采集页' : '采集队列' }}</h2>
-        <p>{{ mode === 'scans' ? '独立维护扫描入口，按各自周期发现新的图片页面。' : mode === 'pages' ? '扫描发现的页面会逐条出现在这里。点击采集，创建独立任务。' : '一个执行器同时处理一个任务；网站专用执行器数决定该队列的并发上限。' }}</p>
+    <header v-if="mode !== 'pages'" class="workflow-heading">
+      <div><p class="eyebrow">{{ mode === 'scans' ? 'DISCOVERY SOURCES' : 'SITE QUEUES' }}</p>
+        <h2>{{ mode === 'scans' ? '扫描页' : '采集队列' }}</h2>
+        <p>{{ mode === 'scans' ? '独立维护扫描入口，按各自周期发现新的图片页面。' : '一个执行器同时处理一个任务；网站专用执行器数决定该队列的并发上限。' }}</p>
       </div>
       <el-space wrap><el-button :icon="Refresh" circle aria-label="刷新列表" @click="load()" />
         <el-button v-if="mode === 'scans'" type="primary" :icon="Plus" :disabled="!sites.length" @click="editScan()">新增扫描页</el-button>
@@ -204,7 +204,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="最近扫描" min-width="165"><template #default="{ row }">{{ time(row.lastScanAt) }}</template></el-table-column>
       <el-table-column label="管理" width="125"><template #default="{ row }"><el-button link type="primary" @click="editScan(row)">编辑</el-button><el-button link type="danger" @click="removeScan(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length" @click="removeSelectedPages">批量删除</el-button></div>
+    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length" @click="removeSelectedPages">批量删除</el-button><el-button :icon="Refresh" circle aria-label="刷新列表" @click="load()" /></div>
     <el-table v-if="mode === 'pages'" ref="pageTable" :data="pages" row-key="id" max-height="58vh" empty-text="尚无扫描结果，运行扫描页任务后会自动出现" @selection-change="onPageSelectionChange">
       <el-table-column type="selection" width="48" />
       <el-table-column label="采集" width="90" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button></template></el-table-column>
