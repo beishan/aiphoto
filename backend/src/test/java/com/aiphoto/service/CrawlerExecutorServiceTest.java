@@ -41,7 +41,7 @@ class CrawlerExecutorServiceTest {
         when(repository.findById(1L)).thenReturn(Optional.of(executor));
         when(proxies.findById(2L)).thenReturn(Optional.of(proxy));
         when(settings.networkSnapshot()).thenReturn(new CrawlerSettingsService.NetworkSnapshot(
-                true, 10, 30, 1000, 2, 1000, List.of()));
+                true, 10, 30, 60, 1000, 2, 1000, List.of()));
         when(mihomo.proxies(anyString(), isNull())).thenReturn(mapper.readTree(
                 "{\"proxies\":{\"Crawler\":{\"type\":\"Selector\",\"all\":[\"A\",\"B\"],\"now\":\"A\"},\"A\":{\"type\":\"ss\"},\"B\":{\"type\":\"ss\"}}}"));
     }

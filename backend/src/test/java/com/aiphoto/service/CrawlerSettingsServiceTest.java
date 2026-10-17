@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiphoto.entity.CrawlerProxy;
+import com.aiphoto.entity.CrawlerSetting;
 import com.aiphoto.repository.CrawlerProxyRepository;
 import com.aiphoto.repository.CrawlerSettingRepository;
 import java.util.List;
@@ -92,6 +93,19 @@ class CrawlerSettingsServiceTest {
         when(proxyRepository.findByEnabledTrueOrderByPriorityAscIdAsc()).thenReturn(List.of(ordinary, mihomo));
         assertThat(service.networkSnapshot().proxies()).extracting(CrawlerSettingsService.ProxyConfig::id)
                 .containsExactly(1L);
+    }
+
+    @Test
+    void imageDownloadTimeoutIsSavedAndClamped() {
+        CrawlerSetting setting = new CrawlerSetting();
+        when(settingRepository.findById(1L)).thenReturn(Optional.of(setting));
+        when(proxyRepository.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of());
+
+        var result = service.updateSettings(new CrawlerSettingsService.SettingsRequest(
+                true, 10, 30, 900, 1000L, 2, 1000L));
+
+        assertThat(setting.getImageDownloadTimeoutSeconds()).isEqualTo(600);
+        assertThat(result.imageDownloadTimeoutSeconds()).isEqualTo(600);
     }
 
     @Test

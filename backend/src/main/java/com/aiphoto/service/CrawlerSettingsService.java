@@ -26,6 +26,7 @@ public class CrawlerSettingsService {
                 setting.getDirectFallback(),
                 setting.getConnectTimeoutSeconds(),
                 setting.getRequestTimeoutSeconds(),
+                setting.getImageDownloadTimeoutSeconds(),
                 setting.getMinRequestIntervalMillis(),
                 setting.getMaxRetries(),
                 setting.getRetryBaseDelayMillis(),
@@ -39,6 +40,7 @@ public class CrawlerSettingsService {
         setting.setDirectFallback(request.directFallback());
         setting.setConnectTimeoutSeconds(clamp(request.connectTimeoutSeconds(), 1, 60));
         setting.setRequestTimeoutSeconds(clamp(request.requestTimeoutSeconds(), 1, 300));
+        setting.setImageDownloadTimeoutSeconds(clamp(request.imageDownloadTimeoutSeconds(), 1, 600));
         if (request.minRequestIntervalMillis() == null) {
             throw new IllegalArgumentException("请求间隔不能为空");
         }
@@ -153,6 +155,7 @@ public class CrawlerSettingsService {
                 setting.getDirectFallback(),
                 setting.getConnectTimeoutSeconds(),
                 setting.getRequestTimeoutSeconds(),
+                setting.getImageDownloadTimeoutSeconds(),
                 setting.getMinRequestIntervalMillis(),
                 setting.getMaxRetries(),
                 setting.getRetryBaseDelayMillis(),
@@ -205,6 +208,7 @@ public class CrawlerSettingsService {
         }
         return new NetworkSnapshot("DIRECT".equals(normalized),
                 setting.getConnectTimeoutSeconds(), setting.getRequestTimeoutSeconds(),
+                setting.getImageDownloadTimeoutSeconds(),
                 setting.getMinRequestIntervalMillis(), setting.getMaxRetries(),
                 setting.getRetryBaseDelayMillis(), proxies);
     }
@@ -272,7 +276,8 @@ public class CrawlerSettingsService {
 
     public record SettingsRequest(
             boolean directFallback, Integer connectTimeoutSeconds,
-            Integer requestTimeoutSeconds, Long minRequestIntervalMillis,
+            Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
+            Long minRequestIntervalMillis,
             Integer maxRetries, Long retryBaseDelayMillis) {}
     public record ProxyRequest(
             String name, String host, Integer port, String username, String password,
@@ -289,14 +294,16 @@ public class CrawlerSettingsService {
             String controllerUrl, boolean secretConfigured) {}
     public record SettingsView(
             boolean directFallback, Integer connectTimeoutSeconds,
-            Integer requestTimeoutSeconds, Long minRequestIntervalMillis,
+            Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
+            Long minRequestIntervalMillis,
             Integer maxRetries, Long retryBaseDelayMillis,
             List<ProxyView> proxies) {}
     public record ProxyConfig(
             Long id, String host, Integer port, String username, String password) {}
     public record NetworkSnapshot(
             boolean directFallback, int connectTimeoutSeconds,
-            int requestTimeoutSeconds, long minRequestIntervalMillis,
+            int requestTimeoutSeconds, int imageDownloadTimeoutSeconds,
+            long minRequestIntervalMillis,
             int maxRetries, long retryBaseDelayMillis,
             List<ProxyConfig> proxies) {}
     private record CachedSnapshot(NetworkSnapshot snapshot, long expiresAt) {}

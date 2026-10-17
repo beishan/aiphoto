@@ -23,6 +23,7 @@ const settings = reactive({
   directFallback: true,
   connectTimeoutSeconds: 10,
   requestTimeoutSeconds: 30,
+  imageDownloadTimeoutSeconds: 60,
   minRequestIntervalMillis: 1000,
   maxRetries: 2,
   retryBaseDelayMillis: 1000,
@@ -230,6 +231,7 @@ onMounted(load)
       <div class="setting-grid">
         <label><span>连接超时</span><el-input-number v-model="settings.connectTimeoutSeconds" :min="1" :max="60" /><small>秒</small></label>
         <label><span>单次请求超时</span><el-input-number v-model="settings.requestTimeoutSeconds" :min="1" :max="300" /><small>秒</small></label>
+        <label><span>单张图片下载超时</span><el-input-number v-model="settings.imageDownloadTimeoutSeconds" :min="1" :max="600" /><small>秒，包含图片传输时间</small></label>
         <label><span>同域名最小间隔</span><el-input-number v-model="settings.minRequestIntervalMillis" :min="0" :max="60000" :step="100" /><small>毫秒</small></label>
         <label><span>失败自动重试</span><el-input-number v-model="settings.maxRetries" :min="0" :max="5" /><small>次</small></label>
         <label><span>重试基础等待</span><el-input-number v-model="settings.retryBaseDelayMillis" :min="0" :max="60000" :step="100" /><small>毫秒，指数退避</small></label>

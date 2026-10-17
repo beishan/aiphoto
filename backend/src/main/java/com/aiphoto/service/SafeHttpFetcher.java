@@ -2,7 +2,6 @@ package com.aiphoto.service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.Authenticator;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -13,13 +12,22 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +38,11 @@ public class SafeHttpFetcher {
     private static final int MAX_REDIRECTS = 5;
     private static final String PAGE_ACCEPT = "text/html,image/*;q=0.9,*/*;q=0.1";
     private static final String IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.9,*/*;q=0.1";
+    private static final ScheduledExecutorService BODY_TIMEOUTS = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "crawler-response-timeout");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerExecutorService executorService;
     private final ThreadLocal<java.util.List<HttpClient>> managedClients = new ThreadLocal<>();
@@ -111,56 +124,53 @@ public class SafeHttpFetcher {
         validate(uri, hosts);
         long requestIntervalMillis = Math.max(
                 settings.minRequestIntervalMillis(), siteMinRequestIntervalMillis);
+        int timeoutSeconds = IMAGE_ACCEPT.equals(accept)
+                ? settings.imageDownloadTimeoutSeconds() : settings.requestTimeoutSeconds();
         for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
             validate(uri, hosts);
             awaitRateLimit(uri.getHost(), requestIntervalMillis);
             HttpRequest request = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofSeconds(settings.requestTimeoutSeconds()))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("User-Agent", "aiphoto-crawler/1.0")
                     .header("Accept", accept)
                     .GET()
                     .build();
-            HttpResponse<InputStream> response = sendWithRetry(request, settings, session);
+            HttpResponse<byte[]> response = sendWithRetry(request, settings, session, maxBytes, timeoutSeconds);
             int status = response.statusCode();
             if (status >= 300 && status < 400) {
                 String location = response.headers().firstValue("location")
                         .orElseThrow(() -> new IllegalStateException("重定向缺少 Location"));
-                response.body().close();
                 uri = uri.resolve(location);
                 continue;
             }
             if (status < 200 || status >= 300) {
-                response.body().close();
                 throw new HttpStatusException(status);
             }
             long declaredLength = response.headers().firstValueAsLong("content-length").orElse(-1);
             if (declaredLength > maxBytes) {
-                response.body().close();
                 throw new IllegalStateException("响应超过大小限制");
             }
-            byte[] bytes = readLimited(response.body(), maxBytes);
             String contentType = response.headers().firstValue("content-type")
                     .orElse("application/octet-stream").split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
-            return new FetchedResource(uri, contentType, bytes);
+            return new FetchedResource(uri, contentType, response.body());
         }
         throw new IllegalStateException("重定向次数过多");
     }
 
-    private HttpResponse<InputStream> sendWithRetry(
+    private HttpResponse<byte[]> sendWithRetry(
             HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings,
-            CrawlerExecutorService.Session session) throws Exception {
+            CrawlerExecutorService.Session session, long maxBytes, int timeoutSeconds) throws Exception {
         IOException lastFailure = null;
         int retries = session != null && session.managedMihomo() ? Math.max(1, settings.maxRetries()) : settings.maxRetries();
         for (int attempt = 0; attempt <= retries; attempt++) {
             try {
                 if (attempt > 0) awaitRateLimit(request.uri().getHost(), settings.minRequestIntervalMillis());
-                HttpResponse<InputStream> response = send(request, settings, session);
+                HttpResponse<byte[]> response = send(request, settings, session, maxBytes, timeoutSeconds);
                 if (!(isRetryableStatus(response.statusCode()) || (session != null && session.managedMihomo()
                         && (response.statusCode() == 401 || response.statusCode() == 403 || response.statusCode() == 451))) || attempt >= retries) {
                     return response;
                 }
                 String retryAfter = response.headers().firstValue("retry-after").orElse(null);
-                response.body().close();
                 awaitRetry(attempt, settings.retryBaseDelayMillis(), retryAfter);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
@@ -206,16 +216,17 @@ public class SafeHttpFetcher {
         if (delay > 0) Thread.sleep(delay);
     }
 
-    private HttpResponse<InputStream> send(
+    private HttpResponse<byte[]> send(
             HttpRequest request, CrawlerSettingsService.NetworkSnapshot settings,
-            CrawlerExecutorService.Session session) throws Exception {
+            CrawlerExecutorService.Session session, long maxBytes, int timeoutSeconds) throws Exception {
         IOException lastFailure = null;
         for (CrawlerSettingsService.ProxyConfig proxy : settings.proxies()) {
             if (session != null && !session.managedMihomo() && !session.ordinaryAvailable(proxy.id())) continue;
             try {
                 if (session != null) session.proxyAttempt(proxy.id());
-                HttpResponse<InputStream> response = proxyClient(proxy, settings.connectTimeoutSeconds(), session)
-                        .send(request, HttpResponse.BodyHandlers.ofInputStream());
+                HttpResponse<byte[]> response = sendWithBodyTimeout(
+                        proxyClient(proxy, settings.connectTimeoutSeconds(), session), request,
+                        maxBytes, timeoutSeconds);
                 if (!isProxyFailureStatus(response.statusCode())) {
                     if (session != null && !session.managedMihomo()) {
                         if (response.statusCode() < 400) session.proxySucceeded(proxy.id());
@@ -224,7 +235,6 @@ public class SafeHttpFetcher {
                     return response;
                 }
                 if (session != null && !session.managedMihomo()) session.proxyFailed(proxy.id(), "代理返回 HTTP " + response.statusCode());
-                response.body().close();
                 lastFailure = new IOException(
                         "代理 " + proxy.host() + ":" + proxy.port() + " 返回 HTTP " + response.statusCode());
             } catch (InterruptedException exception) {
@@ -237,8 +247,8 @@ public class SafeHttpFetcher {
         }
         if (settings.directFallback()) {
             if (session != null) session.proxyAttempt(null);
-            return directClient(settings.connectTimeoutSeconds())
-                    .send(request, HttpResponse.BodyHandlers.ofInputStream());
+            return sendWithBodyTimeout(directClient(settings.connectTimeoutSeconds()), request,
+                    maxBytes, timeoutSeconds);
         }
         if (lastFailure != null) throw new IOException("所有爬虫代理均连接失败", lastFailure);
         throw new IOException("未配置可用代理且已禁用直连");
@@ -363,20 +373,83 @@ public class SafeHttpFetcher {
         return bytes.length != 16 || ((bytes[0] & 0xfe) != 0xfc);
     }
 
-    private byte[] readLimited(InputStream input, long maxBytes) throws Exception {
-        try (input; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            long total = 0;
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                total += read;
-                if (total > maxBytes) {
-                    throw new IllegalStateException("响应超过大小限制");
-                }
-                output.write(buffer, 0, read);
+    static HttpResponse<byte[]> sendWithBodyTimeout(
+            HttpClient client, HttpRequest request, long maxBytes, int timeoutSeconds) throws Exception {
+        AtomicBoolean timedOut = new AtomicBoolean();
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        try {
+            return client.send(request,
+                    limitedBodyHandler(maxBytes, timeoutSeconds, deadlineNanos, timedOut));
+        } catch (IOException exception) {
+            if (timedOut.get()) {
+                throw new java.net.http.HttpTimeoutException(
+                        "响应体下载超过 " + timeoutSeconds + " 秒");
             }
-            return output.toByteArray();
+            throw exception;
         }
+    }
+
+    static HttpResponse.BodyHandler<byte[]> limitedBodyHandler(long maxBytes, int timeoutSeconds) {
+        long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        return limitedBodyHandler(maxBytes, timeoutSeconds, deadlineNanos, new AtomicBoolean());
+    }
+
+    private static HttpResponse.BodyHandler<byte[]> limitedBodyHandler(
+            long maxBytes, int timeoutSeconds, long deadlineNanos, AtomicBoolean timedOut) {
+        return responseInfo -> new HttpResponse.BodySubscriber<>() {
+            private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+            private final ByteArrayOutputStream output = new ByteArrayOutputStream();
+            private Flow.Subscription subscription;
+            private long total;
+            private ScheduledFuture<?> timeout;
+
+            @Override
+            public CompletionStage<byte[]> getBody() {
+                return body;
+            }
+
+            @Override
+            public void onSubscribe(Flow.Subscription value) {
+                subscription = value;
+                timeout = BODY_TIMEOUTS.schedule(() -> {
+                    timedOut.set(true);
+                    value.cancel();
+                    body.completeExceptionally(new java.net.http.HttpTimeoutException(
+                            "响应体下载超过 " + timeoutSeconds + " 秒"));
+                }, Math.max(0, deadlineNanos - System.nanoTime()), TimeUnit.NANOSECONDS);
+                value.request(1);
+            }
+
+            @Override
+            public void onNext(java.util.List<ByteBuffer> buffers) {
+                for (ByteBuffer buffer : buffers) {
+                    int remaining = buffer.remaining();
+                    if (total + remaining > maxBytes) {
+                        subscription.cancel();
+                        timeout.cancel(false);
+                        body.completeExceptionally(new IllegalStateException("响应超过大小限制"));
+                        return;
+                    }
+                    byte[] chunk = new byte[remaining];
+                    buffer.get(chunk);
+                    output.write(chunk, 0, chunk.length);
+                    total += remaining;
+                }
+                subscription.request(1);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                if (timeout != null) timeout.cancel(false);
+                body.completeExceptionally(error);
+            }
+
+            @Override
+            public void onComplete() {
+                if (timeout != null) timeout.cancel(false);
+                body.complete(output.toByteArray());
+            }
+        };
     }
 
     private void awaitRateLimit(String host, long minRequestIntervalMillis) throws InterruptedException {

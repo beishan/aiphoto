@@ -468,7 +468,7 @@ public class CrawlerExecutorService {
                 throw waitFor("没有可用普通代理", until);
             }
             synchronized (CrawlerExecutorService.this) { proxies.forEach(proxy -> state.requestProxyIds.add(proxy.id())); }
-            return new CrawlerSettingsService.NetworkSnapshot(direct, base.connectTimeoutSeconds(), base.requestTimeoutSeconds(), base.minRequestIntervalMillis(), base.maxRetries(), base.retryBaseDelayMillis(), List.copyOf(proxies));
+            return new CrawlerSettingsService.NetworkSnapshot(direct, base.connectTimeoutSeconds(), base.requestTimeoutSeconds(), base.imageDownloadTimeoutSeconds(), base.minRequestIntervalMillis(), base.maxRetries(), base.retryBaseDelayMillis(), List.copyOf(proxies));
         }
         private RequestEntry snapshotRequestEntry() {
             if (executor == null || !managedMihomo() || options.getNodeGroupId() == null) return null;

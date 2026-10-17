@@ -134,7 +134,7 @@ class CrawlServiceTest {
     @Test
     void previewUsesSameInspectionNetworkForListAndDetail() throws Exception {
         CrawlSite site = inspectionSite();
-        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 60, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
         when(fetcher.fetchForInspection("https://example.com/", "blocked.example", 5242880L, 1000L, network))
@@ -156,7 +156,7 @@ class CrawlServiceTest {
     @Test
     void previewUsesDraftProxyWithoutSavingSite() throws Exception {
         CrawlSite site = inspectionSite();
-        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 60, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("DIRECT", null)).thenReturn(network);
         when(fetcher.fetchForInspection("https://example.com/", "blocked.example", 5242880L, 1000L, network))
@@ -174,7 +174,7 @@ class CrawlServiceTest {
     void inspectionReturnsMetadataUsingDraftProxy() throws Exception {
         CrawlSite site = inspectionSite();
         site.setId(null); site.setBlockedHosts("");
-        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 60, 0, 0, 0, List.of());
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
         when(fetcher.fetchForInspection("https://example.com/", "", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/", "<title>Example</title><meta name='description' content='Gallery'>"));
@@ -258,7 +258,7 @@ class CrawlServiceTest {
     void rulePreviewUsesFirstDiscoveryPageInsteadOfSiteEntry() throws Exception {
         CrawlSite site = inspectionSite();
         site.setDiscoveryUrls("https://example.com/list/a\nhttps://example.com/list/b");
-        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 60, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
         when(fetcher.fetchForInspection("https://example.com/list/a", "blocked.example", 5242880L, 1000L, network))

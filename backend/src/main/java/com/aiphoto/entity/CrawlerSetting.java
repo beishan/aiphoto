@@ -24,6 +24,8 @@ public class CrawlerSetting {
     @Column(nullable = false)
     private Integer requestTimeoutSeconds = 30;
     @Column(nullable = false)
+    private Integer imageDownloadTimeoutSeconds = 60;
+    @Column(nullable = false)
     private Long minRequestIntervalMillis = 1000L;
     @Column(nullable = false)
     private Integer maxRetries = 2;

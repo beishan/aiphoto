@@ -4,10 +4,48 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
+import java.net.InetSocketAddress;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Set;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
 class SafeHttpFetcherTest {
+
+    @Test
+    void requestTimeoutAlsoStopsAResponseThatStallsDuringImageBodyDownload() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/slow-image", exchange -> {
+            exchange.sendResponseHeaders(200, 0);
+            try (var body = exchange.getResponseBody()) {
+                body.write(new byte[] {1});
+                body.flush();
+                Thread.sleep(3000);
+                body.write(new byte[] {2});
+            } catch (java.io.IOException ignored) {
+                // The client closes the response when its request timeout expires.
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/slow-image"))
+                    .timeout(Duration.ofMillis(300)).GET().build();
+            long started = System.nanoTime();
+            assertThatThrownBy(() -> SafeHttpFetcher.sendWithBodyTimeout(
+                    HttpClient.newHttpClient(), request, 100, 1))
+                    .isInstanceOf(java.net.http.HttpTimeoutException.class)
+                    .hasMessageContaining("响应体下载超过 1 秒");
+            assertThat(Duration.ofNanos(System.nanoTime() - started).toMillis()).isLessThan(2200);
+        } finally {
+            server.stop(0);
+        }
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -16,23 +54,24 @@ class SafeHttpFetcherTest {
         var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
         var fetcher = new SafeHttpFetcher(settings, executors);
         var client = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
-        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, java.util.List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 60, 0, 0, 0, java.util.List.of());
         org.mockito.Mockito.when(settings.networkSnapshot()).thenReturn(network);
         var clients = (java.util.Map<String, java.net.http.HttpClient>)
                 org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
         clients.put("direct:5", client);
         org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
-                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<byte[]>>any()))
                 .thenAnswer(invocation -> {
                     java.net.http.HttpRequest request = invocation.getArgument(0);
                     boolean image = request.headers().firstValue("Accept").orElse("").startsWith("image/");
+                    assertThat(request.timeout()).contains(java.time.Duration.ofSeconds(image ? 60 : 10));
                     assertThat(request.headers().firstValue("Referer")).isEmpty();
-                    java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+                    java.net.http.HttpResponse<byte[]> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
                     org.mockito.Mockito.when(response.statusCode()).thenReturn(200);
                     org.mockito.Mockito.when(response.headers()).thenReturn(java.net.http.HttpHeaders.of(
                             java.util.Map.of("content-type", java.util.List.of(image ? "image/jpeg" : "text/html")), (a, b) -> true));
-                    org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(
-                            image ? new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff} : "<img src='/photo.jpg'>".getBytes()));
+                    org.mockito.Mockito.when(response.body()).thenReturn(
+                            image ? new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff} : "<img src='/photo.jpg'>".getBytes());
                     return response;
                 });
         assertThat(fetcher.fetch("https://8.8.8.8/photo.jpg", "", 100, 0).contentType()).isEqualTo("text/html");
@@ -49,23 +88,23 @@ class SafeHttpFetcherTest {
         var fetcher = new SafeHttpFetcher(settings, executors);
         var client = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
         org.mockito.Mockito.when(settings.networkSnapshot()).thenReturn(
-                new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, java.util.List.of()));
+                new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 60, 0, 0, 0, java.util.List.of()));
         var clients = (java.util.Map<String, java.net.http.HttpClient>)
                 org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
         clients.put("direct:5", client);
         org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
-                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<byte[]>>any()))
                 .thenAnswer(invocation -> {
                     java.net.http.HttpRequest request = invocation.getArgument(0);
                     assertThat(request.headers().firstValue("Accept").orElse("")).startsWith("image/").doesNotContain("text/html");
                     assertThat(request.headers().firstValue("Referer")).isEmpty();
                     boolean redirect = "/first".equals(request.uri().getPath());
-                    java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+                    java.net.http.HttpResponse<byte[]> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
                     org.mockito.Mockito.when(response.statusCode()).thenReturn(redirect ? 302 : 200);
                     org.mockito.Mockito.when(response.headers()).thenReturn(java.net.http.HttpHeaders.of(redirect
                             ? java.util.Map.of("location", java.util.List.of("https://8.8.4.4/original.jpg"))
                             : java.util.Map.of("content-type", java.util.List.of("image/jpeg")), (a, b) -> true));
-                    org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(new byte[] {1}));
+                    org.mockito.Mockito.when(response.body()).thenReturn(new byte[] {1});
                     return response;
                 });
         assertThat(fetcher.fetchImage("https://8.8.8.8/first", "", 100, 0).finalUri())
@@ -98,24 +137,24 @@ class SafeHttpFetcherTest {
         var fetcher = new SafeHttpFetcher(settings, executors);
         var client = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
         @SuppressWarnings("unchecked")
-        java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        java.net.http.HttpResponse<byte[]> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
         org.mockito.Mockito.when(response.statusCode()).thenReturn(302);
-        org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(new byte[0]));
+        org.mockito.Mockito.when(response.body()).thenReturn(new byte[0]);
         org.mockito.Mockito.when(response.headers()).thenReturn(java.net.http.HttpHeaders.of(
                 java.util.Map.of("location", java.util.List.of("https://cdn.66img.cc/image.jpg")), (a, b) -> true));
         org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
-                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<byte[]>>any()))
                 .thenReturn(response);
         @SuppressWarnings("unchecked")
         var clients = (java.util.Map<String, java.net.http.HttpClient>)
                 org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
         clients.put("direct:5", client);
-        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, java.util.List.of());
+        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 60, 0, 0, 0, java.util.List.of());
         assertThatThrownBy(() -> fetcher.fetchForInspection("http://8.8.8.8/", "66img.cc", 100, 0, network))
                 .hasMessageContaining("禁止访问列表");
         org.mockito.Mockito.verify(client, org.mockito.Mockito.times(1)).send(
                 org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
-                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any());
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<byte[]>>any());
     }
 
     @Test
@@ -180,23 +219,23 @@ class SafeHttpFetcherTest {
         var fetcher = new SafeHttpFetcher(settings, executors);
         var selectedClient = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
         var otherClient = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
-        java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        java.net.http.HttpResponse<byte[]> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
         org.mockito.Mockito.when(response.statusCode()).thenReturn(status);
-        org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(new byte[] {1}));
+        org.mockito.Mockito.when(response.body()).thenReturn(new byte[] {1});
         if (status == 200) {
             org.mockito.Mockito.when(response.headers()).thenReturn(
                     java.net.http.HttpHeaders.of(java.util.Map.of("content-type", java.util.List.of("text/html")), (a, b) -> true));
         }
         org.mockito.Mockito.when(selectedClient.send(
                 org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
-                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<byte[]>>any()))
                 .thenReturn(response);
         var clients = (java.util.Map<String, java.net.http.HttpClient>)
                 org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
         String proxyKey = "proxy:7:localhost:7890:null:0:5";
         clients.put(direct ? "direct:5" : proxyKey, selectedClient);
         clients.put(direct ? proxyKey : "direct:5", otherClient);
-        var network = new CrawlerSettingsService.NetworkSnapshot(direct, 5, 10, 0, 0, 0,
+        var network = new CrawlerSettingsService.NetworkSnapshot(direct, 5, 10, 60, 0, 0, 0,
                 direct ? java.util.List.of() : java.util.List.of(
                         new CrawlerSettingsService.ProxyConfig(7L, "localhost", 7890, null, null)));
 

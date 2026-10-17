@@ -133,6 +133,7 @@ export interface CrawlerSettings {
   directFallback: boolean
   connectTimeoutSeconds: number
   requestTimeoutSeconds: number
+  imageDownloadTimeoutSeconds: number
   minRequestIntervalMillis: number
   maxRetries: number
   retryBaseDelayMillis: number

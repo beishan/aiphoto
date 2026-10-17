@@ -264,6 +264,7 @@ CREATE TABLE IF NOT EXISTS crawler_settings (
     direct_fallback BOOLEAN NOT NULL DEFAULT TRUE,
     connect_timeout_seconds INTEGER NOT NULL DEFAULT 10,
     request_timeout_seconds INTEGER NOT NULL DEFAULT 30,
+    image_download_timeout_seconds INTEGER NOT NULL DEFAULT 60,
     min_request_interval_millis BIGINT NOT NULL DEFAULT 1000,
     schedule_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     daily_scan_time TIME NOT NULL DEFAULT '03:00:00',
@@ -274,6 +275,7 @@ CREATE TABLE IF NOT EXISTS crawler_settings (
 );
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 2;
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000;
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS image_download_timeout_seconds INTEGER NOT NULL DEFAULT 60;
 INSERT INTO crawler_settings (
     id, direct_fallback, connect_timeout_seconds,
     request_timeout_seconds, min_request_interval_millis
