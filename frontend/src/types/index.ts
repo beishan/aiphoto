@@ -204,6 +204,7 @@ export interface CrawlPage {
   included: boolean
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED'
   errorMessage: string | null
+  filteredImagesJson: string | null
 }
 
 export interface CrawlAsset {

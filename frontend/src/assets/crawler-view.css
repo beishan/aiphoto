@@ -629,6 +629,14 @@
 .task-image-card-copy .task-image-error { color: var(--danger, #dc2626); }
 .task-image-card-copy .task-image-proxy { color: var(--accent); font-weight: 650; }
 .task-image-empty { grid-column: 1 / -1; }
+.filtered-image-url,
+.filtered-image-reason {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.55;
+}
+.filtered-image-url { color: var(--text-secondary); font-size: 12px; }
+.filtered-image-reason { color: var(--danger, #dc2626); font-size: 12px; }
 
 @keyframes image-download-progress {
   from { transform: translateX(-110%); }

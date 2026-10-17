@@ -31,6 +31,8 @@ public class CrawlPage {
     private Status status = Status.PENDING;
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
+    @Column(name = "filtered_images_json", columnDefinition = "TEXT")
+    private String filteredImagesJson;
     @CreationTimestamp
     private LocalDateTime createdAt;
 

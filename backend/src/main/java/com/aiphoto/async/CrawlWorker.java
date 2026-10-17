@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -178,11 +179,13 @@ public class CrawlWorker {
                 if (!queueService.renew(jobId, workerId)) return;
                 page.setStatus(CrawlPage.Status.RUNNING);
                 page.setErrorMessage(null);
+                page.setFilteredImagesJson(null);
                 pageRepository.save(page);
                 try {
                     int matchedImages = 0;
                     int validImageUrls = 0;
                     int acceptedImageUrls = 0;
+                    ArrayList<FilteredImageDetail> filteredImages = new ArrayList<>();
                     ArrayDeque<String> detailQueue = new ArrayDeque<>();
                     Set<String> detailVisited = new HashSet<>();
                     detailQueue.add(page.getUrl());
@@ -196,18 +199,25 @@ public class CrawlWorker {
                         requireHtml(resource.contentType());
                         Document document = Jsoup.parse(
                                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
+                        int filteredCountBeforePage = filteredImages.size();
                         for (Element element : document.select(rule.getImageSelector())) {
                             matchedImages++;
                             String imageUrl = CrawlRuleMatcher.extractImageUrl(
                                     element, rule.getImageAttributes(), resource.finalUri());
                             if (imageUrl == null) continue;
                             validImageUrls++;
-                            if (!CrawlRuleMatcher.matches(
-                                    imageUrl, rule.getImageUrlIncludes(), rule.getImageUrlExcludes())) {
+                            String filterReason = CrawlRuleMatcher.filterReason(
+                                    imageUrl, rule.getImageUrlIncludes(), rule.getImageUrlExcludes());
+                            if (filterReason != null) {
+                                filteredImages.add(new FilteredImageDetail(imageUrl, filterReason));
                                 continue;
                             }
                             acceptedImageUrls++;
                             registerAsset(jobId, page, imageUrl);
+                        }
+                        if (filteredImages.size() > filteredCountBeforePage) {
+                            page.setFilteredImagesJson(objectMapper.writeValueAsString(filteredImages));
+                            pageRepository.save(page);
                         }
                         if (rule.getDetailNextSelector() != null && !rule.getDetailNextSelector().isBlank()) {
                             for (Element link : document.select(rule.getDetailNextSelector())) {
@@ -442,6 +452,8 @@ public class CrawlWorker {
         String message = exception.getMessage();
         return message == null ? exception.getClass().getSimpleName() : message.substring(0, Math.min(1000, message.length()));
     }
+
+    private record FilteredImageDetail(String url, String reason) {}
 
     private CrawlRule ruleSnapshot(CrawlJob job) {
         try {

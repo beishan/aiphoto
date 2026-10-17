@@ -414,6 +414,7 @@ CREATE TABLE IF NOT EXISTS crawl_pages (
     UNIQUE(job_id, url_hash)
 );
 ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS included BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS filtered_images_json TEXT;
 
 CREATE TABLE IF NOT EXISTS crawl_seen_pages (
     id BIGSERIAL PRIMARY KEY,

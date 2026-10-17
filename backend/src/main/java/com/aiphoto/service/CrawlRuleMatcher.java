@@ -2,6 +2,7 @@ package com.aiphoto.service;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.jsoup.nodes.Element;
@@ -17,6 +18,21 @@ public final class CrawlRuleMatcher {
         boolean included = includeRules.isEmpty()
                 || includeRules.stream().anyMatch(candidate::contains);
         return included && excludeRules.stream().noneMatch(candidate::contains);
+    }
+
+    public static String filterReason(String url, String includes, String excludes) {
+        String candidate = url.toLowerCase(Locale.ROOT);
+        List<String> includeRules = rules(includes);
+        List<String> excludeRules = rules(excludes);
+        List<String> reasons = new ArrayList<>();
+        if (!includeRules.isEmpty() && includeRules.stream().noneMatch(candidate::contains)) {
+            reasons.add("未命中任一必含片段（要求命中一个：" + String.join("、", includeRules) + "）");
+        }
+        List<String> matchedExcludes = excludeRules.stream().filter(candidate::contains).toList();
+        if (!matchedExcludes.isEmpty()) {
+            reasons.add("命中排除片段：" + String.join("、", matchedExcludes));
+        }
+        return reasons.isEmpty() ? null : String.join("；", reasons);
     }
 
     public static String extractImageUrl(Element element, String attributes, URI baseUri) {

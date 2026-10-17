@@ -82,6 +82,8 @@ const pageAssets = ref<CrawlAsset[]>([])
 const pageAssetsTotal = ref(0)
 const pageAssetsPage = ref(0)
 const selectedSourcePage = ref<CrawlPage | null>(null)
+const filteredImagesDialogVisible = ref(false)
+const selectedFilteredPage = ref<CrawlPage | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
 let polling = false
@@ -235,6 +237,22 @@ function assetStatusLabel(asset: CrawlAsset) {
   if (asset.status === 'RUNNING' && activeJob.value?.status === 'PAUSED') return '任务已暂停，等待恢复'
   if (asset.status === 'RUNNING' && activeJob.value?.status !== 'RUNNING') return '下载已中断'
   return ({ PENDING: '待下载', RUNNING: '正在下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as const)[asset.status]
+}
+
+function filteredImageRows(page: CrawlPage | null) {
+  if (!page?.filteredImagesJson) return [] as { url: string; reason: string }[]
+  try {
+    const rows = JSON.parse(page.filteredImagesJson) as { url?: unknown; reason?: unknown }[]
+    return Array.isArray(rows) ? rows.filter((row): row is { url: string; reason: string } =>
+      typeof row?.url === 'string' && typeof row?.reason === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function openFilteredImages(page: CrawlPage) {
+  selectedFilteredPage.value = page
+  filteredImagesDialogVisible.value = true
 }
 
 function statusLabel(status: CrawlJob['status']) {
@@ -1140,6 +1158,7 @@ onUnmounted(() => {
             <el-table-column label="图片页名称 / URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.name || row.url }}</span><small v-if="row.name" class="source-page-url">{{ row.url }}</small></template></el-table-column>
           <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
           <el-table-column label="页面失败原因" prop="errorMessage" min-width="240" />
+          <el-table-column label="过滤详情" width="150"><template #default="{ row }"><el-button v-if="filteredImageRows(row).length" link type="primary" @click="openFilteredImages(row)">查看 {{ filteredImageRows(row).length }} 个 URL</el-button><span v-else>—</span></template></el-table-column>
           <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
           </el-table>
           <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
@@ -1149,6 +1168,13 @@ onUnmounted(() => {
         <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
       </el-card>
     </el-drawer>
+    <el-dialog v-model="filteredImagesDialogVisible" append-to-body width="min(1000px, calc(100vw - 28px))" class="filtered-images-dialog">
+      <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Warning /></el-icon></span><div><h2>图片过滤详情</h2><p>{{ selectedFilteredPage?.name || selectedFilteredPage?.url }}</p></div></div></template>
+      <el-table :data="filteredImageRows(selectedFilteredPage)" max-height="65vh" table-layout="fixed">
+        <el-table-column label="图片 URL" min-width="420"><template #default="{ row }"><div class="filtered-image-url">{{ row.url }}</div></template></el-table-column>
+        <el-table-column label="过滤原因" min-width="300"><template #default="{ row }"><span class="filtered-image-reason">{{ row.reason }}</span></template></el-table-column>
+      </el-table>
+    </el-dialog>
 </template>
 
 <style scoped>

@@ -27,6 +27,18 @@ class CrawlRuleMatcherTest {
     }
 
     @Test
+    void explainsEveryMatchingIncludeAndExcludeFilter() {
+        assertThat(CrawlRuleMatcher.filterReason(
+                "https://example.com/gallery/thumb/photo.jpg", "/gallery/,/album/", "thumb,avatar"))
+                .isEqualTo("命中排除片段：thumb");
+        assertThat(CrawlRuleMatcher.filterReason(
+                "https://example.com/avatar/photo.jpg", "/gallery/,/album/", "thumb,avatar"))
+                .isEqualTo("未命中任一必含片段（要求命中一个：/gallery/、/album/）；命中排除片段：avatar");
+        assertThat(CrawlRuleMatcher.filterReason(
+                "https://example.com/gallery/photo.jpg", "/gallery/", "thumb,avatar")).isNull();
+    }
+
+    @Test
     void extractsLargestSrcsetCandidateAgainstTheFinalPageUrl() {
         var element = Jsoup.parse(
                 "<img src='small.jpg' srcset='small.jpg 320w, /images/large.jpg 1600w'>")
