@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { onBeforeRouteLeave } from 'vue-router'
 import {
   ArrowLeft, ArrowRight, CircleCheck, Close, Collection, Connection, Delete, Download, EditPen,
   FolderOpened, List, Loading, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, View, Warning,
@@ -403,6 +404,15 @@ function handlePreviewViewerKeydown(event: KeyboardEvent) {
     closePreviewViewer()
   }
 }
+
+onBeforeRouteLeave(() => {
+  taskDrawerVisible.value = false
+  siteConfigurationVisible.value = false
+  siteDialogVisible.value = false
+  pageAssetsDialogVisible.value = false
+  filteredImagesDialogVisible.value = false
+  closePreviewViewer()
+})
 
 async function saveRule(showMessage = true) {
   if (!activeSiteId.value) {
