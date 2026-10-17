@@ -27,7 +27,7 @@ export interface CrawlImportItem {
 }
 
 export interface InspectionProxy { id: number; name: string; enabled: boolean; proxyType: 'HTTP' | 'MIHOMO' }
-export interface CrawlImageProgress { total: number; processed: number; downloaded: number; runningAsset: CrawlAsset | null }
+export interface CrawlImageProgress { total: number; processed: number; downloaded: number; runningAsset: CrawlAsset | null; currentProxyName: string | null }
 export interface CrawlSiteInfo { title: string; description: string; finalUrl: string }
 export interface CrawlScanPage {
   id?: number; siteId: number; name: string; url: string; autoScanEnabled: boolean;

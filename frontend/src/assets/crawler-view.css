@@ -627,6 +627,7 @@
 .task-image-card-copy strong { font-size: 12px; }
 .task-image-card-copy small { color: var(--text-secondary); font-size: 10px; }
 .task-image-card-copy .task-image-error { color: var(--danger, #dc2626); }
+.task-image-card-copy .task-image-proxy { color: var(--accent); font-weight: 650; }
 .task-image-empty { grid-column: 1 / -1; }
 
 @keyframes image-download-progress {

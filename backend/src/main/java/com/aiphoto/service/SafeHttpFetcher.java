@@ -36,6 +36,10 @@ public class SafeHttpFetcher {
     private final ConcurrentHashMap<String, Long> nextRequestAt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, HttpClient> clients = new ConcurrentHashMap<>();
 
+    public String activeProxyName(Long jobId) {
+        return executorService.activeProxyName(jobId);
+    }
+
     public FetchedResource fetch(String url, String blockedHosts, long maxBytes) throws Exception {
         return fetch(url, blockedHosts, maxBytes, 0L);
     }

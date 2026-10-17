@@ -297,6 +297,13 @@ public class CrawlerExecutorService {
         return null;
     }
     public Session current() { return current.get(); }
+    public synchronized String activeProxyName(Long jobId) {
+        return states.values().stream()
+                .filter(state -> Objects.equals(state.jobId, jobId))
+                .map(state -> state.activeProxyName)
+                .filter(name -> name != null && !name.isBlank())
+                .findFirst().orElse(null);
+    }
     private boolean active(Long id) { return states.containsKey(id) && states.get(id).jobId != null; }
     private RuntimeState state(CrawlerExecutor executor) { return states.computeIfAbsent(executor.getId(), ignored -> restore(executor)); }
     private CrawlerProxy requireProxy(Long id) {
@@ -418,14 +425,14 @@ public class CrawlerExecutorService {
                 if (options.isFrozen()) throw waitFor("执行器已人工冻结", null);
                 if (state.resetPending) { resetCounters(state); state.resetPending = false; if (managedMihomo() && !readNodes(executor.getNodesJson()).contains(state.node)) state.node = null; }
                 triedNodes.clear(); failedProxies.clear(); proxyAttempts.clear(); nodeAttempts.clear(); state.requestProxyIds.clear(); forceSwitch = false;
-                requestUrl = url; requestNode = null; proxyName = null; attempts = 0; startedNanos = System.nanoTime(); activeStartedNanos = startedNanos; inRequest = true;
+                requestUrl = url; requestNode = null; proxyName = null; state.activeProxyName = null; attempts = 0; startedNanos = System.nanoTime(); activeStartedNanos = startedNanos; inRequest = true;
             }
         }
         public boolean managedMihomo() { return executor != null && "MIHOMO".equals(executor.getProxyMode()); }
         public int nodeCount() { return managedMihomo() ? readNodes(executor.getNodesJson()).size() : 1; }
         public boolean autoFailover() { return managedMihomo() && !"MANUAL".equals(executor.getSwitchMode()) && ("FAILOVER".equals(executor.getSwitchMode()) || options.isFailover()); }
         public boolean ordinaryAvailable(Long id) { synchronized (CrawlerExecutorService.this) { return !cooling(state, "proxy:" + id); } }
-        public void proxyAttempt(Long id) { synchronized (CrawlerExecutorService.this) { attempts++; proxyName = id == null ? "直连" : requireProxy(id).getName(); requestNode = managedMihomo() ? state.node : null; if (id != null) proxyAttempts.merge(id, 1, Integer::sum); if (requestNode != null) nodeAttempts.merge(requestNode, 1, Integer::sum); } }
+        public void proxyAttempt(Long id) { synchronized (CrawlerExecutorService.this) { attempts++; proxyName = id == null ? "直连" : requireProxy(id).getName(); requestNode = managedMihomo() ? state.node : null; state.activeProxyName = managedMihomo() ? requestNode : proxyName; if (id != null) proxyAttempts.merge(id, 1, Integer::sum); if (requestNode != null) nodeAttempts.merge(requestNode, 1, Integer::sum); } }
         public void proxyFailed(Long id, String reason) { if (id != null) failedProxies.put("proxy:" + id, reason); }
         public void proxySucceeded(Long id) { synchronized (CrawlerExecutorService.this) { if (id != null) { String key = "proxy:" + id; failedProxies.remove(key); state.failures.put(key, 0); } } }
         public CrawlerSettingsService.NetworkSnapshot network() throws Exception {
@@ -607,6 +614,7 @@ public class CrawlerExecutorService {
     public static class RuntimeState {
         private Long jobId;
         private String node;
+        private String activeProxyName;
         private int requests;
         private String error;
         @com.fasterxml.jackson.annotation.JsonIgnore

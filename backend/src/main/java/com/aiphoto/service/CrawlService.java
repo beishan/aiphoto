@@ -315,7 +315,8 @@ public class CrawlService {
                 assetRepository.countByJobId(jobId),
                 assetRepository.countByJobIdAndStatusIn(jobId, completedStatuses),
                 assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED),
-                runningAsset);
+                runningAsset,
+                runningAsset == null ? null : fetcher.activeProxyName(jobId));
     }
 
     @Transactional
@@ -573,5 +574,7 @@ public class CrawlService {
             int size, int number, long includedElements) {}
     public record PageSelectionResult(int success, long included) {}
     public record PurgeResult(int success, int fileFail) {}
-    public record ImageProgress(long total, long processed, long downloaded, CrawlAsset runningAsset) {}
+    public record ImageProgress(
+            long total, long processed, long downloaded, CrawlAsset runningAsset,
+            String currentProxyName) {}
 }

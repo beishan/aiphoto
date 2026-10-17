@@ -45,7 +45,7 @@ const batchNote = ref('')
 const assetPage = ref(0)
 const assetPageSize = 60
 const assetTotal = ref(0)
-const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0, runningAsset: null })
+const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null })
 const assetStatus = ref('')
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
@@ -110,7 +110,7 @@ const form = reactive<CrawlRule>({
 })
 
 const activeJob = computed(() => jobs.value.find(job => job.id === activeJobId.value) || null)
-const taskImageCards = computed(() => {
+const taskImageAssets = computed(() => {
   const running = imageProgress.value.runningAsset
   return running && !assets.value.some(asset => asset.id === running.id)
     ? [running, ...assets.value]
@@ -275,7 +275,7 @@ async function loadJobDetail() {
   includedPageTotal.value = pageResult.data.includedElements
   assets.value = assetResult.data.content
   assetTotal.value = assetResult.data.totalElements
-  imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0, runningAsset: null }
+  imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }
   for (const key of Object.keys(previewImages)) {
     const id = Number(key)
     if (!assets.value.some(asset => asset.id === id)) {
@@ -723,7 +723,7 @@ function formatBytes(size?: number) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
@@ -1110,14 +1110,15 @@ onUnmounted(() => {
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
           <div v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" class="image-list-toolbar"><p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p><el-radio-group v-model="taskAssetView" size="small" aria-label="图片列表视图"><el-radio-button value="table">表格</el-radio-button><el-radio-button value="cards">卡片</el-radio-button></el-radio-group></div>
-          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'table'" :data="assets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
+          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'table'" :data="taskImageAssets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="150"><template #default="{ row }">{{ assetStatusLabel(row) }}</template></el-table-column>
+            <el-table-column label="代理节点" width="150"><template #default="{ row }"><el-tag v-if="row.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" size="small" effect="plain">{{ imageProgress.currentProxyName }}</el-tag><span v-else>—</span></template></el-table-column>
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
           <div v-else-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'cards'" class="task-image-cards" :aria-label="`图片列表，共 ${assetTotal} 张`">
-            <article v-for="asset in taskImageCards" :key="asset.id" class="task-image-card">
+            <article v-for="asset in taskImageAssets" :key="asset.id" class="task-image-card">
               <div class="task-image-card-preview">
                 <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="contain" />
                 <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
@@ -1125,7 +1126,7 @@ onUnmounted(() => {
                 <span v-if="asset.status === 'DOWNLOADED'" class="task-image-result task-image-result-success" title="下载成功" aria-label="下载成功"><el-icon><CircleCheck /></el-icon></span>
                 <span v-else-if="asset.status === 'FAILED'" class="task-image-result task-image-result-failed" title="下载失败" aria-label="下载失败"><el-icon><CircleClose /></el-icon></span>
               </div>
-              <div class="task-image-card-copy"><strong :title="asset.originalFilename || `图片 #${asset.id}`">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
+              <div class="task-image-card-copy"><strong :title="asset.originalFilename || `图片 #${asset.id}`">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-proxy">代理节点：{{ imageProgress.currentProxyName }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
             </article>
             <el-empty v-if="!assets.length" class="task-image-empty" :description="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'" />
           </div>
