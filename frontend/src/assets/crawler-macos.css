@@ -1,0 +1,276 @@
+/* Collection workspaces use the same materials as the macOS 26 app shell.
+   Keep these rules global so dialogs teleported to body retain the theme. */
+[data-theme="macos26"] .crawler-controls {
+  --crawler-action-text: #0064d1;
+  --crawler-danger-text: #bc2824;
+  --collection-fill: rgba(255, 255, 255, .42);
+  --collection-line: rgba(79, 104, 143, .13);
+  --collection-glass: linear-gradient(145deg, rgba(255, 255, 255, .72), rgba(244, 249, 255, .48));
+  --el-border-color: var(--collection-line);
+  --el-border-color-light: var(--collection-line);
+  --el-fill-color-blank: transparent;
+  --el-fill-color-light: rgba(255, 255, 255, .46);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="macos26"] .crawler-page.crawler-controls {
+  width: min(var(--workspace-max-width), 100%);
+  gap: 18px;
+  padding: 20px var(--workspace-gutter) 112px;
+}
+
+[data-theme="macos26"] .crawler-controls:is(.surface-card, .el-dialog, .el-drawer),
+[data-theme="macos26"] .crawler-controls > .surface-card,
+[data-theme="macos26"] .crawler-controls .overview-workspace > .surface-card,
+[data-theme="macos26"] .crawler-controls .overview-grid > .surface-card,
+[data-theme="macos26"] .crawler-controls .review-workspace > .surface-card {
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  background: var(--collection-glass);
+  box-shadow: 0 10px 30px rgba(45, 61, 94, .09), inset 0 1px 0 rgba(255, 255, 255, .94);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+}
+
+[data-theme="macos26"] .crawler-controls .hero-card .el-card__body { padding: 18px 22px; }
+[data-theme="macos26"] .crawler-controls .crawler-hero h1 {
+  font-family: var(--font-heading);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -.035em;
+}
+[data-theme="macos26"] .crawler-controls .eyebrow { display: none; }
+[data-theme="macos26"] .crawler-controls .hero-symbol {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border-color: rgba(255, 255, 255, .8);
+  background: linear-gradient(145deg, #4cb3ff, #0878ef);
+  color: white;
+  font-size: 23px;
+  box-shadow: 0 5px 12px rgba(0, 122, 255, .2), inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+
+[data-theme="macos26"] .crawler-controls .workspace-switcher {
+  padding: 5px;
+  border-radius: 18px;
+  scrollbar-width: none;
+}
+[data-theme="macos26"] .crawler-controls .workspace-switcher::-webkit-scrollbar { display: none; }
+[data-theme="macos26"] .crawler-controls .workspace-switcher .el-segmented {
+  min-width: 760px;
+  --el-segmented-item-selected-color: var(--text-primary);
+}
+[data-theme="macos26"] .crawler-controls .workspace-switcher .el-segmented__item {
+  min-height: 38px;
+  border-radius: 13px;
+  font-weight: 500;
+}
+[data-theme="macos26"] .crawler-controls .workspace-switcher .el-segmented__item-selected {
+  border: 1px solid rgba(255, 255, 255, .96);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .84);
+  box-shadow: 0 2px 7px rgba(35, 58, 91, .1);
+}
+
+[data-theme="macos26"] .crawler-controls :is(.metric-card, .site-card, .queue-card, .asset-card) {
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 18px;
+  background: var(--collection-fill);
+  box-shadow: 0 4px 14px rgba(45, 61, 94, .045), inset 0 1px 0 rgba(255, 255, 255, .84);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-theme="macos26"] .crawler-controls .site-card {
+  padding: 20px;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+[data-theme="macos26"] .crawler-controls .site-card:hover {
+  border-color: rgba(255, 255, 255, .98);
+  box-shadow: 0 8px 22px rgba(45, 61, 94, .1);
+}
+[data-theme="macos26"] .crawler-controls .asset-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, .18);
+}
+[data-theme="macos26"] .crawler-controls :is(.executor-card, .settings-card, .runtime, .group-preview) {
+  border-color: var(--collection-line);
+  background: var(--collection-fill);
+  box-shadow: none;
+}
+[data-theme="macos26"] .crawler-controls :is(.card-heading h2, .workflow-heading h2, .section-heading h2) {
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+[data-theme="macos26"] .crawler-controls :is(.task-list-filters, .workflow-toolbar, .page-bulk-bar) {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+[data-theme="macos26"] .crawler-controls .page-bulk-bar {
+  padding: 10px 0 14px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+[data-theme="macos26"] .crawler-controls .el-button.el-button {
+  min-height: 32px;
+  border-radius: 999px;
+  border-color: rgba(255, 255, 255, .84);
+  background: rgba(255, 255, 255, .68);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 550;
+  box-shadow: 0 1px 3px rgba(35, 58, 91, .07), inset 0 1px 0 rgba(255, 255, 255, .9);
+  transition: background .16s ease, box-shadow .16s ease;
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button:hover:not(.is-disabled) {
+  background: rgba(255, 255, 255, .94);
+  border-color: rgba(255, 255, 255, .98);
+  color: var(--text-primary);
+  box-shadow: 0 2px 7px rgba(35, 58, 91, .12);
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button--primary:not(.is-link):not(.is-text):not(.is-plain) {
+  border-color: rgba(0, 100, 220, .3);
+  background: linear-gradient(#168cff, #0073ed);
+  color: #fff;
+  box-shadow: 0 2px 5px rgba(0, 105, 226, .17), inset 0 1px 0 rgba(255, 255, 255, .24);
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button--primary.is-plain {
+  border-color: rgba(0, 122, 255, .12);
+  background: rgba(0, 122, 255, .075);
+  color: var(--crawler-action-text);
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button--danger {
+  background: rgba(217, 45, 40, .075);
+  border-color: rgba(217, 45, 40, .1);
+  color: var(--crawler-danger-text);
+}
+[data-theme="macos26"] .crawler-controls .el-button:is(.is-link, .is-text) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+[data-theme="macos26"] .crawler-controls .el-button--primary:is(.is-link, .is-text) { color: var(--crawler-action-text); }
+[data-theme="macos26"] .crawler-controls .el-button.el-button--primary.is-plain:hover:not(.is-disabled) {
+  background: rgba(0, 122, 255, .13);
+  color: var(--crawler-action-text);
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button--danger:hover:not(.is-disabled) {
+  background: rgba(217, 45, 40, .13);
+  color: var(--crawler-danger-text);
+}
+[data-theme="macos26"] .crawler-controls .el-button.el-button.is-disabled:not(.is-link):not(.is-text) {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, .36);
+  border-color: var(--collection-line);
+  color: var(--text-secondary);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+[data-theme="macos26"] .crawler-controls .el-table {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: rgba(237, 244, 253, .66);
+  --el-table-row-hover-bg-color: rgba(0, 122, 255, .055);
+  --el-table-border-color: var(--collection-line);
+  --el-table-header-text-color: var(--text-secondary);
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+[data-theme="macos26"] .crawler-controls .el-table th.el-table__cell {
+  height: 42px;
+  background: var(--el-table-header-bg-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+[data-theme="macos26"] .crawler-controls .el-table td.el-table__cell { padding: 13px 0; }
+[data-theme="macos26"] .crawler-controls .el-table .cell { line-height: 1.55; }
+[data-theme="macos26"] .crawler-controls .el-table :is(.el-table-fixed-column--left, .el-table-fixed-column--right) {
+  background: rgba(246, 250, 255, .96);
+}
+[data-theme="macos26"] .crawler-controls .el-table__inner-wrapper::before { display: none; }
+[data-theme="macos26"] .crawler-controls .el-pagination {
+  padding: 16px 0 0;
+  margin: 12px 0 0;
+  border-top: 1px solid var(--collection-line);
+  border-radius: 0;
+  background: transparent;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+[data-theme="macos26"] .crawler-controls .el-pagination :is(.btn-prev, .btn-next, .el-pager li) {
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .55);
+}
+[data-theme="macos26"] .crawler-controls .el-pagination .el-pager li.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+[data-theme="macos26"] .crawler-controls :is(.el-input__wrapper, .el-select__wrapper) {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .65);
+  box-shadow: inset 0 0 0 1px rgba(81, 105, 142, .14), 0 1px 0 rgba(255, 255, 255, .7);
+}
+[data-theme="macos26"] .crawler-controls :is(.el-input__wrapper.is-focus, .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, .16), inset 0 0 0 1px var(--accent);
+}
+[data-theme="macos26"] .crawler-controls .el-tag { border-radius: 7px; font-weight: 500; }
+
+[data-theme="macos26"] .crawler-controls.el-drawer {
+  border-radius: 24px 0 0 24px;
+  box-shadow: -16px 0 60px rgba(35, 58, 91, .16), inset 1px 0 0 rgba(255, 255, 255, .9);
+}
+[data-theme="macos26"] .crawler-controls:is(.el-dialog, .el-drawer) :is(.el-dialog__header, .el-drawer__header) {
+  margin: 0;
+  padding: 20px 56px 18px 24px;
+  border-bottom: 1px solid var(--collection-line);
+}
+[data-theme="macos26"] .crawler-controls .el-drawer__body { padding: 20px 24px; }
+[data-theme="macos26"] .crawler-controls .site-configuration-tabs .el-tabs__header {
+  border-color: rgba(255, 255, 255, .8);
+  border-radius: 14px;
+  background: rgba(228, 237, 249, .45);
+}
+[data-theme="macos26"] .crawler-controls .site-configuration-tabs .el-tabs__item.is-active {
+  background: rgba(255, 255, 255, .88);
+  box-shadow: 0 1px 5px rgba(35, 58, 91, .09);
+  color: var(--text-primary);
+}
+[data-theme="macos26"] .crawler-controls .site-configuration-panels .surface-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (max-width: 760px) {
+  [data-theme="macos26"] .crawler-page.crawler-controls { padding: 14px 12px 96px; gap: 12px; }
+  [data-theme="macos26"] .crawler-controls .hero-card .el-card__body { padding: 16px; }
+  [data-theme="macos26"] .crawler-controls .crawler-hero { align-items: stretch; }
+  [data-theme="macos26"] .crawler-controls .crawler-hero h1 { font-size: 22px; }
+  [data-theme="macos26"] .crawler-controls :is(.workflow-panel, .task-list-panel, .site-catalog) { padding: 16px; }
+  [data-theme="macos26"] .crawler-controls .el-drawer__body { padding: 16px; }
+  [data-theme="macos26"] .crawler-controls .workflow-toolbar > .el-select { flex: 1; }
+  [data-theme="macos26"] .crawler-controls .el-pagination { justify-content: center; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="macos26"] .crawler-controls:is(.surface-card, .el-dialog, .el-drawer),
+  [data-theme="macos26"] .crawler-controls .surface-card {
+    background: #f6f9fe;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="macos26"] .crawler-controls .site-card,
+  [data-theme="macos26"] .crawler-controls .el-button { transition: none; }
+}

@@ -10,6 +10,7 @@ import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import '@/assets/crawler-actions.css'
+import '@/assets/crawler-macos.css'
 import type { InspectionProxy, CrawlImageProgress, CrawlSiteInfo } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
@@ -1057,7 +1058,7 @@ onUnmounted(() => {
             <el-timeline-item type="primary" hollow><strong>配置解析规则</strong><p>选择图片页链接与原图节点</p></el-timeline-item>
             <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>扫描结果进入待采集页，按需发起采集</p></el-timeline-item>
           </el-timeline>
-          <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">配置第一个网站</el-button>
+          <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">{{ sites.length ? '添加采集网站' : '配置第一个网站' }}</el-button>
         </el-card>
       </div>
 
@@ -1420,7 +1421,7 @@ onUnmounted(() => {
         </div>
       </Transition>
     </Teleport>
-    <el-dialog v-model="filteredImagesDialogVisible" append-to-body width="min(1000px, calc(100vw - 28px))" class="filtered-images-dialog">
+    <el-dialog v-model="filteredImagesDialogVisible" append-to-body width="min(1000px, calc(100vw - 28px))" class="crawler-controls filtered-images-dialog">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Warning /></el-icon></span><div><h2>图片过滤详情</h2><p>{{ selectedFilteredPage?.name || selectedFilteredPage?.url }}</p></div></div></template>
       <el-table :data="filteredImageRows(selectedFilteredPage)" max-height="65vh" table-layout="fixed">
         <el-table-column label="图片 URL" min-width="420"><template #default="{ row }"><div class="filtered-image-url">{{ row.url }}</div></template></el-table-column>
