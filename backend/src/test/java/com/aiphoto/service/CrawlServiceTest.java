@@ -71,6 +71,25 @@ class CrawlServiceTest {
         verify(assetRepository).findReviewAssets(9L, null, "ALL", false, false, pageable);
     }
 
+    @Test void runningAndQueuedJobsAppearBeforeHistoryWithoutChangingHistoryOrder() {
+        CrawlJob newestCompleted = job(1L, CrawlJob.Status.COMPLETED);
+        CrawlJob newestRunning = job(2L, CrawlJob.Status.RUNNING);
+        CrawlJob newestQueued = job(3L, CrawlJob.Status.QUEUED);
+        CrawlJob olderFailed = job(4L, CrawlJob.Status.FAILED);
+        when(jobRepository.findByOwnerIdOrderByCreatedAtDesc(9L))
+                .thenReturn(List.of(newestCompleted, newestRunning, newestQueued, olderFailed));
+
+        assertThat(crawlService.listJobs(9L))
+                .containsExactly(newestRunning, newestQueued, newestCompleted, olderFailed);
+    }
+
+    private CrawlJob job(Long id, CrawlJob.Status status) {
+        CrawlJob job = new CrawlJob();
+        job.setId(id);
+        job.setStatus(status);
+        return job;
+    }
+
     @Test void emptyCompletedDownloadCanBeRetriedForDiagnosis() {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);

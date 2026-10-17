@@ -292,7 +292,15 @@ public class CrawlService {
     }
 
     public List<CrawlJob> listJobs(Long ownerId) {
-        return jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        return jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+                .sorted(java.util.Comparator.comparingInt(CrawlService::jobListPriority))
+                .toList();
+    }
+
+    private static int jobListPriority(CrawlJob job) {
+        if (job.getStatus() == CrawlJob.Status.RUNNING) return 0;
+        if (job.getStatus() == CrawlJob.Status.QUEUED) return 1;
+        return 2;
     }
 
     public CrawlJob getJob(Long jobId, Long ownerId) {
