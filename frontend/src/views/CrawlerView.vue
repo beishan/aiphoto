@@ -116,7 +116,7 @@ const recentJobs = computed(() => jobs.value.slice(0, 6))
 const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
   { label: sites.value.length ? `采集网站  ${sites.value.length}` : '采集网站', value: 'sites' },
-  { label: '采集页面', value: 'pages' },
+  { label: '待采集页', value: 'pages' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
   { label: imageSkips.value.length ? `跳过管理  ${skipTotal.value}` : '跳过管理', value: 'skips' },
@@ -781,7 +781,7 @@ onUnmounted(() => {
           <template #header><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>采集流程</h2><p>扫描页发现新链接，网站队列负责并发采集。</p></div><el-tag type="info" effect="plain" round>4 个阶段</el-tag></div></template>
           <el-steps :active="activeJobs.length ? 1 : 0" align-center finish-status="success">
             <el-step title="发现链接" description="扫描列表页" :icon="Search" />
-            <el-step title="采集页面" description="按 URL 创建任务" :icon="CircleCheck" />
+            <el-step title="待采集页" description="按 URL 创建任务" :icon="CircleCheck" />
             <el-step title="下载校验" description="域名与大小限制" :icon="Download" />
             <el-step title="整理入库" description="去重与标注" :icon="Collection" />
           </el-steps>
@@ -792,7 +792,7 @@ onUnmounted(() => {
           <el-timeline>
             <el-timeline-item type="primary" hollow><strong>添加采集网站</strong><p>配置网站入口与域名黑名单</p></el-timeline-item>
             <el-timeline-item type="primary" hollow><strong>配置解析规则</strong><p>选择图片页链接与原图节点</p></el-timeline-item>
-            <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>扫描结果进入采集页面，按需发起采集</p></el-timeline-item>
+            <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>扫描结果进入待采集页，按需发起采集</p></el-timeline-item>
           </el-timeline>
           <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">配置第一个网站</el-button>
         </el-card>
@@ -1076,7 +1076,7 @@ onUnmounted(() => {
           </el-descriptions>
           <el-alert v-if="activeJob.errorMessage" type="error" show-icon :title="activeJob.errorMessage" :closable="false" />
           <el-space class="task-actions" wrap>
-            <el-button v-if="['DISCOVERY','AWAITING_CONFIRMATION'].includes(activeJob.phase)" type="primary" :icon="Download" round @click="taskDrawerVisible = false; activeTab = 'pages'">前往采集页面</el-button>
+            <el-button v-if="['DISCOVERY','AWAITING_CONFIRMATION'].includes(activeJob.phase)" type="primary" :icon="Download" round @click="taskDrawerVisible = false; activeTab = 'pages'">前往待采集页</el-button>
             <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
             <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status) || (activeJob.phase === 'REVIEW' && activeJob.status === 'COMPLETED' && assetTotal === 0)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
             <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
@@ -1097,7 +1097,7 @@ onUnmounted(() => {
           <el-pagination v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
           </el-tab-pane>
           <el-tab-pane label="图片页清单" name="pages">
-          <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在采集页面中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
+          <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在待采集页中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
           <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页名称或 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
           <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
             <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
