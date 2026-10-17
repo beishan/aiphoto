@@ -16,6 +16,8 @@ public class CrawlPage {
     private Long id;
     private Long jobId;
     private Long collectionJobId;
+    @Column(length = 1000)
+    private String name;
     @Column(nullable = false, length = 4096)
     private String url;
     @Column(nullable = false, length = 4096)

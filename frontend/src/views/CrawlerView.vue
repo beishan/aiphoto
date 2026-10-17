@@ -1032,7 +1032,7 @@ onUnmounted(() => {
     </el-dialog>
 
     <el-dialog append-to-body v-model="pageAssetsDialogVisible" width="min(980px, calc(100vw - 28px))" destroy-on-close class="crawler-controls">
-      <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Picture /></el-icon></span><div><h2>链接采集结果</h2><p>{{ selectedSourcePage?.url }}</p></div></div></template>
+      <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Picture /></el-icon></span><div><h2>{{ selectedSourcePage?.name || '链接采集结果' }}</h2><p>{{ selectedSourcePage?.url }}</p></div></div></template>
       <el-alert v-if="!pageAssets.length" type="info" :closable="false" title="这个链接尚未提取到图片，或还未进入下载阶段。" />
       <div v-else class="asset-grid page-result-grid">
         <el-card v-for="asset in pageAssets" :key="asset.id" class="asset-card surface-card" shadow="never">
@@ -1075,10 +1075,10 @@ onUnmounted(() => {
           <el-pagination v-if="activeJob.sourcePageId && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
           <el-divider />
           <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在采集页面中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
-          <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
+          <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页名称或 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
           <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
             <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
-            <el-table-column label="图片页 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.url }}</span></template></el-table-column>
+            <el-table-column label="图片页名称 / URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.name || row.url }}</span><small v-if="row.name" class="source-page-url">{{ row.url }}</small></template></el-table-column>
           <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
           <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
           </el-table>
@@ -1090,6 +1090,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.source-page-url{display:block;color:var(--text-secondary);font-size:12px}
+
 .task-list-panel{padding:24px;min-width:0}.task-list-filters{margin:0 0 20px}.task-list-filters .el-select{width:180px}.task-site-name{display:block;color:var(--text-secondary);font-size:12px}.workspace-switcher{overflow-x:auto}.workspace-switcher :deep(.el-segmented){min-width:920px}
 
 .crawler-page{display:grid;gap:18px;padding:28px 30px 112px;color:var(--text-primary)}

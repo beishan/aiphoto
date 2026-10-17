@@ -693,3 +693,5 @@ ALTER TABLE crawl_sites ALTER COLUMN scan_pages_migrated SET DEFAULT TRUE;
 -- Retain the legacy column for older schema backfills; never turn allowed domains into blocked ones.
 ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS blocked_hosts VARCHAR(1000) NOT NULL DEFAULT '';
 ALTER TABLE crawl_sites ALTER COLUMN allowed_hosts SET DEFAULT '';
+
+ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS name VARCHAR(1000);

@@ -16,8 +16,10 @@ public class CrawlDiscoveryHistoryService {
 
     @Transactional
     public boolean addIfNew(
-            Long jobId, Long siteId, String url, String normalizedUrl, String urlHash) {
+            Long jobId, Long siteId, String url, String normalizedUrl, String urlHash, String name) {
+        String pageName = normalizeName(name);
         if (pageRepository.findByJobIdAndUrlHash(jobId, urlHash).isPresent()) {
+            fillMissingNames(siteId, normalizedUrl, urlHash, pageName);
             return false;
         }
         if (seenPageRepository.insertIfAbsent(siteId, normalizedUrl, urlHash) == 0) {
@@ -25,6 +27,7 @@ public class CrawlDiscoveryHistoryService {
             if (!normalizedUrl.equals(seen.getNormalizedUrl())) {
                 throw new IllegalStateException("详情页 URL 哈希冲突");
             }
+            fillMissingNames(siteId, normalizedUrl, urlHash, pageName);
             return false;
         }
         CrawlPage page = new CrawlPage();
@@ -32,8 +35,20 @@ public class CrawlDiscoveryHistoryService {
         page.setUrl(url);
         page.setNormalizedUrl(normalizedUrl);
         page.setUrlHash(urlHash);
+        page.setName(pageName);
         pageRepository.save(page);
 
         return true;
+    }
+
+    private void fillMissingNames(Long siteId, String normalizedUrl, String urlHash, String name) {
+        if (name != null) pageRepository.fillMissingNames(siteId, normalizedUrl, urlHash, name);
+    }
+
+    private String normalizeName(String name) {
+        if (name == null || name.isBlank()) return null;
+        String normalized = name.strip().replaceAll("\\s+", " ");
+        int characters = normalized.codePointCount(0, normalized.length());
+        return characters > 1000 ? normalized.substring(0, normalized.offsetByCodePoints(0, 1000)) : normalized;
     }
 }

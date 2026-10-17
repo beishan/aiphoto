@@ -118,14 +118,15 @@ public class CrawlWorkflowService {
         job.setSourcePageId(page.getId());
         job.setPhase(CrawlJob.Phase.DOWNLOAD);
         job.setPagesFound(1);
-        String name = "采集 · " + page.getUrl();
-        job.setName(name.substring(0, Math.min(name.length(), 200)));
+        String name = "采集 · " + (page.getName() == null || page.getName().isBlank() ? page.getUrl() : page.getName());
+        job.setName(name.substring(0, name.offsetByCodePoints(0, Math.min(name.codePointCount(0, name.length()), 200))));
         job = jobRepository.save(job);
         CrawlPage target = new CrawlPage();
         target.setJobId(job.getId());
         target.setUrl(page.getUrl());
         target.setNormalizedUrl(page.getNormalizedUrl());
         target.setUrlHash(page.getUrlHash());
+        target.setName(page.getName());
         pageRepository.save(target);
         page.setCollectionJobId(job.getId());
         pageRepository.save(page);
@@ -143,7 +144,7 @@ public class CrawlWorkflowService {
                             || source.getPhase() == CrawlJob.Phase.REVIEW;
                     CrawlJob task = collection != null ? collection : legacy ? source : null;
                     return new DiscoveredPage(page.getId(), source.getId(), source.getSiteId(),
-                            source.getScanPageId(), page.getUrl(), page.getCreatedAt(),
+                            source.getScanPageId(), page.getName(), page.getUrl(), page.getCreatedAt(),
                             task == null ? null : task.getId(), task == null ? "PENDING" : task.getStatus().name(),
                             task == null && page.getStatus() == CrawlPage.Status.PENDING);
                 });
@@ -160,5 +161,5 @@ public class CrawlWorkflowService {
     }
 
     public record DiscoveredPage(Long id, Long scanJobId, Long siteId, Long scanPageId,
-            String url, LocalDateTime createdAt, Long collectionJobId, String status, boolean collectable) {}
+            String name, String url, LocalDateTime createdAt, Long collectionJobId, String status, boolean collectable) {}
 }

@@ -97,6 +97,7 @@ class CrawlWorkflowServiceTest {
     @Test void createsExactlyOneCollectionJobAndCopiesOnlyRequestedPage() throws Exception {
         CrawlPage page = new CrawlPage(); page.setId(11L); page.setJobId(10L);
         page.setUrl("https://example.com/photos/1"); page.setNormalizedUrl(page.getUrl()); page.setUrlHash("hash");
+        page.setName("[原创]家庭旅行记录[34P]");
         CrawlJob source = new CrawlJob(); source.setId(10L); source.setSiteId(2L);
         when(pages.lockById(11L)).thenReturn(Optional.of(page));
         when(crawl.getJob(10L, 9L)).thenReturn(source);
@@ -107,12 +108,14 @@ class CrawlWorkflowServiceTest {
         assertThat(result.getPhase()).isEqualTo(CrawlJob.Phase.DOWNLOAD);
         assertThat(result.getSourcePageId()).isEqualTo(11L);
         assertThat(result.getPagesFound()).isEqualTo(1);
+        assertThat(result.getName()).isEqualTo("采集 · [原创]家庭旅行记录[34P]");
         assertThat(page.getCollectionJobId()).isEqualTo(20L);
         ArgumentCaptor<CrawlPage> saved = ArgumentCaptor.forClass(CrawlPage.class);
         verify(pages, times(2)).save(saved.capture());
         CrawlPage target = saved.getAllValues().getFirst();
         assertThat(target.getJobId()).isEqualTo(20L);
         assertThat(target.getUrl()).isEqualTo(page.getUrl());
+        assertThat(target.getName()).isEqualTo(page.getName());
         assertThat(page.getJobId()).isEqualTo(10L);
         when(crawl.getJob(20L, 9L)).thenReturn(result);
         assertThat(workflow.collect(11L, 9L)).isSameAs(result);
@@ -137,7 +140,7 @@ class CrawlWorkflowServiceTest {
     }
 
     @Test void pageListExposesCollectionStatusInsteadOfTheScanStatus() {
-        CrawlPage page = new CrawlPage(); page.setJobId(10L); page.setCollectionJobId(20L);
+        CrawlPage page = new CrawlPage(); page.setJobId(10L); page.setCollectionJobId(20L); page.setName("旅行照片");
         CrawlJob scan = new CrawlJob(); scan.setId(10L); scan.setSiteId(2L); scan.setStatus(CrawlJob.Status.COMPLETED);
         CrawlJob collection = new CrawlJob(); collection.setId(20L); collection.setStatus(CrawlJob.Status.RUNNING);
         var pageable = PageRequest.of(0, 50);
@@ -148,6 +151,7 @@ class CrawlWorkflowServiceTest {
         assertThat(result.status()).isEqualTo("RUNNING");
         assertThat(result.collectable()).isFalse();
         assertThat(result.collectionJobId()).isEqualTo(20L);
+        assertThat(result.name()).isEqualTo("旅行照片");
     }
 
     @Test void scanUrlMustNotBeBlockedAndIntervalMustBeValid() {

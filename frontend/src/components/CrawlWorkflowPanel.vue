@@ -148,7 +148,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
     <div v-if="!scopedSiteId" class="workflow-toolbar">
       <el-select v-model="siteId" clearable placeholder="全部网站" aria-label="筛选网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select>
       <template v-if="mode === 'pages'">
-        <el-input v-model="query" clearable placeholder="搜索页面 URL" :prefix-icon="Search" @keyup.enter="search" @clear="search"><template #append><el-button @click="search">搜索</el-button></template></el-input>
+        <el-input v-model="query" clearable placeholder="搜索页面名称或 URL" :prefix-icon="Search" @keyup.enter="search" @clear="search"><template #append><el-button @click="search">搜索</el-button></template></el-input>
         <el-checkbox v-model="pending">仅待采集</el-checkbox>
       </template>
     </div>
@@ -163,7 +163,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
     </el-table>
     <el-table v-else-if="mode === 'pages'" :data="pages" empty-text="尚无扫描结果，运行扫描页任务后会自动出现">
       <el-table-column label="操作" width="130" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button><el-button v-else-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button></template></el-table-column>
-      <el-table-column label="页面 URL" min-width="340"><template #default="{ row }"><a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a><small>{{ siteName(row.siteId) }} · 扫描任务 #{{ row.scanJobId }}</small></template></el-table-column>
+      <el-table-column label="采集页面" min-width="340"><template #default="{ row }"><a :href="row.url" :title="row.name || row.url" target="_blank" rel="noopener noreferrer" class="page-title">{{ row.name || row.url }}</a><small v-if="row.name">{{ row.url }}</small><small>{{ siteName(row.siteId) }} · 扫描任务 #{{ row.scanJobId }}</small></template></el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
     </el-table>
@@ -199,5 +199,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 </template>
 
 <style scoped>
+.page-title{font-weight:600}
+
 .workflow-panel{padding:24px;min-width:0}.workflow-heading,.queue-card header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.workflow-heading{margin-bottom:24px}.workflow-heading h2,.queue-card h3{margin:0}.workflow-heading p,.field-hint{color:var(--text-secondary);font-size:13px;line-height:1.7}.eyebrow{font-size:10px!important;letter-spacing:.16em;color:var(--accent)!important;margin:0 0 6px}.workflow-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:18px}.workflow-toolbar>.el-select{width:200px;flex-shrink:0}.workflow-toolbar>.el-input{max-width:520px}.workflow-panel :deep(.cell)>small,.workflow-panel :deep(.cell)>a{display:block;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workflow-panel small{color:var(--text-secondary)}a{color:var(--accent);text-decoration:none}.el-pagination{margin-top:20px}.queue-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}.queue-card{border:1px solid var(--separator);border-radius:16px;padding:22px;background:var(--bg-secondary)}.queue-numbers{display:flex;gap:36px;margin:24px 0}.queue-numbers b{font-size:28px;font-variant-numeric:tabular-nums}.queue-numbers small{display:block;margin-top:5px}.executor-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;min-height:26px}.queue-jobs{display:grid;gap:6px;margin-top:16px;max-height:260px;overflow:auto}.queue-jobs button{display:flex;gap:12px;align-items:center;min-height:36px;border:0;background:var(--bg-card);color:var(--text-primary);padding:8px 10px;border-radius:8px;text-align:left;cursor:pointer}.queue-jobs strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-jobs span{flex-shrink:0;color:var(--accent);font-size:12px}button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}@media(max-width:760px){.workflow-panel{padding:16px}.workflow-heading{flex-direction:column}.workflow-toolbar{flex-wrap:wrap}.workflow-toolbar>.el-input{max-width:100%}.queue-grid{grid-template-columns:1fr}}
 </style>

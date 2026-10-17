@@ -97,7 +97,10 @@ class CrawlWorkerExecutorTest {
         when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
         when(fetcher.fetch(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
             String url = invocation.getArgument(0);
-            String body = "<a class='detail' href='/detail'>Detail</a><a class='next' href='/b'>Next</a>";
+            String body = "<table><tr><td class='tal'><h3><a class='detail' href='/detail'>"
+                    + "[原创]家庭旅行记录[34P]</a></h3><span class='thread_page'>"
+                    + "[<a href='/read?page=1'>1</a><a href='/read?page=2'>2</a>]"
+                    + "</span></td></tr></table><a class='next' href='/b'>Next</a>";
             return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "text/html",
                     body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         });
@@ -107,6 +110,8 @@ class CrawlWorkerExecutorTest {
         verify(fetcher).fetch("https://example.com/a", "example.com", 5242880L, 1000L);
         verify(fetcher).fetch("https://example.com/b", "example.com", 5242880L, 1000L);
         verify(fetcher, times(2)).fetch(anyString(), any(), anyLong(), anyLong());
+        verify(history, times(2)).addIfNew(eq(1L), eq(2L), eq("https://example.com/detail"),
+                eq("https://example.com/detail"), anyString(), eq("[原创]家庭旅行记录[34P]"));
         assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.COMPLETED);
         verify(session).close();
     }

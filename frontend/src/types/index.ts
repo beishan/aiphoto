@@ -199,6 +199,7 @@ export interface CrawlJob {
 export interface CrawlPage {
   id: number
   jobId: number
+  name: string | null
   url: string
   included: boolean
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED'

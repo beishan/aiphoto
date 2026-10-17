@@ -33,7 +33,7 @@ export interface CrawlScanPage {
   scanIntervalMinutes: number; maxPages: number; lastScanAt?: string
 }
 export interface DiscoveredPage {
-  id: number; scanJobId: number; siteId: number; scanPageId: number | null; url: string;
+  id: number; scanJobId: number; siteId: number; scanPageId: number | null; name: string | null; url: string;
   createdAt: string; collectionJobId: number | null; status: CrawlJob['status'] | 'PENDING'; collectable: boolean
 }
 export interface CrawlSiteQueue {

@@ -110,7 +110,8 @@ public class CrawlWorker {
                         }
                         String detailHash = SafeHttpFetcher.urlHash(detailUrl);
                         discoveryHistoryService.addIfNew(
-                                jobId, rule.getSiteId(), href, detailUrl, detailHash);
+                                jobId, rule.getSiteId(), href, detailUrl, detailHash,
+                                link.text().isBlank() ? link.attr("title") : link.text());
                         if (pageRepository.countByJobId(jobId) >= rule.getMaxDetailPages()) break;
                     }
                     if (rule.getNextSelector() != null && !rule.getNextSelector().isBlank()) {

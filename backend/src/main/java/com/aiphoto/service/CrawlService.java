@@ -380,7 +380,7 @@ public class CrawlService {
         String normalizedQuery = query == null ? "" : query.trim();
         Page<CrawlPage> result = normalizedQuery.isEmpty()
                 ? pageRepository.findByJobIdOrderById(jobId, pageable)
-                : pageRepository.findByJobIdAndUrlContainingIgnoreCaseOrderById(
+                : pageRepository.searchByJobId(
                         jobId, normalizedQuery, pageable);
         return new PageResult(
                 result.getContent(), result.getTotalElements(), result.getTotalPages(),
