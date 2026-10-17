@@ -1170,6 +1170,32 @@
   padding: 24px;
 }
 
+.task-title-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-title-cell .task-site-tag {
+  flex: 0 1 auto;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-title-cell .task-title-button {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.task-title-cell .task-title-button :deep(span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .site-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
