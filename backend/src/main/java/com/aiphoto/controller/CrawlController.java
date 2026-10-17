@@ -185,6 +185,26 @@ public class CrawlController {
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
     }
 
+    @GetMapping("/review/pages")
+    public List<com.aiphoto.repository.CrawlAssetRepository.ReviewPageGroup> reviewPages(
+            Authentication authentication) {
+        return crawlService.reviewPageGroups(userId(authentication));
+    }
+
+    @GetMapping("/review/assets")
+    public Page<CrawlAsset> reviewAssets(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "60") int size,
+            @RequestParam(required = false) CrawlAsset.Status status,
+            @RequestParam(defaultValue = "false") boolean exactDuplicates,
+            @RequestParam(defaultValue = "false") boolean similarOnly,
+            @RequestParam(required = false) Long sourcePageId,
+            Authentication authentication) {
+        return crawlService.listReviewAssets(userId(authentication), sourcePageId,
+                status == null ? null : status.name(), exactDuplicates, similarOnly,
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
+    }
+
     @PostMapping("/jobs/{jobId}/assets/skip")
     public Map<String, Integer> skipAssets(
             @PathVariable Long jobId,

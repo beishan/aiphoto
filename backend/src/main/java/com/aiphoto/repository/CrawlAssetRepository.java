@@ -25,6 +25,37 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     Page<CrawlAsset> findByJobIdAndSourcePageIdAndStatus(
             @Param("jobId") Long jobId, @Param("pageId") Long pageId,
             @Param("status") CrawlAsset.Status status, Pageable pageable);
+    @Query(value = "SELECT a.* FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
+            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
+            + "AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+            + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
+            + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
+            + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
+            + "(SELECT 1 FROM crawl_assets b WHERE b.job_id = a.job_id AND b.status <> 'DELETED' "
+            + "AND b.file_hash_md5 = a.file_hash_md5 GROUP BY b.job_id, b.file_hash_md5 HAVING COUNT(*) > 1))) "
+            + "ORDER BY a.id DESC",
+            countQuery = "SELECT COUNT(*) FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
+                    + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
+                    + "AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+                    + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
+                    + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
+                    + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
+                    + "(SELECT 1 FROM crawl_assets b WHERE b.job_id = a.job_id AND b.status <> 'DELETED' "
+                    + "AND b.file_hash_md5 = a.file_hash_md5 GROUP BY b.job_id, b.file_hash_md5 HAVING COUNT(*) > 1)))",
+            nativeQuery = true)
+    Page<CrawlAsset> findReviewAssets(
+            @Param("ownerId") Long ownerId, @Param("pageId") Long pageId,
+            @Param("status") String status, @Param("exactDuplicates") boolean exactDuplicates,
+            @Param("similarOnly") boolean similarOnly, Pageable pageable);
+
+    @Query(value = "SELECT p.id AS id, p.name AS name, p.url AS url, COUNT(a.id) AS \"assetCount\" "
+            + "FROM crawl_jobs j JOIN crawl_pages p ON p.id = j.source_page_id "
+            + "JOIN crawl_assets a ON a.job_id = j.id "
+            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND j.source_page_id IS NOT NULL "
+            + "AND a.status <> 'DELETED' GROUP BY p.id, p.name, p.url "
+            + "ORDER BY MAX(j.created_at) DESC, p.id DESC",
+            nativeQuery = true)
+    List<ReviewPageGroup> findReviewPageGroups(@Param("ownerId") Long ownerId);
     Page<CrawlAsset> findByJobIdAndStatusAndSimilarityGroupIdIsNotNullOrderByIdDesc(
             Long jobId, CrawlAsset.Status status, Pageable pageable);
     @Query("SELECT a FROM CrawlAsset a WHERE a.jobId = :jobId AND a.status <> :deletedStatus "
@@ -57,4 +88,11 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     @Query("UPDATE CrawlAsset a SET a.similarityGroupId = NULL, a.similarityCount = 0 "
             + "WHERE a.jobId = :jobId")
     int clearSimilarityGroups(@Param("jobId") Long jobId);
+
+    interface ReviewPageGroup {
+        Long getId();
+        String getName();
+        String getUrl();
+        Long getAssetCount();
+    }
 }

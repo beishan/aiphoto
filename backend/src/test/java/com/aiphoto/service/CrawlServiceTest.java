@@ -58,6 +58,19 @@ class CrawlServiceTest {
                 crawlerSettingsService);
     }
 
+    @Test void reviewAssetsDefaultToAllNonDeletedImagesAcrossOwnerTasks() {
+        CrawlAsset first = new CrawlAsset(); first.setId(1L); first.setJobId(10L);
+        CrawlAsset second = new CrawlAsset(); second.setId(2L); second.setJobId(11L);
+        var pageable = PageRequest.of(0, 60);
+        var assets = new PageImpl<>(List.of(first, second), pageable, 2);
+        when(assetRepository.findReviewAssets(9L, null, "ALL", false, false, pageable)).thenReturn(assets);
+
+        var result = crawlService.listReviewAssets(9L, null, "", false, false, pageable);
+
+        assertThat(result.getContent()).containsExactly(first, second);
+        verify(assetRepository).findReviewAssets(9L, null, "ALL", false, false, pageable);
+    }
+
     @Test void emptyCompletedDownloadCanBeRetriedForDiagnosis() {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);

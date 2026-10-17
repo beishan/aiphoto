@@ -46,6 +46,8 @@ const batchNote = ref('')
 const assetPage = ref(0)
 const assetPageSize = 60
 const assetTotal = ref(0)
+const reviewSourcePageId = ref<number | null>(null)
+const reviewSourcePages = ref<{ id: number; name: string | null; url: string; assetCount: number }[]>([])
 const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null })
 const assetStatus = ref('')
 const exactDuplicateOnly = ref(false)
@@ -109,6 +111,7 @@ const filteredImagesDialogVisible = ref(false)
 const selectedFilteredPage = ref<CrawlPage | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
+let reviewRequest = 0
 let polling = false
 
 type TabKey = 'overview' | 'sites' | 'pages' | 'tasks' | 'review' | 'skips'
@@ -213,6 +216,39 @@ async function loadJobs() {
   jobs.value = (await crawlApi.jobs()).data
   if (!activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
 }
+async function loadReviewData() {
+  const request = ++reviewRequest
+  try {
+    const [pagesResult, assetsResult] = await Promise.all([
+      crawlApi.reviewPages(),
+      crawlApi.reviewAssets(assetPage.value, assetPageSize, assetStatus.value,
+        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value),
+    ])
+    if (request !== reviewRequest) return
+    reviewSourcePages.value = pagesResult.data
+    if (reviewSourcePageId.value && !reviewSourcePages.value.some(page => page.id === reviewSourcePageId.value)) {
+      reviewSourcePageId.value = null
+      return
+    }
+    assets.value = assetsResult.data.content
+    assetTotal.value = assetsResult.data.totalElements
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => assets.value.some(asset => asset.id === id)))
+    for (const key of Object.keys(previewImages)) {
+      const id = Number(key)
+      if (!assets.value.some(asset => asset.id === id)) {
+        URL.revokeObjectURL(previewImages[id])
+        delete previewImages[id]
+      }
+    }
+    await loadPreviews()
+  } catch (error: any) {
+    if (request === reviewRequest) ElMessage.error(error?.response?.data?.message || '待整理图片加载失败')
+  }
+}
+async function reloadVisibleAssets() {
+  if (activeTab.value === 'review' && !taskDrawerVisible.value) await loadReviewData()
+  else await loadJobDetail()
+}
 async function loadImageSkips() {
   const { data } = await crawlApi.imageSkips(skipPage.value, 50, skipQuery.value)
   imageSkips.value = data.content
@@ -221,7 +257,8 @@ async function loadImageSkips() {
 
 async function refresh() {
   await Promise.all([loadSites(), loadJobs(), loadImageSkips()])
-  if (activeJobId.value) await loadJobDetail()
+  if (activeTab.value === 'review') await loadReviewData()
+  else if (activeJobId.value) await loadJobDetail()
 }
 
 function openJob(job: CrawlJob, tab: TabKey = 'tasks') {
@@ -302,10 +339,11 @@ async function loadJobDetail() {
   if (!activeJobId.value) return
   const jobId = activeJobId.value
   const request = ++detailRequest
+  const showTaskAssets = taskDrawerVisible.value || activeTab.value !== 'review'
   const [jobResult, pageResult, assetResult, progressResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
-    crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value),
+    showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
     taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
   ])
   if (request !== detailRequest || jobId !== activeJobId.value) return
@@ -314,8 +352,10 @@ async function loadJobDetail() {
   pages.value = pageResult.data.content
   pageTotal.value = pageResult.data.totalElements
   includedPageTotal.value = pageResult.data.includedElements
-  assets.value = assetResult.data.content
-  assetTotal.value = assetResult.data.totalElements
+  if (assetResult) {
+    assets.value = assetResult.data.content
+    assetTotal.value = assetResult.data.totalElements
+  }
   imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }
   for (const key of Object.keys(previewImages)) {
     const id = Number(key)
@@ -372,6 +412,7 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
 function openAssetPreview(asset: CrawlAsset) {
   const indexInPage = assets.value.findIndex(item => item.id === asset.id)
   if (indexInPage < 0 || !previewImages[asset.id]) return
+  Object.keys(previewViewerPages).forEach(key => delete previewViewerPages[Number(key)])
   previewViewerPages[assetPage.value] = assets.value.slice()
   previewViewerVisible.value = true
   void loadPreviewViewerAsset(asset, assetPage.value * assetPageSize + indexInPage)
@@ -380,12 +421,15 @@ function openAssetPreview(asset: CrawlAsset) {
 async function stepPreviewViewer(direction: -1 | 1) {
   if (!previewViewerVisible.value || previewViewerLoading.value) return
   const targetIndex = previewViewerIndex.value + direction
-  if (targetIndex < 0 || targetIndex >= assetTotal.value || !activeJobId.value) return
+  if (targetIndex < 0 || targetIndex >= assetTotal.value) return
   const targetPage = Math.floor(targetIndex / assetPageSize)
   let pageAssets = previewViewerPages[targetPage]
   if (!pageAssets) {
     try {
-      const { data } = await crawlApi.assets(activeJobId.value, targetPage, assetPageSize)
+      const { data } = taskDrawerVisible.value && activeJobId.value
+        ? await crawlApi.assets(activeJobId.value, targetPage, assetPageSize)
+        : await crawlApi.reviewAssets(targetPage, assetPageSize, assetStatus.value,
+          exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value)
       pageAssets = data.content
       previewViewerPages[targetPage] = pageAssets
     } catch {
@@ -651,6 +695,17 @@ function toggleAsset(id: number) {
   selectedAssets.value = next
 }
 
+function selectedAssetGroups() {
+  const groups = new Map<number, number[]>()
+  for (const asset of assets.value) {
+    if (!selectedAssets.value.has(asset.id)) continue
+    const ids = groups.get(asset.jobId) || []
+    ids.push(asset.id)
+    groups.set(asset.jobId, ids)
+  }
+  return [...groups].map(([jobId, ids]) => ({ jobId, ids }))
+}
+
 function selectAllDownloadable() {
   selectedAssets.value = new Set(reviewAssets.value.filter(asset => asset.status === 'DOWNLOADED').map(asset => asset.id))
 }
@@ -661,15 +716,18 @@ function toggleAllDownloadable(selected: string | number | boolean) {
 }
 
 async function deleteSelected() {
-  if (!activeJobId.value || !selectedAssets.value.size) return
-  const { data } = await crawlApi.deleteAssets(activeJobId.value, [...selectedAssets.value])
-  ElMessage.success(`已移到待整理区已删除列表：${data.success} 张`)
+  const groups = selectedAssetGroups()
+  if (!groups.length) return
+  const results = await Promise.all(groups.map(group => crawlApi.deleteAssets(group.jobId, group.ids)))
+  const changed = results.reduce((total, result) => total + result.data.success, 0)
+  ElMessage.success(`已移到待整理区已删除列表：${changed} 张`)
   selectedAssets.value = new Set()
-  await loadJobDetail()
+  await reloadVisibleAssets()
 }
 
 async function skipSelectedNextTime() {
-  if (!activeJobId.value || !selectedAssets.value.size) return
+  const groups = selectedAssetGroups()
+  if (!groups.length) return
   let reason = '重复图片'
   try {
     const { value } = await ElMessageBox.prompt(
@@ -680,9 +738,12 @@ async function skipSelectedNextTime() {
     reason = value
   } catch { return }
   try {
-    const { data } = await crawlApi.skipAssets(activeJobId.value, [...selectedAssets.value], reason)
-    ElMessage.success(`已加入跳过清单：${data.success} 张`)
+    const results = await Promise.all(groups.map(group => crawlApi.skipAssets(group.jobId, group.ids, reason)))
+    const skipped = results.reduce((total, result) => total + result.data.success, 0)
+    ElMessage.success(`已加入跳过清单：${skipped} 张`)
+    selectedAssets.value = new Set()
     await loadImageSkips()
+    await reloadVisibleAssets()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '加入跳过清单失败')
   }
@@ -736,28 +797,35 @@ async function removeImageSkip(skip: CrawlImageSkip) {
 }
 
 async function editSelected() {
-  if (!activeJobId.value || !selectedAssets.value.size) return
-  const { data } = await crawlApi.editAssets(activeJobId.value, [...selectedAssets.value], batchNote.value)
-  ElMessage.success(`已更新 ${data.success} 张图片的备注`)
-  await loadJobDetail()
+  const groups = selectedAssetGroups()
+  if (!groups.length) return
+  const results = await Promise.all(groups.map(group => crawlApi.editAssets(group.jobId, group.ids, batchNote.value)))
+  const updated = results.reduce((total, result) => total + result.data.success, 0)
+  ElMessage.success(`已更新 ${updated} 张图片的备注`)
+  await reloadVisibleAssets()
 }
 
-async function restoreDeleted(id: number) {
-  if (!activeJobId.value) return
-  await crawlApi.restoreAssets(activeJobId.value, [id])
-  await loadJobDetail()
+async function restoreDeleted(asset: CrawlAsset) {
+  await crawlApi.restoreAssets(asset.jobId, [asset.id])
+  await reloadVisibleAssets()
 }
 
 async function analyzeSimilarity() {
-  if (!activeJobId.value) return
+  if (!reviewJobs.value.length) return
   busy.value = 'similarity'
   try {
-    const { data } = await crawlApi.analyzeSimilarity(activeJobId.value, similarityThreshold.value)
+    const results = await Promise.all(reviewJobs.value.map(job =>
+      crawlApi.analyzeSimilarity(job.id, similarityThreshold.value)))
+    const data = results.reduce((total, result) => ({
+      analyzed: total.analyzed + result.data.analyzed,
+      groups: total.groups + result.data.groups,
+      matched: total.matched + result.data.matched,
+    }), { analyzed: 0, groups: 0, matched: 0 })
     similarOnly.value = data.groups > 0
     exactDuplicateOnly.value = false
     assetStatus.value = ''
     assetPage.value = 0
-    await loadJobDetail()
+    await loadReviewData()
     if (data.groups) ElMessage.success(`已分析 ${data.analyzed} 张，找到 ${data.groups} 组、共 ${data.matched} 张相似图片`)
     else ElMessage.info(`已分析 ${data.analyzed} 张，没有发现相似图片`)
   } catch (error: any) {
@@ -766,37 +834,47 @@ async function analyzeSimilarity() {
 }
 
 async function importSelected() {
-  if (!activeJobId.value || !selectedAssets.value.size) return
-  const ids = [...selectedAssets.value]
-  const preview = (await crawlApi.importPreview(activeJobId.value, ids)).data
+  const groups = selectedAssetGroups()
+  if (!groups.length) return
+  const previews = await Promise.all(groups.map(async group => ({
+    ...group, preview: (await crawlApi.importPreview(group.jobId, group.ids)).data,
+  })))
+  const preview = previews.reduce((total, item) => ({
+    importable: total.importable + item.preview.importable,
+    duplicates: total.duplicates + item.preview.duplicates,
+    alreadyImported: total.alreadyImported + item.preview.alreadyImported,
+    blocked: total.blocked + item.preview.blocked,
+  }), { importable: 0, duplicates: 0, alreadyImported: 0, blocked: 0 })
   const summary = `预计新增 ${preview.importable} 张，图库重复 ${preview.duplicates} 张，已入库 ${preview.alreadyImported} 张，当前不可入库 ${preview.blocked} 张。继续后将逐项处理并启动新增图片的 AI 索引。`
   try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info' }) }
   catch { return }
   busy.value = 'import'
   try {
-    const signature = JSON.stringify({
-      jobId: activeJobId.value,
-      ids: [...ids].sort((a, b) => a - b),
-      albumId: targetAlbumId.value,
-      tagIds: [...targetTagIds.value].sort((a, b) => a - b),
-    })
-    if (pendingImport.value?.signature !== signature) {
-      pendingImport.value = { signature, key: newImportKey() }
+    const completed = { success: 0, skipped: 0, fail: 0 }
+    for (const group of previews) {
+      const signature = JSON.stringify({
+        jobId: group.jobId,
+        ids: [...group.ids].sort((a, b) => a - b),
+        albumId: targetAlbumId.value,
+        tagIds: [...targetTagIds.value].sort((a, b) => a - b),
+      })
+      if (pendingImport.value?.signature !== signature) pendingImport.value = { signature, key: newImportKey() }
+      const { data } = await crawlApi.importAssets(
+        group.jobId, group.ids, targetAlbumId.value, targetTagIds.value, pendingImport.value.key)
+      await loadImportBatch(data.batchId)
+      if (data.status === 'QUEUED' || data.status === 'RUNNING') ElMessage.info(`导入批次 #${data.batchId} 已进入后台队列`)
+      const batch = await waitForImportBatch(data.batchId)
+      await loadImportBatch(data.batchId, batch.fail ? 'FAILED' : '')
+      completed.success += batch.success
+      completed.skipped += batch.skipped
+      completed.fail += batch.fail
     }
-    const { data } = await crawlApi.importAssets(
-      activeJobId.value, ids, targetAlbumId.value, targetTagIds.value, pendingImport.value.key)
-    await loadImportBatch(data.batchId)
-    if (data.status === 'QUEUED' || data.status === 'RUNNING') {
-      ElMessage.info(`导入批次 #${data.batchId} 已进入后台队列`)
-    }
-    const completed = await waitForImportBatch(data.batchId)
-    await loadImportBatch(data.batchId, completed.fail ? 'FAILED' : '')
     pendingImport.value = null
     if (completed.fail) ElMessage.warning(`入库完成：成功 ${completed.success}，重复跳过 ${completed.skipped}，失败 ${completed.fail}`)
     else ElMessage.success(`入库完成：成功 ${completed.success}，重复跳过 ${completed.skipped}`)
     selectedAssets.value = new Set()
     window.dispatchEvent(new Event('photos-changed'))
-    await loadJobDetail()
+    await loadReviewData()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || error?.message || '入库请求失败，可直接重试，已完成项目不会重复入库')
   } finally { busy.value = '' }
@@ -874,26 +952,35 @@ watch(taskAssetView, value => {
 })
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
-  if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
-    activeJobId.value = reviewJobs.value[0]?.id ?? null
-  } else if (tab === 'tasks' && !activeJobId.value && jobs.value.length) {
-    activeJobId.value = jobs.value[0].id
+  if (tab === 'review') {
+    detailRequest++
+    void loadReviewData()
+  } else {
+    reviewRequest++
+    if (tab === 'tasks' && !activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
   }
 })
-watch(taskDrawerVisible, () => { assetPage.value = 0; void loadJobDetail() })
+watch(taskDrawerVisible, () => {
+  assetPage.value = 0
+  if (activeTab.value === 'review' && !taskDrawerVisible.value) void loadReviewData()
+  else {
+    if (taskDrawerVisible.value) reviewRequest++
+    void loadJobDetail()
+  }
+})
 watch([taskDrawerVisible, activeJobId], () => {
   if (taskDrawerVisible.value) {
     taskDetailTab.value = activeJob.value && ['DOWNLOAD', 'REVIEW'].includes(activeJob.value.phase) ? 'images' : 'pages'
   }
 })
-watch(assetStatus, () => { assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
-watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
-watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
+watch([assetStatus, reviewSourcePageId], () => { assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
+watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
+watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
 
 function changeAssetPage(page: number) {
   assetPage.value = page - 1
   selectedAssets.value = new Set()
-  void loadJobDetail()
+  void reloadVisibleAssets()
 }
 onMounted(async () => {
   const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
@@ -906,7 +993,8 @@ onMounted(async () => {
     polling = true
     try {
       await loadJobs()
-      if (taskDrawerVisible.value || activeTab.value === 'review') await loadJobDetail()
+      if (taskDrawerVisible.value) await loadJobDetail()
+      else if (activeTab.value === 'review') await loadReviewData()
     } catch { /* A transient polling failure is retried on the next interval. */ }
     finally { polling = false }
   }, 2500)
@@ -1023,10 +1111,10 @@ onUnmounted(() => {
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
-          <el-select v-model="activeJobId" class="review-job-select" placeholder="选择待整理任务"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="job in reviewJobs" :key="job.id" :label="`${job.name}（${job.imagesDownloaded} 张）`" :value="job.id" /></el-select>
+          <el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select>
         </div>
       </el-card>
-      <el-empty v-if="!activeJob || (!assets.length && activeJob.phase !== 'REVIEW')" class="surface-card review-empty" description="暂无可整理的图片，完成下载后会出现在这里" :image-size="110" />
+      <el-empty v-if="!reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
       <template v-else>
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
@@ -1036,7 +1124,7 @@ onUnmounted(() => {
           </el-form>
           <el-divider />
           <el-descriptions :column="4" class="review-stats">
-            <el-descriptions-item label="任务图片">{{ assetTotal }}</el-descriptions-item>
+            <el-descriptions-item label="待整理图片">{{ assetTotal }}</el-descriptions-item>
             <el-descriptions-item label="本页可见">{{ reviewAssets.length }}</el-descriptions-item>
             <el-descriptions-item label="精确重复组">{{ duplicateHashes.size }}</el-descriptions-item>
             <el-descriptions-item label="已删除">{{ deletedAssets.length }}</el-descriptions-item>
@@ -1083,7 +1171,7 @@ onUnmounted(() => {
           </el-card>
         </div>
         <el-pagination v-if="assetTotal > assetPageSize" class="pagination" layout="prev, pager, next, total" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
-        <el-collapse v-if="deletedAssets.length" class="deleted-collapse surface-card"><el-collapse-item :title="`已删除（${deletedAssets.length}）`" name="deleted"><el-table :data="deletedAssets" size="small"><el-table-column label="文件" prop="originalFilename" min-width="240" /><el-table-column label="大小" width="120"><template #default="{ row }">{{ formatBytes(row.fileSize) }}</template></el-table-column><el-table-column label="" width="90"><template #default="{ row }"><el-button link type="primary" @click="restoreDeleted(row.id)">恢复</el-button></template></el-table-column></el-table></el-collapse-item></el-collapse>
+        <el-collapse v-if="deletedAssets.length" class="deleted-collapse surface-card"><el-collapse-item :title="`已删除（${deletedAssets.length}）`" name="deleted"><el-table :data="deletedAssets" size="small"><el-table-column label="文件" prop="originalFilename" min-width="240" /><el-table-column label="大小" width="120"><template #default="{ row }">{{ formatBytes(row.fileSize) }}</template></el-table-column><el-table-column label="" width="90"><template #default="{ row }"><el-button link type="primary" @click="restoreDeleted(row)">恢复</el-button></template></el-table-column></el-table></el-collapse-item></el-collapse>
       </template>
     </section>
 

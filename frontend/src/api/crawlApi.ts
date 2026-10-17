@@ -29,6 +29,7 @@ export interface CrawlImportItem {
 export interface InspectionProxy { id: number; name: string; enabled: boolean; proxyType: 'HTTP' | 'MIHOMO' }
 export interface CrawlImageProgress { total: number; processed: number; downloaded: number; runningAsset: CrawlAsset | null; currentProxyName: string | null }
 export interface CrawlSiteInfo { title: string; description: string; finalUrl: string }
+export interface CrawlReviewPageGroup { id: number; name: string | null; url: string; assetCount: number }
 export interface CrawlScanPage {
   id?: number; siteId: number; name: string; url: string; autoScanEnabled: boolean;
   scanIntervalMinutes: number; maxPages: number; lastScanAt?: string
@@ -92,6 +93,8 @@ export const crawlApi = {
   resume: (id: number) => http.post(`/crawl/jobs/${id}/resume`),
   cancel: (id: number) => http.post<CrawlJob>(`/crawl/jobs/${id}/cancel`),
   assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, pageId?: number) => http.get<PageResponse<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, pageId } }),
+  reviewPages: () => http.get<CrawlReviewPageGroup[]>('/crawl/review/pages'),
+  reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null) => http.get<PageResponse<CrawlAsset>>('/crawl/review/assets', { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined } }),
   skipAssets: (jobId: number, ids: number[], reason: string) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/skip`, { ids, reason }),
   imageSkips: (page = 0, size = 50, query = '') => http.get<PageResponse<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } }),
   deleteImageSkip: (id: number) => http.delete<{ success: number }>(`/crawl/image-skips/${id}`),

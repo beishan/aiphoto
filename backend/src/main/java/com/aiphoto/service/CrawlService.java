@@ -484,6 +484,25 @@ public class CrawlService {
         return result;
     }
 
+    @Transactional(readOnly = true)
+    public Page<CrawlAsset> listReviewAssets(
+            Long ownerId, Long sourcePageId, String status, boolean exactDuplicates,
+            boolean similarOnly, Pageable pageable) {
+        if (exactDuplicates && similarOnly) {
+            throw new IllegalArgumentException("精确重复和相似图片筛选不能同时启用");
+        }
+        Page<CrawlAsset> result = assetRepository.findReviewAssets(
+                ownerId, sourcePageId, status == null || status.isBlank() ? "ALL" : status,
+                exactDuplicates, similarOnly, pageable);
+        result.getContent().stream().collect(Collectors.groupingBy(CrawlAsset::getJobId))
+                .forEach(this::enrichDuplicateState);
+        return result;
+    }
+
+    public List<CrawlAssetRepository.ReviewPageGroup> reviewPageGroups(Long ownerId) {
+        return assetRepository.findReviewPageGroups(ownerId);
+    }
+
     private void enrichDuplicateState(Long jobId, List<CrawlAsset> assets) {
         List<String> hashes = assets.stream().map(CrawlAsset::getFileHashMd5)
                 .filter(java.util.Objects::nonNull).distinct().toList();

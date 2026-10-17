@@ -495,6 +495,7 @@ CREATE INDEX IF NOT EXISTS idx_crawl_image_skips_owner_created
     ON crawl_image_skips(owner_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_crawl_jobs_owner_created ON crawl_jobs(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crawl_jobs_owner_phase_page ON crawl_jobs(owner_id, phase, source_page_id);
 CREATE INDEX IF NOT EXISTS idx_crawl_pages_job_status ON crawl_pages(job_id, status);
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_job_status ON crawl_assets(job_id, status);
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_job_page ON crawl_assets(job_id, page_id, id DESC);
