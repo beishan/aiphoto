@@ -7,7 +7,7 @@ import { settingApi, type CrawlerExecutor, type CrawlerProxy } from '@/api/setti
 import type { CrawlJob, CrawlSite } from '@/types'
 import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
 
-const props = defineProps<{ mode: 'scans' | 'pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[]; scopedSiteId?: number | null }>()
+const props = defineProps<{ mode: 'scans' | 'pages' | 'collected-pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[]; scopedSiteId?: number | null }>()
 const emit = defineEmits<{ 'open-job': [job: CrawlJob]; changed: [] }>()
 const scans = ref<CrawlScanPage[]>([])
 const pages = ref<DiscoveredPage[]>([])
@@ -18,7 +18,6 @@ const pageTable = ref()
 const queues = ref<CrawlSiteQueue[]>([])
 const siteId = ref<number>()
 const query = ref('')
-const pending = ref(false)
 const pageNumber = ref(1)
 const pageSize = ref(50)
 const total = ref(0)
@@ -61,8 +60,10 @@ async function load(silent = false) {
     if (props.mode === 'scans') {
       const { data } = await crawlApi.scanPages()
       if (request === requestId) scans.value = data
-    } else if (props.mode === 'pages') {
-      const { data } = await crawlApi.collectionPages(pageNumber.value - 1, query.value, siteId.value, pending.value, pageSize.value)
+    } else if (props.mode === 'pages' || props.mode === 'collected-pages') {
+      const { data } = await crawlApi.collectionPages(
+        pageNumber.value - 1, query.value, siteId.value, props.mode === 'pages', pageSize.value,
+        props.mode === 'collected-pages')
       if (request === requestId && pageNumber.value > Math.max(1, data.totalPages)) {
         pageNumber.value = Math.max(1, data.totalPages)
         await load(silent)
@@ -203,7 +204,7 @@ async function manageExecutors() {
   try { proxies.value = (await settingApi.getCrawlerSettings()).data.proxies; executorManager.value = true }
   catch (error) { fail(error) }
 }
-watch([siteId, pending], search)
+watch(siteId, search)
 watch(() => props.mode, () => { pageNumber.value = 1; void load() })
 onMounted(() => { void load(); timer = setInterval(() => { if (!loading.value && !selectedPageIds.value.length) void load(true) }, 5000) })
 onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
@@ -211,7 +212,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 
 <template>
   <section class="workflow-panel surface-card crawler-controls" v-loading="loading" role="tabpanel">
-    <header v-if="mode !== 'pages'" class="workflow-heading">
+    <header v-if="mode !== 'pages' && mode !== 'collected-pages'" class="workflow-heading">
       <div><p class="eyebrow">{{ mode === 'scans' ? 'DISCOVERY SOURCES' : 'SITE QUEUES' }}</p>
         <h2>{{ mode === 'scans' ? '扫描页' : '采集队列' }}</h2>
         <p>{{ mode === 'scans' ? '独立维护扫描入口，按各自周期发现新的图片页面。' : '一个执行器同时处理一个任务；网站专用执行器数决定该队列的并发上限。' }}</p>
@@ -223,9 +224,8 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
     </header>
     <div v-if="!scopedSiteId" class="workflow-toolbar">
       <el-select v-model="siteId" clearable placeholder="全部网站" aria-label="筛选网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select>
-      <template v-if="mode === 'pages'">
+      <template v-if="mode === 'pages' || mode === 'collected-pages'">
         <el-input v-model="query" clearable placeholder="搜索页面名称或 URL" :prefix-icon="Search" @keyup.enter="search" @clear="search"><template #append><el-button @click="search">搜索</el-button></template></el-input>
-        <el-checkbox v-model="pending">仅待采集</el-checkbox>
       </template>
     </div>
     <el-table v-if="mode === 'scans'" :data="visibleScans" empty-text="暂无扫描页，先添加一个扫描入口">
@@ -237,16 +237,16 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="最近扫描" min-width="165"><template #default="{ row }">{{ time(row.lastScanAt) }}</template></el-table-column>
       <el-table-column label="管理" width="125"><template #default="{ row }"><el-button link type="primary" @click="editScan(row)">编辑</el-button><el-button link type="danger" @click="removeScan(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length || !!action" @click="removeSelectedPages">批量删除</el-button><el-button type="primary" plain size="small" :icon="Download" :loading="action === 'collect-selected'" :disabled="!selectedCollectableIds.length || !!action" @click="collectSelectedPages">批量采集（{{ selectedCollectableIds.length }}）</el-button><el-button :icon="Refresh" circle aria-label="刷新列表" :disabled="!!action" @click="load()" /></div>
-    <el-table v-if="mode === 'pages'" ref="pageTable" :data="pages" row-key="id" max-height="58vh" empty-text="尚无扫描结果，运行扫描页任务后会自动出现" @selection-change="onPageSelectionChange">
+    <div v-if="mode === 'pages' || mode === 'collected-pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length || !!action" @click="removeSelectedPages">批量删除</el-button><el-button v-if="mode === 'pages'" type="primary" plain size="small" :icon="Download" :loading="action === 'collect-selected'" :disabled="!selectedCollectableIds.length || !!action" @click="collectSelectedPages">批量采集（{{ selectedCollectableIds.length }}）</el-button><el-button :icon="Refresh" circle aria-label="刷新列表" :disabled="!!action" @click="load()" /></div>
+    <el-table v-if="mode === 'pages' || mode === 'collected-pages'" ref="pageTable" :data="pages" row-key="id" max-height="58vh" :empty-text="mode === 'pages' ? '尚无待采集页，运行扫描任务后会自动出现' : '尚无已采集页，点击待采集页中的采集按钮后会显示在这里'" @selection-change="onPageSelectionChange">
       <el-table-column type="selection" width="48" />
-      <el-table-column label="采集" width="90" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button></template></el-table-column>
+      <el-table-column v-if="mode === 'pages'" label="采集" width="90" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button></template></el-table-column>
       <el-table-column label="采集页面" min-width="340"><template #default="{ row }"><a :href="row.url" :title="row.name || row.url" target="_blank" rel="noopener noreferrer" class="page-title">{{ row.name || row.url }}</a></template></el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
       <el-table-column label="操作" width="145" fixed="right"><template #default="{ row }"><el-button v-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button><el-button link type="danger" @click="removePage(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100, 200, 1000]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="changePage" @size-change="search" />
+    <el-pagination v-if="mode === 'pages' || mode === 'collected-pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100, 200, 1000]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="changePage" @size-change="search" />
     <div v-if="mode === 'queues'" class="queue-grid">
       <article v-for="item in visibleQueues" :key="item.siteId" class="queue-card">
         <header><h3>{{ item.name }}</h3><el-tag :type="item.dedicated ? 'primary' : 'info'">{{ item.dedicated ? '专用队列' : '共享执行器' }}</el-tag></header>

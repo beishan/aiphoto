@@ -58,9 +58,10 @@ public class CrawlWorkflowController {
             @RequestParam(required = false) Long siteId,
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "false") boolean pending,
+            @RequestParam(defaultValue = "false") boolean collected,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return workflow.pages(owner(auth), siteId, query, pending,
+        return workflow.pages(owner(auth), siteId, query, pending, collected,
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(1000, size))));
     }
 

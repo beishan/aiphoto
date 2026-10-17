@@ -145,14 +145,24 @@ class CrawlWorkflowServiceTest {
         CrawlJob scan = new CrawlJob(); scan.setId(10L); scan.setSiteId(2L); scan.setStatus(CrawlJob.Status.COMPLETED);
         CrawlJob collection = new CrawlJob(); collection.setId(20L); collection.setStatus(CrawlJob.Status.RUNNING);
         var pageable = PageRequest.of(0, 50);
-        when(pages.discovered(9L, null, "", false, pageable)).thenReturn(new PageImpl<>(List.of(page)));
+        when(pages.discovered(9L, null, "", false, true, pageable)).thenReturn(new PageImpl<>(List.of(page)));
         when(crawl.getJob(10L, 9L)).thenReturn(scan);
         when(crawl.getJob(20L, 9L)).thenReturn(collection);
-        var result = workflow.pages(9L, null, "", false, pageable).getContent().getFirst();
+        var result = workflow.pages(9L, null, "", false, true, pageable).getContent().getFirst();
         assertThat(result.status()).isEqualTo("RUNNING");
         assertThat(result.collectable()).isFalse();
         assertThat(result.collectionJobId()).isEqualTo(20L);
         assertThat(result.name()).isEqualTo("旅行照片");
+    }
+
+    @Test void pendingPageListExcludesPagesAlreadyCollected() {
+        var pageable = PageRequest.of(0, 50);
+        when(pages.discovered(9L, 2L, "", true, false, pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        workflow.pages(9L, 2L, "", true, false, pageable);
+
+        verify(pages).discovered(9L, 2L, "", true, false, pageable);
     }
 
     @Test void scanUrlMustNotBeBlockedAndIntervalMustBeValid() {

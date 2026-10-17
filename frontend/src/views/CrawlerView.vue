@@ -114,7 +114,7 @@ let detailRequest = 0
 let reviewRequest = 0
 let polling = false
 
-type TabKey = 'overview' | 'sites' | 'pages' | 'tasks' | 'review' | 'skips'
+type TabKey = 'overview' | 'sites' | 'pages' | 'collected-pages' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
@@ -153,6 +153,7 @@ const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
   { label: sites.value.length ? `采集网站  ${sites.value.length}` : '采集网站', value: 'sites' },
   { label: '待采集页', value: 'pages' },
+  { label: '采集页', value: 'collected-pages' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
   { label: imageSkips.value.length ? `跳过管理  ${skipTotal.value}` : '跳过管理', value: 'skips' },
@@ -1091,6 +1092,7 @@ onUnmounted(() => {
     </section>
 
     <CrawlWorkflowPanel v-else-if="activeTab === 'pages'" mode="pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+    <CrawlWorkflowPanel v-else-if="activeTab === 'collected-pages'" mode="collected-pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>

@@ -176,9 +176,11 @@ public class CrawlWorkflowService {
         }
     }
 
-    public Page<DiscoveredPage> pages(Long ownerId, Long siteId, String query, boolean pending, Pageable pageable) {
+    public Page<DiscoveredPage> pages(
+            Long ownerId, Long siteId, String query, boolean pending, boolean collected, Pageable pageable) {
         if (siteId != null) crawlService.getSite(siteId, ownerId);
-        return pageRepository.discovered(ownerId, siteId, query == null ? "" : query.trim(), pending, pageable)
+        return pageRepository.discovered(
+                ownerId, siteId, query == null ? "" : query.trim(), pending, collected, pageable)
                 .map(page -> {
                     CrawlJob source = crawlService.getJob(page.getJobId(), ownerId);
                     CrawlJob collection = page.getCollectionJobId() == null ? null

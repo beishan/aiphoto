@@ -54,8 +54,8 @@ export const crawlApi = {
     : http.post<CrawlScanPage>('/crawl/scan-pages', page),
   deleteScanPage: (id: number) => http.delete(`/crawl/scan-pages/${id}`),
   scan: (id: number) => http.post<CrawlJob>(`/crawl/scan-pages/${id}/scan`),
-  collectionPages: (page = 0, query = '', siteId?: number, pending = false, size = 50) =>
-    http.get<PageResponse<DiscoveredPage> | CollectionPageResponse>('/crawl/collection-pages', { params: { page, size, query, siteId, pending } })
+  collectionPages: (page = 0, query = '', siteId?: number, pending = false, size = 50, collected = false) =>
+    http.get<PageResponse<DiscoveredPage> | CollectionPageResponse>('/crawl/collection-pages', { params: { page, size, query, siteId, pending, collected } })
       .then(response => ({
         ...response,
         // Spring VIA_DTO places pagination metadata inside `page`.
