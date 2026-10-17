@@ -654,3 +654,37 @@ CREATE TABLE IF NOT EXISTS crawler_executor_receipts (
 ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS job_name VARCHAR(200);
 ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);
 ALTER TABLE crawler_execution_logs ADD COLUMN IF NOT EXISTS phase VARCHAR(30);
+
+-- Independent scan entries and one collection job per discovered page (0.17.0).
+CREATE TABLE IF NOT EXISTS crawl_scan_pages (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    site_id BIGINT NOT NULL REFERENCES crawl_sites(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    url VARCHAR(2048) NOT NULL,
+    auto_scan_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    scan_interval_minutes INTEGER NOT NULL DEFAULT 360 CHECK (scan_interval_minutes BETWEEN 5 AND 10080),
+    max_pages INTEGER NOT NULL DEFAULT 100 CHECK (max_pages BETWEEN 1 AND 1000),
+    last_scan_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS scan_page_id BIGINT REFERENCES crawl_scan_pages(id) ON DELETE SET NULL;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS source_page_id BIGINT;
+ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS collection_job_id BIGINT REFERENCES crawl_jobs(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_crawl_jobs_scan_status ON crawl_jobs(scan_page_id, status);
+CREATE INDEX IF NOT EXISTS idx_crawl_scan_pages_auto ON crawl_scan_pages(auto_scan_enabled, last_scan_at);
+CREATE INDEX IF NOT EXISTS idx_crawl_pages_collection ON crawl_pages(collection_job_id);
+
+-- Migrate each legacy entry once; deleted scan pages must not reappear on restart.
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS scan_pages_migrated BOOLEAN NOT NULL DEFAULT FALSE;
+INSERT INTO crawl_scan_pages (owner_id, site_id, name, url, auto_scan_enabled,
+    scan_interval_minutes, max_pages, last_scan_at)
+SELECT s.owner_id, s.id, LEFT(s.name, 75) || ' · ' || entry.ordinality,
+    TRIM(entry.url), s.schedule_enabled, 1440, s.max_list_pages,
+    CASE WHEN s.schedule_enabled THEN CURRENT_DATE + s.daily_scan_time - INTERVAL '1 day' ELSE NULL END
+FROM crawl_sites s CROSS JOIN LATERAL regexp_split_to_table(
+    COALESCE(NULLIF(TRIM(s.discovery_urls), ''), s.start_url), E'\n')
+    WITH ORDINALITY AS entry(url, ordinality)
+WHERE s.scan_pages_migrated = FALSE AND TRIM(entry.url) <> '';
+UPDATE crawl_sites SET schedule_enabled = FALSE, scan_pages_migrated = TRUE WHERE scan_pages_migrated = FALSE;
+ALTER TABLE crawl_sites ALTER COLUMN scan_pages_migrated SET DEFAULT TRUE;

@@ -7,6 +7,7 @@ import {
 } from '@element-plus/icons-vue'
 import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
+import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import type { InspectionProxy, CrawlSiteInfo } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
@@ -61,13 +62,21 @@ const skipQuery = ref('')
 const skipPage = ref(0)
 const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
+const taskDrawerVisible = ref(false)
+const taskKind = ref('')
+const taskSiteId = ref<number>()
+const filteredJobs = computed(() => jobs.value.filter(job =>
+  (!taskSiteId.value || job.siteId === taskSiteId.value)
+  && (!taskKind.value || (taskKind.value === 'scan' ? !job.sourcePageId && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(job.phase) : !!job.sourcePageId || ['DOWNLOAD', 'REVIEW'].includes(job.phase)))))
 const pageAssets = ref<CrawlAsset[]>([])
 const pageAssetsTotal = ref(0)
 const pageAssetsPage = ref(0)
 const selectedSourcePage = ref<CrawlPage | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let detailRequest = 0
+let polling = false
 
-type TabKey = 'overview' | 'sites' | 'tasks' | 'review' | 'skips'
+type TabKey = 'overview' | 'sites' | 'scans' | 'pages' | 'queues' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
@@ -99,6 +108,9 @@ const recentJobs = computed(() => jobs.value.slice(0, 6))
 const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
   { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
+  { label: '扫描页', value: 'scans' },
+  { label: '采集页面', value: 'pages' },
+  { label: '采集队列', value: 'queues' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
   { label: imageSkips.value.length ? `跳过管理  ${skipTotal.value}` : '跳过管理', value: 'skips' },
@@ -174,11 +186,25 @@ async function refresh() {
 }
 
 function openJob(job: CrawlJob, tab: TabKey = 'tasks') {
+  const index = jobs.value.findIndex(item => item.id === job.id)
+  if (index < 0) jobs.value.unshift(job)
+  else jobs.value[index] = job
   activeJobId.value = job.id
   activeTab.value = tab
+  if (tab === 'tasks') taskDrawerVisible.value = true
+}
+
+function openWorkflowJob(job: CrawlJob) {
+  const index = jobs.value.findIndex(item => item.id === job.id)
+  if (index < 0) jobs.value.unshift(job)
+  else jobs.value[index] = job
+  activeJobId.value = job.id
+  taskDrawerVisible.value = true
+  void loadJobDetail()
 }
 
 function jobProgress(job: CrawlJob) {
+  if (job.status === 'COMPLETED') return 100
   if (job.phase === 'DISCOVERY') return job.listProcessed ? Math.min(95, job.listProcessed) : 0
   if (job.phase === 'AWAITING_CONFIRMATION') return 45
   if (!job.pagesFound) return job.phase === 'REVIEW' ? 100 : 0
@@ -207,11 +233,14 @@ function formatTime(value?: string) {
 
 async function loadJobDetail() {
   if (!activeJobId.value) return
+  const jobId = activeJobId.value
+  const request = ++detailRequest
   const [jobResult, pageResult, assetResult] = await Promise.all([
-    crawlApi.job(activeJobId.value),
-    crawlApi.pages(activeJobId.value, pagePage.value, pagePageSize, pageQuery.value),
-    crawlApi.assets(activeJobId.value, assetPage.value, assetPageSize, assetStatus.value, exactDuplicateOnly.value, similarOnly.value),
+    crawlApi.job(jobId),
+    crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
+    crawlApi.assets(jobId, assetPage.value, assetPageSize, assetStatus.value, exactDuplicateOnly.value, similarOnly.value),
   ])
+  if (request !== detailRequest || jobId !== activeJobId.value) return
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
   if (index >= 0) jobs.value[index] = jobResult.data
   pages.value = pageResult.data.content
@@ -320,9 +349,7 @@ function selectRuleById(id: string) {
   if (rule) useRule(rule)
 }
 
-function selectJobById(id: string) {
-  activeJobId.value = Number(id)
-}
+
 
 function resetCreateSiteForm() {
   Object.assign(createSiteForm, {
@@ -425,32 +452,6 @@ async function activateRule(rule: CrawlRule) {
   await loadRules(data.id)
   useRule(data)
   ElMessage.success(`“${data.name}”已设为当前生效规则`)
-}
-
-async function startDiscovery() {
-  busy.value = 'discover'
-  try {
-    const rule = await saveRule(false)
-    if (!rule?.id) return
-    const { data } = await crawlApi.createJob(rule.id)
-    activeJobId.value = data.jobId
-    activeTab.value = 'tasks'
-    siteConfigurationVisible.value = false
-    await loadJobs()
-    await loadJobDetail()
-    ElMessage.success('已开始发现图片页链接')
-  } catch (error: any) { ElMessage.error(error?.response?.data?.message || '启动失败') }
-  finally { busy.value = '' }
-}
-
-async function startDownload() {
-  if (!activeJob.value) return
-  try { await ElMessageBox.confirm(`已保留 ${includedPageTotal.value} / ${activeJob.value.pagesFound} 个图片页，开始逐页提取并下载图片？`, '开始下载', { type: 'warning' }) }
-  catch { return }
-  await crawlApi.download(activeJob.value.id)
-  activeTab.value = 'tasks'
-  await loadJobDetail()
-  ElMessage.success('下载任务已开始')
 }
 
 async function controlJob(action: 'pause' | 'resume' | 'cancel') {
@@ -724,9 +725,13 @@ onMounted(async () => {
   tags.value = tagResult.data
   await loadJobDetail()
   pollTimer = setInterval(async () => {
-    if (activeJob.value?.status === 'RUNNING' || activeJob.value?.status === 'QUEUED') {
-      await loadJobs(); await loadJobDetail()
-    }
+    if (polling) return
+    polling = true
+    try {
+      await loadJobs()
+      if (taskDrawerVisible.value || activeTab.value === 'review') await loadJobDetail()
+    } catch { /* A transient polling failure is retried on the next interval. */ }
+    finally { polling = false }
   }, 2500)
 })
 onUnmounted(() => {
@@ -741,7 +746,7 @@ onUnmounted(() => {
       <div class="crawler-hero">
         <div class="hero-copy">
           <span class="hero-symbol"><el-icon><MagicStick /></el-icon></span>
-          <div><p class="eyebrow">PRIVATE COLLECTION AUTOMATION</p><h1>图片采集中心</h1><p class="subtitle">发现、确认、下载、整理，每一步都由你掌控。</p></div>
+          <div><p class="eyebrow">PRIVATE COLLECTION AUTOMATION</p><h1>图片采集中心</h1><p class="subtitle">扫描发现页面，按需采集图片，整理珍藏。</p></div>
         </div>
         <el-space wrap>
           <el-tag v-if="activeJobs.length" type="primary" effect="light" round>{{ activeJobs.length }} 个任务运行中</el-tag>
@@ -766,10 +771,10 @@ onUnmounted(() => {
 
       <div class="overview-grid">
         <el-card class="pipeline-card surface-card" shadow="never">
-          <template #header><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>采集流程</h2><p>先确认链接范围，再把文件安全带回图库。</p></div><el-tag type="info" effect="plain" round>4 个阶段</el-tag></div></template>
+          <template #header><div class="card-heading"><div><p class="eyebrow">WORKFLOW</p><h2>采集流程</h2><p>扫描页发现新链接，网站队列负责并发采集。</p></div><el-tag type="info" effect="plain" round>4 个阶段</el-tag></div></template>
           <el-steps :active="activeJobs.length ? 1 : 0" align-center finish-status="success">
             <el-step title="发现链接" description="扫描列表页" :icon="Search" />
-            <el-step title="人工确认" description="筛选图片页" :icon="CircleCheck" />
+            <el-step title="采集页面" description="按 URL 创建任务" :icon="CircleCheck" />
             <el-step title="下载校验" description="域名与大小限制" :icon="Download" />
             <el-step title="整理入库" description="去重与标注" :icon="Collection" />
           </el-steps>
@@ -780,7 +785,7 @@ onUnmounted(() => {
           <el-timeline>
             <el-timeline-item type="primary" hollow><strong>添加采集网站</strong><p>限定入口与允许访问的域名</p></el-timeline-item>
             <el-timeline-item type="primary" hollow><strong>配置解析规则</strong><p>选择图片页链接与原图节点</p></el-timeline-item>
-            <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>人工确认后再下载图片</p></el-timeline-item>
+            <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>扫描结果进入采集页面，按需发起采集</p></el-timeline-item>
           </el-timeline>
           <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">配置第一个网站</el-button>
         </el-card>
@@ -806,67 +811,30 @@ onUnmounted(() => {
           <div class="site-top">
             <span class="source-avatar">{{ site.name.slice(0, 1) }}</span>
             <div class="site-identity"><h3><button type="button" class="site-name-button" @click="openSiteConfiguration(site)">{{ site.name }}</button></h3><a :href="site.startUrl" target="_blank" rel="noopener noreferrer">{{ site.startUrl }}</a></div>
-            <el-tag :type="site.scheduleEnabled ? 'success' : 'info'" size="small" round>{{ site.scheduleEnabled ? '定时扫描' : '手动扫描' }}</el-tag>
+            <el-tag type="info" size="small" round>独立扫描页</el-tag>
           </div>
           <div class="site-stats"><span><b>{{ site.maxListPages }}</b> 列表页</span><span><b>{{ site.maxDetailPages }}</b> 图片页</span><span><b>{{ site.maxImages }}</b> 张图片</span></div>
-          <p class="site-health-line">请求间隔 {{ site.minRequestIntervalMillis }} ms · {{ site.scheduleEnabled ? `每天 ${site.dailyScanTime || '03:00'} 扫描` : '未开启定时扫描' }}</p>
-          <footer><el-button type="primary" plain :icon="Setting" @click="openSiteConfiguration(site)">网站设置</el-button><el-button :icon="EditPen" @click="openSiteConfiguration(site, 'rules')">解析规则</el-button></footer>
+          <p class="site-health-line">请求间隔 {{ site.minRequestIntervalMillis }} ms · 在扫描页中配置自动扫描周期</p>
+          <footer><el-button type="primary" plain :icon="Search" @click="activeTab = 'scans'">扫描页管理</el-button><el-button :icon="Setting" @click="openSiteConfiguration(site)">网站设置</el-button><el-button :icon="EditPen" @click="openSiteConfiguration(site, 'rules')">解析规则</el-button></footer>
         </article>
       </div>
       <el-empty v-else description="尚未配置采集网站"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
     </section>
 
-    <section v-else-if="activeTab === 'tasks'" class="task-workspace" role="tabpanel">
-      <el-card class="task-sidebar surface-card" shadow="never">
-        <template #header><div class="card-heading"><div><p class="eyebrow">QUEUE</p><h2>采集任务</h2></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div></template>
-        <el-scrollbar max-height="680px">
-          <el-menu v-if="jobs.length" :default-active="String(activeJobId || '')" class="source-menu job-menu" @select="selectJobById">
-            <el-menu-item v-for="job in jobs" :key="job.id" :index="String(job.id)">
-              <span class="job-dot" :class="job.status.toLowerCase()" />
-              <div class="menu-copy"><strong>{{ job.name }}</strong><small>{{ phaseLabel(job.phase) }} · {{ formatTime(job.createdAt) }}</small></div>
-              <el-tag size="small" :type="statusType(job.status)" effect="light" round>{{ statusLabel(job.status) }}</el-tag>
-            </el-menu-item>
-          </el-menu>
-          <el-empty v-else description="暂无采集任务" :image-size="72" />
-        </el-scrollbar>
-      </el-card>
+    <CrawlWorkflowPanel v-else-if="activeTab === 'scans' || activeTab === 'pages' || activeTab === 'queues'" :mode="activeTab" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
 
-      <el-card class="task-detail surface-card" shadow="never">
-        <template v-if="activeJob" #header>
-          <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>
-        </template>
-        <template v-if="activeJob">
-          <div class="progress-card"><div><strong>任务进度</strong><span>{{ jobProgress(activeJob) }}%</span></div><el-progress :percentage="jobProgress(activeJob)" :stroke-width="10" :show-text="false" /></div>
-          <el-descriptions :column="3" border class="job-stats">
-            <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
-            <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>
-            <el-descriptions-item label="已处理图片页">{{ activeJob.pagesProcessed }}</el-descriptions-item>
-            <el-descriptions-item label="已下载图片">{{ activeJob.imagesDownloaded }}</el-descriptions-item>
-            <el-descriptions-item label="失败项目">{{ activeJob.failCount }}</el-descriptions-item>
-            <el-descriptions-item label="执行次数">{{ activeJob.attemptCount }}</el-descriptions-item>
-          </el-descriptions>
-          <el-alert v-if="activeJob.errorMessage" type="error" show-icon :title="activeJob.errorMessage" :closable="false" />
-          <el-space class="task-actions" wrap>
-            <el-button v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" type="primary" :icon="Download" round :disabled="includedPageTotal === 0" @click="startDownload">确认 {{ includedPageTotal }} 页并下载</el-button>
-            <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
-            <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
-            <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
-            <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="activeTab = 'review'">进入待整理区</el-button>
-            <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
-          </el-space>
-          <el-divider />
-          <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>检查发现结果，并决定哪些页面进入下载阶段。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
-          <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
-          <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
-            <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
-            <el-table-column label="图片页 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.url }}</span></template></el-table-column>
-          <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
-          <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
-          </el-table>
-          <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
-        </template>
-        <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
-      </el-card>
+    <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
+      <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
+      <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-space>
+      <el-table :data="filteredJobs" empty-text="暂无任务，先从扫描页发起扫描" @row-click="openWorkflowJob">
+        <el-table-column label="任务" min-width="270"><template #default="{ row }"><el-button link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button><small class="task-site-name">{{ sites.find(site => site.id === row.siteId)?.name }}</small></template></el-table-column>
+        <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
+        <el-table-column label="进度" min-width="170"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" /></template></el-table-column>
+        <el-table-column label="发现页面" prop="pagesFound" width="100" />
+        <el-table-column label="已下载图片" prop="imagesDownloaded" width="110" />
+        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="创建时间" width="155"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
+      </el-table>
     </section>
 
     <section v-else-if="activeTab === 'review'" class="review-workspace" role="tabpanel">
@@ -968,12 +936,7 @@ onUnmounted(() => {
                 <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
                 <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
               </el-row>
-              <el-divider content-position="left">发现页配置</el-divider>
-              <el-form-item label="发现页入口">
-                <el-input v-model="siteForm.discoveryUrls" type="textarea" :rows="3"
-                  placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
-              </el-form-item>
-              <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
+              <el-alert type="info" :closable="false" title="扫描入口与周期请在“扫描页”中单独管理。" />
               <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
                 :proxies="inspectionProxies" :loading="inspectionBusy === 'edit'"
                 @refresh="loadInspectionProxies" @inspect="inspectSite('edit')" />
@@ -987,13 +950,6 @@ onUnmounted(() => {
                 <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
                 <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="siteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
               </el-row>
-              <el-divider content-position="left">每日新增扫描</el-divider>
-              <el-row :gutter="16">
-                <el-col :xs="24" :sm="8"><el-form-item label="启用定时扫描"><el-switch v-model="siteForm.scheduleEnabled" /></el-form-item></el-col>
-                <el-col :xs="24" :sm="8"><el-form-item label="每天执行时间"><el-time-select v-model="siteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!siteForm.scheduleEnabled" /></el-form-item></el-col>
-                <el-col :xs="24" :sm="8"><el-form-item label="上次自动扫描"><el-input :model-value="siteForm.lastScheduledScanDate || '尚未执行'" disabled /></el-form-item></el-col>
-              </el-row>
-              <el-alert type="info" show-icon :closable="false" title="定时任务只发现此前没有记录过的新链接，完成后仍由你确认是否下载。" />
             </el-form>
             <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
           </el-card>
@@ -1032,7 +988,7 @@ onUnmounted(() => {
                   <el-col :xs="24" :md="12"><el-form-item label="详情下一页选择器"><el-input v-model="form.detailNextSelector" placeholder="可留空" /></el-form-item></el-col>
                   <el-col :xs="24" :md="12"><el-form-item label="每个详情页组上限"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" controls-position="right" /></el-form-item></el-col>
                 </el-row>
-                <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" :loading="busy === 'discover'" :disabled="!form.enabled" @click="startDiscovery">开始扫描</el-button></div>
+                <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" @click="siteConfigurationVisible = false; activeTab = 'scans'">管理扫描页</el-button></div>
               </el-form>
             </div>
             <el-alert v-if="previewImageError" class="preview-error" type="warning" show-icon :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
@@ -1057,12 +1013,7 @@ onUnmounted(() => {
           <el-col :xs="24" :md="14"><el-form-item label="网站入口" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="createSiteForm.allowedHosts" placeholder="留空时自动使用起始 URL 的域名；多个域名用逗号分隔" /></el-form-item></el-col>
         </el-row>
-        <el-divider content-position="left">发现页配置</el-divider>
-        <el-form-item label="发现页入口">
-          <el-input v-model="createSiteForm.discoveryUrls" type="textarea" :rows="3"
-            placeholder="每行一个完整列表页 URL，例如 https://example.com/gallery；留空使用网站入口" />
-        </el-form-item>
-        <el-alert type="info" show-icon :closable="false" title="最多 20 个入口，扫描按配置顺序处理，并使用解析规则发现详情链接及翻页。所有入口须属于允许域名，共享列表页总上限。保存网站后生效；测试规则预览首个发现页。" />
+              <el-alert type="info" :closable="false" title="扫描入口与周期请在“扫描页”中单独管理。" />
         <SiteInspectionNetwork v-model:mode="createSiteForm.inspectionProxyMode" v-model:proxy-id="createSiteForm.inspectionProxyId"
           :proxies="inspectionProxies" :loading="inspectionBusy === 'create'"
           @refresh="loadInspectionProxies" @inspect="inspectSite('create')" />
@@ -1075,11 +1026,6 @@ onUnmounted(() => {
           <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="createSiteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
-        </el-row>
-        <el-divider content-position="left">每日新增扫描</el-divider>
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12"><el-form-item label="启用定时扫描"><el-switch v-model="createSiteForm.scheduleEnabled" /></el-form-item></el-col>
-          <el-col :xs="24" :sm="12"><el-form-item label="每天执行时间"><el-time-select v-model="createSiteForm.dailyScanTime" start="00:00" step="00:30" end="23:30" :disabled="!createSiteForm.scheduleEnabled" /></el-form-item></el-col>
         </el-row>
         <el-alert type="info" show-icon :closable="false" title="采集器只会访问允许域名中的页面和图片资源。" />
       </el-form>
@@ -1098,9 +1044,55 @@ onUnmounted(() => {
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
     </el-dialog>
   </main>
+    <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close>
+      <el-card class="task-detail surface-card" shadow="never">
+        <template v-if="activeJob" #header>
+          <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>
+        </template>
+        <template v-if="activeJob">
+          <div class="progress-card"><div><strong>任务进度</strong><span>{{ jobProgress(activeJob) }}%</span></div><el-progress :percentage="jobProgress(activeJob)" :stroke-width="10" :show-text="false" /></div>
+          <el-descriptions :column="3" border class="job-stats">
+            <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
+            <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>
+            <el-descriptions-item label="已处理图片页">{{ activeJob.pagesProcessed }}</el-descriptions-item>
+            <el-descriptions-item label="已下载图片">{{ activeJob.imagesDownloaded }}</el-descriptions-item>
+            <el-descriptions-item label="失败项目">{{ activeJob.failCount }}</el-descriptions-item>
+            <el-descriptions-item label="执行次数">{{ activeJob.attemptCount }}</el-descriptions-item>
+          </el-descriptions>
+          <el-alert v-if="activeJob.errorMessage" type="error" show-icon :title="activeJob.errorMessage" :closable="false" />
+          <el-space class="task-actions" wrap>
+            <el-button v-if="['DISCOVERY','AWAITING_CONFIRMATION'].includes(activeJob.phase)" type="primary" :icon="Download" round @click="taskDrawerVisible = false; activeTab = 'pages'">前往采集页面</el-button>
+            <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
+            <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
+            <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
+            <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="taskDrawerVisible = false; activeTab = 'review'">进入待整理区</el-button>
+            <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
+          </el-space>
+          <el-table v-if="activeJob.sourcePageId" :data="assets" max-height="260" empty-text="正在等待采集图片">
+            <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
+            <el-table-column label="状态" prop="status" width="120" />
+            <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
+          </el-table>
+          <el-pagination v-if="activeJob.sourcePageId && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
+          <el-divider />
+          <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在采集页面中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
+          <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
+          <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
+            <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
+            <el-table-column label="图片页 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.url }}</span></template></el-table-column>
+          <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
+          <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
+          </el-table>
+          <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
+        </template>
+        <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
+      </el-card>
+    </el-drawer>
 </template>
 
 <style scoped>
+.task-list-panel{padding:24px;min-width:0}.task-list-filters{margin:0 0 20px}.task-list-filters .el-select{width:180px}.task-site-name{display:block;color:var(--text-secondary);font-size:12px}.workspace-switcher{overflow-x:auto}.workspace-switcher :deep(.el-segmented){min-width:920px}
+
 .crawler-page{display:grid;gap:18px;padding:28px 30px 112px;color:var(--text-primary)}
 .crawler-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:5px 2px 8px}.crawler-hero h1{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:34px;letter-spacing:-.025em}.crawler-hero .subtitle{margin:7px 0 0;color:var(--text-secondary);font-size:13px}.eyebrow{margin:0;color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.17em}.crawler-tabs{position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding:4px;border:1px solid var(--separator);border-radius:15px;background:var(--bg-secondary);isolation:isolate}.crawler-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc((100% - 8px)/4)!important;border:1px solid var(--separator);border-radius:11px;background:var(--bg-card);box-shadow:0 5px 15px rgba(0,0,0,.09);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.crawler-segment{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 12px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.crawler-segment.active{color:var(--accent);font-weight:700}.crawler-segment b{min-width:21px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb,var(--accent) 13%,transparent);font-size:10px}.crawler-segment:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:11px}
 .panel{padding:24px;border:1px solid var(--separator);border-radius:22px;background:var(--bg-card);box-shadow:0 16px 42px rgba(0,0,0,.08)}.section-heading,.review-panel>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}.section-heading h2,.review-panel>header h2{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:23px}.section-heading p:not(.eyebrow),.review-panel>header p{margin:5px 0 0;color:var(--text-secondary);font-size:12px}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric-card{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:18px;border:1px solid var(--separator);border-radius:17px;background:var(--bg-secondary)}.metric-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:13px;background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent);font-size:20px}.metric-card strong{font-size:25px;line-height:1}.metric-card p{margin:5px 0 0;color:var(--text-secondary);font-size:11px}.metric-card small{grid-column:1/-1;color:var(--text-tertiary);font-size:10px}.pipeline-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 27px;padding:16px;border:1px solid var(--separator);border-radius:17px;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 8%,var(--bg-secondary)),var(--bg-secondary))}.pipeline-strip article{display:flex;min-width:0;align-items:center;gap:10px}.pipeline-strip article>b{display:grid;flex:0 0 30px;height:30px;place-items:center;border-radius:10px;background:var(--bg-card);color:var(--accent);font-size:10px}.pipeline-strip article div{display:grid;gap:3px}.pipeline-strip article strong{font-size:12px}.pipeline-strip article small{color:var(--text-tertiary);font-size:9px}.pipeline-strip>i{color:var(--text-tertiary);font-style:normal}.task-name{display:grid;gap:4px}.task-name strong{font-size:12px}.task-name p{margin:0;color:var(--text-tertiary);font-size:10px}

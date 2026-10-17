@@ -28,8 +28,31 @@ export interface CrawlImportItem {
 
 export interface InspectionProxy { id: number; name: string; enabled: boolean; proxyType: 'HTTP' | 'MIHOMO' }
 export interface CrawlSiteInfo { title: string; description: string; finalUrl: string }
+export interface CrawlScanPage {
+  id?: number; siteId: number; name: string; url: string; autoScanEnabled: boolean;
+  scanIntervalMinutes: number; maxPages: number; lastScanAt?: string
+}
+export interface DiscoveredPage {
+  id: number; scanJobId: number; siteId: number; scanPageId: number | null; url: string;
+  createdAt: string; collectionJobId: number | null; status: CrawlJob['status'] | 'PENDING'; collectable: boolean
+}
+export interface CrawlSiteQueue {
+  siteId: number; name: string; dedicated: boolean; concurrency: number; queued: number; running: number;
+  executors: { id: number; name: string; enabled: boolean; frozen: boolean; activeJobId: number | null }[]
+}
 
 export const crawlApi = {
+  scanPages: () => http.get<CrawlScanPage[]>('/crawl/scan-pages'),
+  saveScanPage: (page: CrawlScanPage) => page.id
+    ? http.put<CrawlScanPage>(`/crawl/scan-pages/${page.id}`, page)
+    : http.post<CrawlScanPage>('/crawl/scan-pages', page),
+  deleteScanPage: (id: number) => http.delete(`/crawl/scan-pages/${id}`),
+  scan: (id: number) => http.post<CrawlJob>(`/crawl/scan-pages/${id}/scan`),
+  collectionPages: (page = 0, query = '', siteId?: number, pending = false) =>
+    http.get<PageResponse<DiscoveredPage>>('/crawl/collection-pages', { params: { page, size: 50, query, siteId, pending } }),
+  collectPage: (id: number) => http.post<CrawlJob>(`/crawl/collection-pages/${id}/collect`),
+  queues: () => http.get<CrawlSiteQueue[]>('/crawl/queues'),
+  assignExecutors: (siteId: number, ids: number[]) => http.put(`/crawl/queues/${siteId}/executors`, ids),
   inspectionProxies: () => http.get<InspectionProxy[]>('/crawl/inspection-proxies'),
   inspectSite: (site: CrawlSite) => http.post<CrawlSiteInfo>('/crawl/sites/inspect', site, { timeout: 120000 }),
   sites: () => http.get<CrawlSite[]>('/crawl/sites'),

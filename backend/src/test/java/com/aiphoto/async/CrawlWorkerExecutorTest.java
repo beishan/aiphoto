@@ -55,6 +55,25 @@ class CrawlWorkerExecutorTest {
         verifyNoInteractions(queue, jobs, fetcher);
     }
 
+    @Test void independentScanCompletesWithoutEnteringDownloadConfirmation() throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setScanPageId(7L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/"); rule.setDetailSelector("a");
+        when(executors.acquire(1L)).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(fetcher.fetch(anyString(), any(), anyLong(), anyLong())).thenReturn(
+                new SafeHttpFetcher.FetchedResource(java.net.URI.create("https://example.com/"),
+                        "text/html", "<p>ok</p>".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        worker.discover(1L);
+        assertThat(job.getPhase()).isEqualTo(CrawlJob.Phase.DISCOVERY);
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.COMPLETED);
+        assertThat(job.getFinishedAt()).isNotNull();
+        verifyNoInteractions(assets, storage);
+    }
+
     @Test void failedLeaseClaimReleasesExecutor() {
         when(executors.acquire(1L)).thenReturn(session);
         when(queue.newWorkerId()).thenReturn("worker");

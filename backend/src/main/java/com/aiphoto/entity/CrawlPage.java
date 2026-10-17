@@ -15,6 +15,7 @@ public class CrawlPage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private Long jobId;
+    private Long collectionJobId;
     @Column(nullable = false, length = 4096)
     private String url;
     @Column(nullable = false, length = 4096)

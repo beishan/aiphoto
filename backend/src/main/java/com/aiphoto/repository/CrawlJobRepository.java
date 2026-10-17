@@ -15,10 +15,11 @@ public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
     Optional<CrawlJob> findByIdAndOwnerId(Long id, Long ownerId);
     List<CrawlJob> findByStatusIn(List<CrawlJob.Status> statuses);
     boolean existsBySiteIdAndStatusIn(Long siteId, Collection<CrawlJob.Status> statuses);
+    boolean existsByScanPageIdAndStatusIn(Long scanPageId, Collection<CrawlJob.Status> statuses);
 
     @Query(value = "SELECT id FROM crawl_jobs WHERE status = 'QUEUED' "
             + "OR (status = 'RUNNING' AND (lease_until IS NULL OR lease_until < :now)) "
-            + "ORDER BY created_at LIMIT 20", nativeQuery = true)
+            + "ORDER BY created_at", nativeQuery = true)
     List<Long> findRunnableJobIds(@Param("now") java.time.LocalDateTime now);
 
     @Modifying
@@ -44,6 +45,11 @@ public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
             @Param("id") Long id,
             @Param("worker") String worker,
             @Param("until") java.time.LocalDateTime until);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE CrawlJob j SET j.imagesDownloaded = :downloaded WHERE j.id = :id")
+    void updateImageProgress(@Param("id") Long id, @Param("downloaded") int downloaded);
 
     @Modifying
     @Transactional

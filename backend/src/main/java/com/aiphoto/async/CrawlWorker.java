@@ -136,8 +136,10 @@ public class CrawlWorker {
             if (stopped(jobId)) return;
             job = jobRepository.findById(jobId).orElseThrow();
             job.setPagesFound((int) pageRepository.countByJobId(jobId));
-            job.setPhase(CrawlJob.Phase.AWAITING_CONFIRMATION);
+            job.setPhase(job.getScanPageId() == null
+                    ? CrawlJob.Phase.AWAITING_CONFIRMATION : CrawlJob.Phase.DISCOVERY);
             job.setStatus(discoveryFailures == 0 ? CrawlJob.Status.COMPLETED : CrawlJob.Status.PARTIAL);
+            job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
         } catch (Exception exception) {
@@ -163,11 +165,10 @@ public class CrawlWorker {
         job.setErrorMessage(null);
         jobRepository.save(job);
         recoverInterruptedItems(jobId);
-        int priorFailures = job.getFailCount();
-        int failures = 0;
         try {
             for (CrawlPage page : pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
                     jobId, CrawlPage.Status.PENDING)) {
+                if (page.getCollectionJobId() != null) continue;
                 if (stopped(jobId)) return;
                 if (!queueService.renew(jobId, workerId)) return;
                 if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
@@ -212,24 +213,25 @@ public class CrawlWorker {
                 } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
                     throw exception;
                 } catch (Exception exception) {
-                    failures++;
                     page.setStatus(CrawlPage.Status.FAILED);
                     page.setErrorMessage(shortMessage(exception));
                 }
                 pageRepository.save(page);
-                int totalFailures = priorFailures + failures
+                int totalFailures = (int) pageRepository.countByJobIdAndStatusIn(jobId, java.util.List.of(CrawlPage.Status.FAILED))
                         + (int) assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.FAILED);
+                int processed = (int) pageRepository.countByJobIdAndStatusIn(jobId,
+                        java.util.List.of(CrawlPage.Status.SUCCEEDED, CrawlPage.Status.FAILED));
                 jobRepository.updateDownloadProgress(
                         jobId,
-                        job.getPagesProcessed() + 1,
+                        processed,
                         (int) assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED),
                         totalFailures);
-                job.setPagesProcessed(job.getPagesProcessed() + 1);
+                job.setPagesProcessed(processed);
             }
             if (stopped(jobId)) return;
             job = jobRepository.findById(jobId).orElseThrow();
             job.setPhase(CrawlJob.Phase.REVIEW);
-            int totalFailures = priorFailures + failures
+            int totalFailures = (int) pageRepository.countByJobIdAndStatusIn(jobId, java.util.List.of(CrawlPage.Status.FAILED))
                     + (int) assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.FAILED);
             job.setFailCount(totalFailures);
             job.setStatus(totalFailures == 0 ? CrawlJob.Status.COMPLETED : CrawlJob.Status.PARTIAL);
@@ -326,6 +328,8 @@ public class CrawlWorker {
             asset.setErrorMessage(shortMessage(exception));
         }
         assetRepository.save(asset);
+        jobRepository.updateImageProgress(jobId,
+                (int) assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED));
         if (asset.getStatus() == CrawlAsset.Status.DOWNLOADED) executorService.current().imageCompleted(asset.getId());
     }
 

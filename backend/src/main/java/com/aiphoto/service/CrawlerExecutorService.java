@@ -41,6 +41,51 @@ public class CrawlerExecutorService {
         return repository.findAllByOrderByIdAsc().stream().map(this::view).toList();
     }
 
+    public synchronized List<SiteQueueView> siteQueues(Long ownerId) {
+        List<ExecutorView> all = list();
+        List<CrawlJob> jobs = jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId);
+        return siteRepository.findByOwnerIdOrderByUpdatedAtDesc(ownerId).stream().map(site -> {
+            List<ExecutorView> dedicated = all.stream()
+                    .filter(e -> Objects.equals(e.options().getSiteId(), site.getId())).toList();
+            List<ExecutorView> pool = dedicated.isEmpty() ? all.stream()
+                    .filter(e -> e.options().getSiteId() == null).toList() : dedicated;
+            List<QueueExecutorView> views = pool.stream().map(e -> new QueueExecutorView(
+                    e.id(), e.name(), e.enabled(), e.options().isFrozen(),
+                    jobs.stream().anyMatch(j -> Objects.equals(j.getId(), e.activeJobId()))
+                            ? e.activeJobId() : null)).toList();
+            return new SiteQueueView(site.getId(), site.getName(), !dedicated.isEmpty(),
+                    all.isEmpty() ? 1 : (int) pool.stream().filter(e -> e.enabled() && !e.options().isFrozen()).count(),
+                    jobs.stream().filter(j -> j.getSiteId().equals(site.getId()) && j.getStatus() == CrawlJob.Status.QUEUED).count(),
+                    jobs.stream().filter(j -> j.getSiteId().equals(site.getId()) && j.getStatus() == CrawlJob.Status.RUNNING).count(), views);
+        }).toList();
+    }
+
+    @Transactional
+    public synchronized void assignSiteExecutors(Long siteId, List<Long> ids) throws Exception {
+        if (ids == null || ids.size() > 16 || new HashSet<>(ids).size() != ids.size()) {
+            throw new IllegalArgumentException("执行器列表无效");
+        }
+        List<CrawlerExecutor> all = repository.findAllByOrderByIdAsc();
+        if (!all.stream().map(CrawlerExecutor::getId).toList().containsAll(ids)) {
+            throw new IllegalArgumentException("执行器不存在");
+        }
+        for (CrawlerExecutor executor : all) {
+            var options = options(executor);
+            Long nextSite = ids.contains(executor.getId()) ? siteId
+                    : Objects.equals(options.getSiteId(), siteId) ? null : options.getSiteId();
+            if (!Objects.equals(nextSite, options.getSiteId()) && active(executor.getId())) {
+                throw new IllegalStateException("执行器正在处理任务，请等待完成后调整队列");
+            }
+            options.setSiteId(nextSite);
+            executor.setOptionsJson(mapper.writeValueAsString(options));
+        }
+        repository.saveAll(all);
+    }
+
+    public record QueueExecutorView(Long id, String name, boolean enabled, boolean frozen, Long activeJobId) {}
+    public record SiteQueueView(Long siteId, String name, boolean dedicated, int concurrency,
+            long queued, long running, List<QueueExecutorView> executors) {}
+
     @Transactional
     public synchronized ExecutorView save(Long id, ExecutorRequest request) throws Exception {
         if (id == null && repository.count() >= 16) throw new IllegalArgumentException("最多配置 16 个执行器");
@@ -97,6 +142,9 @@ public class CrawlerExecutorService {
         } else proxyId = null;
         CrawlerExecutor executor = id == null ? new CrawlerExecutor() : repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("执行器不存在"));
+        if (id != null && active(id) && !Objects.equals(options(executor).getSiteId(), options.getSiteId())) {
+            throw new IllegalStateException("执行器正在处理任务，请等待完成后调整网站范围");
+        }
         if (id != null && active(id) && (!Objects.equals(executor.getProxyMode(), request.proxyMode())
                 || ("MIHOMO".equals(executor.getProxyMode()) && !Objects.equals(executor.getProxyId(), proxyId)) || !Objects.equals(executor.getProxyGroup(), controlGroup)
                 || !Objects.equals(options(executor).getNodeGroupId(), options.getNodeGroupId()))) {
@@ -219,6 +267,7 @@ public class CrawlerExecutorService {
     }
 
     public synchronized Session acquire(Long jobId) {
+        if (states.values().stream().anyMatch(state -> Objects.equals(state.jobId, jobId))) return null;
         List<CrawlerExecutor> executors = repository.findAllByOrderByIdAsc();
         if (executors.isEmpty()) {
             if (active(0L)) return null;

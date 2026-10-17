@@ -19,6 +19,8 @@ public class CrawlJob {
     private Long ownerId;
     private Long siteId;
     private Long ruleId;
+    private Long scanPageId;
+    private Long sourcePageId;
     @Column(nullable = false, columnDefinition = "TEXT")
     private String ruleSnapshot;
     @Column(nullable = false, length = 200)

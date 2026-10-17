@@ -179,6 +179,8 @@ export interface CrawlRule {
 
 export interface CrawlJob {
   id: number
+  scanPageId: number | null
+  sourcePageId: number | null
   siteId: number
   ruleId: number
   name: string

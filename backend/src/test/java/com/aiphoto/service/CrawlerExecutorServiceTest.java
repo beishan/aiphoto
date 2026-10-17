@@ -57,6 +57,31 @@ class CrawlerExecutorServiceTest {
         try (var second = service.acquire(11L)) { assertThat(second).isNotNull(); }
     }
 
+    @Test void siteQueueRunsOneJobPerAssignedExecutorAndRejectsDuplicateDispatch() {
+        CrawlerExecutor first = new CrawlerExecutor(); first.setId(11L); first.setName("A");
+        first.setProxyMode("DIRECT"); first.setOptionsJson("{\"siteId\":2}");
+        CrawlerExecutor second = new CrawlerExecutor(); second.setId(12L); second.setName("B");
+        second.setProxyMode("DIRECT"); second.setOptionsJson("{\"siteId\":2}");
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(first, second));
+        com.aiphoto.entity.CrawlJob job = new com.aiphoto.entity.CrawlJob(); job.setSiteId(2L);
+        when(jobRepository.findById(anyLong())).thenReturn(Optional.of(job));
+        try (var a = service.acquire(100L); var b = service.acquire(101L)) {
+            assertThat(a).isNotNull(); assertThat(b).isNotNull();
+            assertThat(service.acquire(100L)).isNull();
+            assertThat(service.acquire(102L)).isNull();
+        }
+        try (var c = service.acquire(102L)) { assertThat(c).isNotNull(); }
+    }
+
+    @Test void assigningMultipleExecutorsPersistsSiteBinding() throws Exception {
+        CrawlerExecutor other = new CrawlerExecutor(); other.setId(8L);
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(executor, other));
+        service.assignSiteExecutors(2L, List.of(1L, 8L));
+        assertThat(mapper.readTree(executor.getOptionsJson()).path("siteId").asLong()).isEqualTo(2L);
+        assertThat(mapper.readTree(other.getOptionsJson()).path("siteId").asLong()).isEqualTo(2L);
+        verify(repository).saveAll(List.of(executor, other));
+    }
+
     @Test void failuresCoolNodeAndSwitchWhilePreventingDirectFallback() throws Exception {
         try (var session = service.acquire(10L)) {
             assertThat(session.network().directFallback()).isFalse();

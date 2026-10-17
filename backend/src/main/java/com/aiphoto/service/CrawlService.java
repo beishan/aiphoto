@@ -307,7 +307,7 @@ public class CrawlService {
     @Transactional
     public CrawlJob prepareDownload(Long jobId, Long ownerId) {
         CrawlJob job = getJob(jobId, ownerId);
-        if (job.getPhase() != CrawlJob.Phase.AWAITING_CONFIRMATION
+        if (job.getScanPageId() != null || job.getPhase() != CrawlJob.Phase.AWAITING_CONFIRMATION
                 || job.getStatus() == CrawlJob.Status.RUNNING
                 || pageRepository.countByJobIdAndIncludedTrue(jobId) == 0) {
             throw new IllegalStateException("当前任务不能开始下载");
@@ -352,6 +352,10 @@ public class CrawlService {
             throw new IllegalStateException("当前任务不能继续或重试");
         }
         if (job.getPhase() == CrawlJob.Phase.DOWNLOAD || job.getPhase() == CrawlJob.Phase.REVIEW) {
+            for (CrawlPage page : pageRepository.pagesWithFailedAssets(jobId)) {
+                page.setStatus(CrawlPage.Status.PENDING);
+                page.setErrorMessage(null);
+            }
             for (CrawlPage page : pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
                     jobId, CrawlPage.Status.FAILED)) {
                 page.setStatus(CrawlPage.Status.PENDING);
@@ -512,6 +516,8 @@ public class CrawlService {
             }
         }
         if (fileFail > 0) return new PurgeResult(0, fileFail);
+        // Keep discovered URLs available when an individual collection task is removed.
+        pageRepository.clearCollectionJob(jobId);
         jobRepository.delete(job);
         return new PurgeResult(1, 0);
     }

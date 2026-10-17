@@ -58,6 +58,19 @@ class CrawlServiceTest {
                 crawlerSettingsService);
     }
 
+    @Test void retryRevisitsSuccessfulPagesContainingFailedImages() {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
+        job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.PARTIAL);
+        var page = new com.aiphoto.entity.CrawlPage();
+        page.setStatus(com.aiphoto.entity.CrawlPage.Status.SUCCEEDED);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));
+        when(pageRepository.pagesWithFailedAssets(1L)).thenReturn(List.of(page));
+        crawlService.prepareResumeOrRetry(1L, 9L);
+        assertThat(page.getStatus()).isEqualTo(com.aiphoto.entity.CrawlPage.Status.PENDING);
+        assertThat(job.getPhase()).isEqualTo(CrawlJob.Phase.DOWNLOAD);
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.QUEUED);
+    }
+
     @Test
     void savesIndependentInspectionProxy() {
         CrawlSite site = inspectionSite();
