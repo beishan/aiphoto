@@ -50,6 +50,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     long countByJobIdAndStatusIn(Long jobId, java.util.Collection<CrawlAsset.Status> statuses);
     List<CrawlAsset> findByJobIdAndStatus(Long jobId, CrawlAsset.Status status);
     List<CrawlAsset> findByJobIdAndStatusOrderById(Long jobId, CrawlAsset.Status status);
+    List<CrawlAsset> findByJobIdAndStatusOrderByIdDesc(Long jobId, CrawlAsset.Status status);
     List<CrawlAsset> findByJobIdAndStatusAndFileHashPhashIsNotNullOrderById(
             Long jobId, CrawlAsset.Status status);
     @Modifying

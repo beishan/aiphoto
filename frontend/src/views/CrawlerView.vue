@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  CircleCheck, Collection, Connection, Delete, Download, EditPen, FolderOpened,
-  List, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, Warning,
+  CircleCheck, CircleClose, Collection, Connection, Delete, Download, EditPen, FolderOpened,
+  List, Loading, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, Warning,
 } from '@element-plus/icons-vue'
 import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
@@ -45,7 +45,7 @@ const batchNote = ref('')
 const assetPage = ref(0)
 const assetPageSize = 60
 const assetTotal = ref(0)
-const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0 })
+const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0, runningAsset: null })
 const assetStatus = ref('')
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
@@ -66,6 +66,7 @@ const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
 const taskDetailTab = ref('images')
+const taskAssetView = ref<'table' | 'cards'>('table')
 const taskKind = ref('')
 const taskSiteId = ref<number>()
 const taskPage = ref(1)
@@ -109,6 +110,12 @@ const form = reactive<CrawlRule>({
 })
 
 const activeJob = computed(() => jobs.value.find(job => job.id === activeJobId.value) || null)
+const taskImageCards = computed(() => {
+  const running = imageProgress.value.runningAsset
+  return running && !assets.value.some(asset => asset.id === running.id)
+    ? [running, ...assets.value]
+    : assets.value
+})
 const activeJobs = computed(() => jobs.value.filter(job => ['QUEUED', 'RUNNING'].includes(job.status)))
 const failedJobs = computed(() => jobs.value.filter(job => ['FAILED', 'PARTIAL'].includes(job.status)))
 const reviewJobs = computed(() => jobs.value.filter(job => job.phase === 'REVIEW'))
@@ -224,6 +231,12 @@ function detailProgress(job: CrawlJob) {
   return Math.min(100, Math.round(imageProgress.value.processed / imageProgress.value.total * 100))
 }
 
+function assetStatusLabel(asset: CrawlAsset) {
+  if (asset.status === 'RUNNING' && activeJob.value?.status === 'PAUSED') return '任务已暂停，等待恢复'
+  if (asset.status === 'RUNNING' && activeJob.value?.status !== 'RUNNING') return '下载已中断'
+  return ({ PENDING: '待下载', RUNNING: '正在下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as const)[asset.status]
+}
+
 function statusLabel(status: CrawlJob['status']) {
   return ({ QUEUED: '等待中', RUNNING: '运行中', PAUSED: '已暂停', COMPLETED: '已完成', PARTIAL: '部分成功', FAILED: '失败', CANCELLED: '已取消' } as const)[status]
 }
@@ -262,7 +275,7 @@ async function loadJobDetail() {
   includedPageTotal.value = pageResult.data.includedElements
   assets.value = assetResult.data.content
   assetTotal.value = assetResult.data.totalElements
-  imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0 }
+  imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0, runningAsset: null }
   for (const key of Object.keys(previewImages)) {
     const id = Number(key)
     if (!assets.value.some(asset => asset.id === id)) {
@@ -275,7 +288,7 @@ async function loadJobDetail() {
 }
 
 async function loadPreviews() {
-  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
+  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
@@ -559,7 +572,7 @@ async function loadPageAssets() {
     activeJobId.value, pageAssetsPage.value, 48, '', false, false, selectedSourcePage.value.id)
   pageAssets.value = data.content
   pageAssetsTotal.value = data.totalElements
-  await Promise.all(pageAssets.value.filter(asset => !['PENDING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).map(async asset => {
+  await Promise.all(pageAssets.value.filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).map(async asset => {
     try {
       const { data: image } = await crawlApi.thumbnail(asset.id)
       previewImages[asset.id] = URL.createObjectURL(image)
@@ -710,7 +723,7 @@ function formatBytes(size?: number) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0 }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
@@ -1096,13 +1109,26 @@ onUnmounted(() => {
           <el-tab-pane label="图片采集列表" name="images" class="image-assets-pane">
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
-          <p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p>
-          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
+          <div v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" class="image-list-toolbar"><p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p><el-radio-group v-model="taskAssetView" size="small" aria-label="图片列表视图"><el-radio-button value="table">表格</el-radio-button><el-radio-button value="cards">卡片</el-radio-button></el-radio-group></div>
+          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'table'" :data="assets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
-            <el-table-column label="状态" width="120"><template #default="{ row }">{{ ({ PENDING: '待下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as Record<string, string>)[row.status] || row.status }}</template></el-table-column>
+            <el-table-column label="状态" width="150"><template #default="{ row }">{{ assetStatusLabel(row) }}</template></el-table-column>
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
+          <div v-else-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'cards'" class="task-image-cards" :aria-label="`图片列表，共 ${assetTotal} 张`">
+            <article v-for="asset in taskImageCards" :key="asset.id" class="task-image-card">
+              <div class="task-image-card-preview">
+                <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="contain" />
+                <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
+                <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="task-image-progress-track"><i /></span></div>
+                <span v-if="asset.status === 'DOWNLOADED'" class="task-image-result task-image-result-success" title="下载成功" aria-label="下载成功"><el-icon><CircleCheck /></el-icon></span>
+                <span v-else-if="asset.status === 'FAILED'" class="task-image-result task-image-result-failed" title="下载失败" aria-label="下载失败"><el-icon><CircleClose /></el-icon></span>
+              </div>
+              <div class="task-image-card-copy"><strong :title="asset.originalFilename || `图片 #${asset.id}`">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
+            </article>
+            <el-empty v-if="!assets.length" class="task-image-empty" :description="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'" />
+          </div>
           <el-pagination v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
           </el-tab-pane>
           <el-tab-pane label="图片页清单" name="pages">

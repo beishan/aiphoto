@@ -309,10 +309,13 @@ public class CrawlService {
                 CrawlAsset.Status.DELETED,
                 CrawlAsset.Status.DUPLICATE,
                 CrawlAsset.Status.IMPORTED);
+        CrawlAsset runningAsset = assetRepository.findByJobIdAndStatusOrderByIdDesc(
+                jobId, CrawlAsset.Status.RUNNING).stream().findFirst().orElse(null);
         return new ImageProgress(
                 assetRepository.countByJobId(jobId),
                 assetRepository.countByJobIdAndStatusIn(jobId, completedStatuses),
-                assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED));
+                assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED),
+                runningAsset);
     }
 
     @Transactional
@@ -570,5 +573,5 @@ public class CrawlService {
             int size, int number, long includedElements) {}
     public record PageSelectionResult(int success, long included) {}
     public record PurgeResult(int success, int fileFail) {}
-    public record ImageProgress(long total, long processed, long downloaded) {}
+    public record ImageProgress(long total, long processed, long downloaded, CrawlAsset runningAsset) {}
 }

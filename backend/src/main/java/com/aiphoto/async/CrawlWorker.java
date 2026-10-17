@@ -242,7 +242,7 @@ public class CrawlWorker {
                 job.setPagesProcessed(processed);
             }
             // Publish all discovered URLs before starting any image download.
-            for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderById(
+            for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderByIdDesc(
                     jobId, CrawlAsset.Status.PENDING)) {
                 if (stopped(jobId) || !queueService.renew(jobId, workerId)) return;
                 if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
@@ -276,6 +276,12 @@ public class CrawlWorker {
             page.setStatus(CrawlPage.Status.PENDING);
             page.setErrorMessage(null);
             pageRepository.save(page);
+        }
+        for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderById(
+                jobId, CrawlAsset.Status.RUNNING)) {
+            asset.setStatus(CrawlAsset.Status.PENDING);
+            asset.setErrorMessage(null);
+            assetRepository.save(asset);
         }
     }
 
@@ -316,6 +322,9 @@ public class CrawlWorker {
             assetRepository.save(asset);
             return;
         }
+        asset.setStatus(CrawlAsset.Status.RUNNING);
+        asset.setErrorMessage(null);
+        assetRepository.save(asset);
         try {
             SafeHttpFetcher.FetchedResource resource = fetcher.fetchImage(
                     imageUrl, rule.getBlockedHosts(), rule.getMaxFileBytes(),

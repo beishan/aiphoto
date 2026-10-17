@@ -218,7 +218,7 @@ export interface CrawlAsset {
   fileSize: number
   width: number | null
   height: number | null
-  status: 'PENDING' | 'DOWNLOADED' | 'FAILED' | 'SKIPPED' | 'DELETED' | 'DUPLICATE' | 'IMPORTED'
+  status: 'PENDING' | 'RUNNING' | 'DOWNLOADED' | 'FAILED' | 'SKIPPED' | 'DELETED' | 'DUPLICATE' | 'IMPORTED'
   importedPhotoId: number | null
   note: string | null
   errorMessage: string | null
