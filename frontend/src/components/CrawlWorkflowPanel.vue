@@ -134,7 +134,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 </script>
 
 <template>
-  <section class="workflow-panel surface-card" v-loading="loading" role="tabpanel">
+  <section class="workflow-panel surface-card crawler-controls" v-loading="loading" role="tabpanel">
     <header class="workflow-heading">
       <div><p class="eyebrow">{{ mode === 'scans' ? 'DISCOVERY SOURCES' : mode === 'pages' ? 'COLLECTION PAGES' : 'SITE QUEUES' }}</p>
         <h2>{{ mode === 'scans' ? '扫描页' : mode === 'pages' ? '采集页面' : '采集队列' }}</h2>
@@ -162,7 +162,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="管理" width="125"><template #default="{ row }"><el-button link type="primary" @click="editScan(row)">编辑</el-button><el-button link type="danger" @click="removeScan(row)">删除</el-button></template></el-table-column>
     </el-table>
     <el-table v-else-if="mode === 'pages'" :data="pages" empty-text="尚无扫描结果，运行扫描页任务后会自动出现">
-      <el-table-column label="操作" width="95" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button><el-button v-else-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button></template></el-table-column>
+      <el-table-column label="操作" width="130" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button><el-button v-else-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button></template></el-table-column>
       <el-table-column label="页面 URL" min-width="340"><template #default="{ row }"><a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a><small>{{ siteName(row.siteId) }} · 扫描任务 #{{ row.scanJobId }}</small></template></el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
@@ -178,7 +178,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       </article>
       <el-empty v-if="!visibleQueues.length" description="请先添加采集网站" />
     </div>
-    <el-dialog v-model="scanDialog" :title="form.id ? '编辑扫描页' : '新增扫描页'" width="min(620px, 94vw)" append-to-body>
+    <el-dialog v-model="scanDialog" :title="form.id ? '编辑扫描页' : '新增扫描页'" width="min(620px, 94vw)" append-to-body class="crawler-controls">
       <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="form.siteId" :disabled="!!form.id || !!scopedSiteId"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-form-item>
         <el-form-item label="扫描页名称"><el-input v-model="form.name" maxlength="100" placeholder="例如：最新发布、热门图片" /></el-form-item>
         <el-form-item label="扫描入口 URL"><el-input v-model="form.url" maxlength="2048" placeholder="https://example.com/latest/" /></el-form-item>
@@ -188,13 +188,13 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
         <el-alert type="info" :closable="false" show-icon title="使用网站当前生效的解析规则，仅发现新的图片页面 URL。采集需在“采集页面”中单独发起。" />
       </el-form><template #footer><el-button @click="scanDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveScan">保存扫描页</el-button></template>
     </el-dialog>
-    <el-dialog v-model="queueDialog" :title="`${queue?.name || ''} · 队列执行器`" width="min(620px, 94vw)" append-to-body>
+    <el-dialog v-model="queueDialog" :title="`${queue?.name || ''} · 队列执行器`" width="min(620px, 94vw)" append-to-body class="crawler-controls">
       <p>选择多个执行器即可并发采集。已停用或冻结的执行器不接收新任务。</p>
       <el-select v-model="executorIds" multiple placeholder="选择该网站专用执行器" style="width:100%"><el-option v-for="executor in allExecutors" :key="executor.id" :value="executor.id" :label="`${executor.name}${executor.options.siteId && executor.options.siteId !== queue?.siteId ? `（当前属于${siteName(executor.options.siteId)}，选择将移动）` : ''}`" /></el-select>
       <p class="field-hint">不选择专用执行器时使用共享池；尚未配置任何执行器时使用默认执行器。运行中的执行器须等待任务完成后才能移动。</p>
       <template #footer><el-button @click="queueDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveQueue">保存队列配置</el-button></template>
     </el-dialog>
-    <el-dialog v-model="executorManager" title="采集执行器管理" width="min(1120px, 96vw)" append-to-body destroy-on-close @closed="load()"><CrawlerExecutorsSettingsPanel v-if="executorManager" :proxies="proxies" :scoped-site-id="scopedSiteId" /></el-dialog>
+    <el-dialog v-model="executorManager" title="采集执行器管理" width="min(1120px, 96vw)" append-to-body destroy-on-close @closed="load()" class="crawler-controls"><CrawlerExecutorsSettingsPanel v-if="executorManager" :proxies="proxies" :scoped-site-id="scopedSiteId" /></el-dialog>
   </section>
 </template>
 

@@ -8,6 +8,7 @@ import {
 import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
+import '@/assets/crawler-actions.css'
 import type { InspectionProxy, CrawlSiteInfo } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
@@ -733,7 +734,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="crawler-page">
+  <main class="crawler-page crawler-controls">
     <el-card class="hero-card surface-card" shadow="never">
       <div class="crawler-hero">
         <div class="hero-copy">
@@ -913,7 +914,7 @@ onUnmounted(() => {
       </el-card>
     </section>
 
-    <el-dialog v-model="siteConfigurationVisible" :title="`${siteForm.name || '采集网站'} · 配置`" width="min(1040px, calc(100vw - 28px))" top="5vh" class="site-configuration-dialog" append-to-body destroy-on-close>
+    <el-dialog v-model="siteConfigurationVisible" :title="`${siteForm.name || '采集网站'} · 配置`" width="min(1040px, calc(100vw - 28px))" top="5vh" class="crawler-controls site-configuration-dialog" append-to-body destroy-on-close>
       <div v-loading="siteConfigurationLoading" class="site-configuration-content">
         <el-tabs v-model="siteConfigurationTab" class="site-configuration-tabs" stretch>
           <el-tab-pane label="网站设置" name="basic" />
@@ -1000,7 +1001,7 @@ onUnmounted(() => {
       <template #footer><el-button round @click="siteConfigurationVisible = false">关闭</el-button></template>
     </el-dialog>
 
-    <el-dialog append-to-body v-model="siteDialogVisible" class="site-dialog" width="min(680px, calc(100vw - 28px))" destroy-on-close align-center @closed="resetCreateSiteForm">
+    <el-dialog append-to-body v-model="siteDialogVisible" class="crawler-controls site-dialog" width="min(680px, calc(100vw - 28px))" destroy-on-close align-center @closed="resetCreateSiteForm">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Connection /></el-icon></span><div><h2>新增采集网站</h2><p>设置采集入口与访问边界，创建后再配置解析规则。</p></div></div></template>
       <el-alert class="preset-alert" type="info" show-icon :closable="false" title="已为目标图片版准备站点适配：识别 ess-data 原图，并按 robots.txt 每 10 秒请求一次。">
         <template #default><el-button type="primary" link @click="applyT66yPreset">填入 t66y 图片版预设</el-button></template>
@@ -1030,7 +1031,7 @@ onUnmounted(() => {
       <template #footer><el-button round @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :icon="Plus" round :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
     </el-dialog>
 
-    <el-dialog append-to-body v-model="pageAssetsDialogVisible" width="min(980px, calc(100vw - 28px))" destroy-on-close>
+    <el-dialog append-to-body v-model="pageAssetsDialogVisible" width="min(980px, calc(100vw - 28px))" destroy-on-close class="crawler-controls">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Picture /></el-icon></span><div><h2>链接采集结果</h2><p>{{ selectedSourcePage?.url }}</p></div></div></template>
       <el-alert v-if="!pageAssets.length" type="info" :closable="false" title="这个链接尚未提取到图片，或还未进入下载阶段。" />
       <div v-else class="asset-grid page-result-grid">
@@ -1042,7 +1043,7 @@ onUnmounted(() => {
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
     </el-dialog>
   </main>
-    <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close>
+    <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close class="crawler-controls">
       <el-card class="task-detail surface-card" shadow="never">
         <template v-if="activeJob" #header>
           <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>

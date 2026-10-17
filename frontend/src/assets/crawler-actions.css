@@ -1,0 +1,118 @@
+/* Keep crawler actions readable in the page and in teleported dialogs. */
+.crawler-controls {
+  --crawler-action-text: #93c5fd;
+  --crawler-danger-text: #fda4af;
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-primary);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-secondary);
+  --el-disabled-text-color: var(--text-secondary);
+}
+
+[data-theme="light"] .crawler-controls,
+[data-theme="macos26"] .crawler-controls {
+  --crawler-action-text: #0758b6;
+  --crawler-danger-text: #a61b1b;
+}
+
+.crawler-controls .el-button.el-button {
+  --el-button-text-color: var(--text-primary);
+  --el-button-bg-color: var(--bg-tertiary);
+  --el-button-border-color: var(--separator);
+  --el-button-hover-text-color: var(--text-primary);
+  --el-button-hover-bg-color: var(--bg-card);
+  --el-button-hover-border-color: var(--crawler-action-text);
+  --el-button-active-text-color: var(--text-primary);
+  --el-button-active-bg-color: var(--bg-card);
+  --el-button-active-border-color: var(--crawler-action-text);
+  min-height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-button-text-color);
+  background: var(--el-button-bg-color);
+  border: 1px solid var(--el-button-border-color);
+  box-shadow: none;
+}
+
+.crawler-controls .el-button.el-button--primary {
+  --el-button-text-color: #fff;
+  --el-button-bg-color: #0861c9;
+  --el-button-border-color: #0861c9;
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: #064da3;
+  --el-button-hover-border-color: #064da3;
+  --el-button-active-text-color: #fff;
+  --el-button-active-bg-color: #06428d;
+  --el-button-active-border-color: #06428d;
+}
+
+.crawler-controls .el-button.el-button--danger {
+  --el-button-text-color: #fff;
+  --el-button-bg-color: #b42318;
+  --el-button-border-color: #b42318;
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: #912018;
+  --el-button-hover-border-color: #912018;
+  --el-button-active-text-color: #fff;
+  --el-button-active-bg-color: #7a1b15;
+  --el-button-active-border-color: #7a1b15;
+}
+
+.crawler-controls .el-button.is-plain {
+  --el-button-bg-color: var(--bg-card);
+}
+
+.crawler-controls .el-button.el-button--primary:is(.is-plain, .is-link, .is-text) {
+  --el-button-text-color: var(--crawler-action-text);
+  --el-button-border-color: var(--crawler-action-text);
+  --el-button-hover-text-color: var(--crawler-action-text);
+  --el-button-hover-bg-color: var(--bg-tertiary);
+  --el-button-hover-border-color: var(--crawler-action-text);
+  --el-button-active-text-color: var(--crawler-action-text);
+  --el-button-active-bg-color: var(--bg-tertiary);
+  --el-button-active-border-color: var(--crawler-action-text);
+}
+
+.crawler-controls .el-button.el-button--danger:is(.is-plain, .is-link, .is-text) {
+  --el-button-text-color: var(--crawler-danger-text);
+  --el-button-border-color: var(--crawler-danger-text);
+  --el-button-hover-text-color: var(--crawler-danger-text);
+  --el-button-hover-bg-color: var(--bg-tertiary);
+  --el-button-hover-border-color: var(--crawler-danger-text);
+  --el-button-active-text-color: var(--crawler-danger-text);
+  --el-button-active-bg-color: var(--bg-tertiary);
+  --el-button-active-border-color: var(--crawler-danger-text);
+}
+
+.crawler-controls .el-button:is(.is-link, .is-text) {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  padding: 6px 10px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.crawler-controls .el-button:hover {
+  color: var(--el-button-hover-text-color);
+  background: var(--el-button-hover-bg-color);
+  border-color: var(--el-button-hover-border-color);
+}
+
+.crawler-controls .el-button:active {
+  color: var(--el-button-active-text-color);
+  background: var(--el-button-active-bg-color);
+  border-color: var(--el-button-active-border-color);
+}
+
+.crawler-controls .el-button.is-disabled,
+.crawler-controls .el-button.is-disabled:hover {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-color: var(--separator);
+  opacity: 1 !important;
+}
+
+.crawler-controls .el-button:focus-visible {
+  outline: 2px solid var(--crawler-action-text);
+  outline-offset: 3px;
+}
