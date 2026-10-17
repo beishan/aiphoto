@@ -9,7 +9,7 @@ import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import '@/assets/crawler-actions.css'
-import type { InspectionProxy, CrawlSiteInfo } from '@/api/crawlApi'
+import type { InspectionProxy, CrawlImageProgress, CrawlSiteInfo } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
@@ -45,6 +45,7 @@ const batchNote = ref('')
 const assetPage = ref(0)
 const assetPageSize = 60
 const assetTotal = ref(0)
+const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0 })
 const assetStatus = ref('')
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
@@ -217,6 +218,12 @@ function jobProgress(job: CrawlJob) {
   return Math.min(100, Math.round(job.pagesProcessed / job.pagesFound * 100))
 }
 
+function detailProgress(job: CrawlJob) {
+  if (!['DOWNLOAD', 'REVIEW'].includes(job.phase) || job.status === 'COMPLETED'
+      || imageProgress.value.total === 0) return jobProgress(job)
+  return Math.min(100, Math.round(imageProgress.value.processed / imageProgress.value.total * 100))
+}
+
 function statusLabel(status: CrawlJob['status']) {
   return ({ QUEUED: '等待中', RUNNING: '运行中', PAUSED: '已暂停', COMPLETED: '已完成', PARTIAL: '部分成功', FAILED: '失败', CANCELLED: '已取消' } as const)[status]
 }
@@ -241,10 +248,11 @@ async function loadJobDetail() {
   if (!activeJobId.value) return
   const jobId = activeJobId.value
   const request = ++detailRequest
-  const [jobResult, pageResult, assetResult] = await Promise.all([
+  const [jobResult, pageResult, assetResult, progressResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
     crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value),
+    taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
   ])
   if (request !== detailRequest || jobId !== activeJobId.value) return
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
@@ -254,6 +262,7 @@ async function loadJobDetail() {
   includedPageTotal.value = pageResult.data.includedElements
   assets.value = assetResult.data.content
   assetTotal.value = assetResult.data.totalElements
+  imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0 }
   for (const key of Object.keys(previewImages)) {
     const id = Number(key)
     if (!assets.value.some(asset => asset.id === id)) {
@@ -701,7 +710,7 @@ function formatBytes(size?: number) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-watch(activeJobId, () => { assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0 }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
@@ -1064,7 +1073,7 @@ onUnmounted(() => {
           <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>
         </template>
         <template v-if="activeJob">
-          <div class="progress-card"><div><strong>任务进度</strong><span>{{ jobProgress(activeJob) }}%</span></div><el-progress :percentage="jobProgress(activeJob)" :stroke-width="10" :show-text="false" /></div>
+          <div class="progress-card"><div><strong>{{ ['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) ? '图片采集进度' : '任务进度' }}</strong><span>{{ detailProgress(activeJob) }}%</span></div><el-progress :percentage="detailProgress(activeJob)" :stroke-width="10" :show-text="false" /><small v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && imageProgress.total">已处理 {{ imageProgress.processed }} / {{ imageProgress.total }} 张 · 下载成功 {{ imageProgress.downloaded }} 张</small></div>
           <el-descriptions :column="3" border class="job-stats">
             <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
             <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>

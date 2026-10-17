@@ -116,6 +116,12 @@ public class CrawlController {
         return crawlService.getJob(jobId, userId(authentication));
     }
 
+    @GetMapping("/jobs/{jobId}/image-progress")
+    public CrawlService.ImageProgress imageProgress(
+            @PathVariable Long jobId, Authentication authentication) {
+        return crawlService.imageProgress(jobId, userId(authentication));
+    }
+
     @GetMapping("/jobs/{jobId}/pages")
     public CrawlService.PageResult listPages(
             @PathVariable Long jobId,

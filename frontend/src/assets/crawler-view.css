@@ -478,6 +478,11 @@
   font-weight: 700;
 }
 
+.progress-card > small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .job-stats {
   margin-bottom: 16px;
 }

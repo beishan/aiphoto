@@ -300,6 +300,21 @@ public class CrawlService {
                 .orElseThrow(() -> new IllegalArgumentException("采集任务不存在"));
     }
 
+    public ImageProgress imageProgress(Long jobId, Long ownerId) {
+        getJob(jobId, ownerId);
+        List<CrawlAsset.Status> completedStatuses = List.of(
+                CrawlAsset.Status.DOWNLOADED,
+                CrawlAsset.Status.FAILED,
+                CrawlAsset.Status.SKIPPED,
+                CrawlAsset.Status.DELETED,
+                CrawlAsset.Status.DUPLICATE,
+                CrawlAsset.Status.IMPORTED);
+        return new ImageProgress(
+                assetRepository.countByJobId(jobId),
+                assetRepository.countByJobIdAndStatusIn(jobId, completedStatuses),
+                assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED));
+    }
+
     @Transactional
     public CrawlJob prepareDownload(Long jobId, Long ownerId) {
         CrawlJob job = getJob(jobId, ownerId);
@@ -555,4 +570,5 @@ public class CrawlService {
             int size, int number, long includedElements) {}
     public record PageSelectionResult(int success, long included) {}
     public record PurgeResult(int success, int fileFail) {}
+    public record ImageProgress(long total, long processed, long downloaded) {}
 }
