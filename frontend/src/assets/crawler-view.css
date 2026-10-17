@@ -548,6 +548,29 @@
   background: var(--bg-tertiary);
 }
 
+.task-image-info-tag {
+  position: absolute;
+  z-index: 2;
+  max-width: calc(100% - 18px);
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 8px;
+  background: rgba(15, 20, 28, .58);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.task-image-type-tag { top: 8px; left: 8px; font-weight: 750; letter-spacing: .04em; }
+.task-image-dimensions-tag { bottom: 8px; left: 8px; }
+.task-image-proxy-tag { right: 8px; bottom: 8px; max-width: 48%; color: rgba(255, 255, 255, .92); }
+
 .task-image-card-preview :deep(.el-image),
 .task-image-card-preview :deep(img) {
   width: 100%;
@@ -560,6 +583,7 @@
 
 .task-image-download-mask {
   position: absolute;
+  z-index: 3;
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -595,6 +619,7 @@
 
 .task-image-result {
   position: absolute;
+  z-index: 4;
   top: 9px;
   right: 9px;
   display: grid;

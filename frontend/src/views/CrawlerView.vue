@@ -741,6 +741,17 @@ function formatBytes(size?: number) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
+function imageTypeLabel(asset: CrawlAsset) {
+  const mimeSubtype = asset.contentType?.split('/').pop()?.split(';')[0]?.trim()
+  let imagePath = ''
+  try { imagePath = new URL(asset.imageUrl).pathname } catch { /* use the original filename fallback */ }
+  const extension = asset.originalFilename?.match(/\.([a-z0-9]{2,5})$/i)?.[1]
+    || imagePath.match(/\.([a-z0-9]{2,5})$/i)?.[1]
+  const type = (mimeSubtype || extension || '').toLowerCase()
+  const labels: Record<string, string> = { jpeg: 'JPG', jpg: 'JPG', 'svg+xml': 'SVG', 'x-icon': 'ICO' }
+  return labels[type] || type.toUpperCase() || '图片'
+}
+
 watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
@@ -1140,11 +1151,14 @@ onUnmounted(() => {
               <div class="task-image-card-preview">
                 <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="contain" />
                 <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
+                <span class="task-image-info-tag task-image-type-tag">{{ imageTypeLabel(asset) }}</span>
+                <span class="task-image-info-tag task-image-dimensions-tag">{{ asset.width && asset.height ? `${asset.width} × ${asset.height}` : '未知尺寸' }} · {{ asset.fileSize ? formatBytes(asset.fileSize) : '未知大小' }}</span>
+                <span v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-info-tag task-image-proxy-tag">代理：{{ imageProgress.currentProxyName }}</span>
                 <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="task-image-progress-track"><i /></span></div>
                 <span v-if="asset.status === 'DOWNLOADED'" class="task-image-result task-image-result-success" title="下载成功" aria-label="下载成功"><el-icon><CircleCheck /></el-icon></span>
                 <span v-else-if="asset.status === 'FAILED'" class="task-image-result task-image-result-failed" title="下载失败" aria-label="下载失败"><el-icon><CircleClose /></el-icon></span>
               </div>
-              <div class="task-image-card-copy"><strong :title="asset.originalFilename || `图片 #${asset.id}`">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-proxy">代理节点：{{ imageProgress.currentProxyName }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
+              <div v-if="asset.errorMessage" class="task-image-card-copy"><small class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
             </article>
             <el-empty v-if="!assets.length" class="task-image-empty" :description="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'" />
           </div>
