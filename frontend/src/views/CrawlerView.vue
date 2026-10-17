@@ -64,6 +64,7 @@ const skipPage = ref(0)
 const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
+const taskDetailTab = ref('images')
 const taskKind = ref('')
 const taskSiteId = ref<number>()
 const taskPage = ref(1)
@@ -710,6 +711,11 @@ watch(activeTab, tab => {
   }
 })
 watch(taskDrawerVisible, () => { assetPage.value = 0; void loadJobDetail() })
+watch([taskDrawerVisible, activeJobId], () => {
+  if (taskDrawerVisible.value) {
+    taskDetailTab.value = activeJob.value && ['DOWNLOAD', 'REVIEW'].includes(activeJob.value.phase) ? 'images' : 'pages'
+  }
+})
 watch(assetStatus, () => { assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
@@ -1077,16 +1083,20 @@ onUnmounted(() => {
             <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="taskDrawerVisible = false; activeTab = 'review'">进入待整理区</el-button>
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>
-          <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看下方页面失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
+          <el-tabs v-model="taskDetailTab">
+          <el-tab-pane label="图片采集列表" name="images">
+          <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
+          <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
           <p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p>
-          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" max-height="260" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看下方页面原因'">
+          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" max-height="260" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="120"><template #default="{ row }">{{ ({ PENDING: '待下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as Record<string, string>)[row.status] || row.status }}</template></el-table-column>
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
           <el-pagination v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
-          <el-divider />
+          </el-tab-pane>
+          <el-tab-pane label="图片页清单" name="pages">
           <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在采集页面中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
           <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页名称或 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
           <el-table :data="pages" table-layout="fixed" empty-text="当前任务暂无图片页记录">
@@ -1097,6 +1107,8 @@ onUnmounted(() => {
           <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
           </el-table>
           <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
+          </el-tab-pane>
+          </el-tabs>
         </template>
         <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
       </el-card>
