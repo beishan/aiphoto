@@ -36,6 +36,10 @@ export interface DiscoveredPage {
   id: number; scanJobId: number; siteId: number; scanPageId: number | null; name: string | null; url: string;
   createdAt: string; collectionJobId: number | null; status: CrawlJob['status'] | 'PENDING'; collectable: boolean
 }
+interface CollectionPageResponse {
+  content: DiscoveredPage[]
+  page: Omit<PageResponse<DiscoveredPage>, 'content'>
+}
 export interface CrawlSiteQueue {
   siteId: number; name: string; dedicated: boolean; concurrency: number; queued: number; running: number;
   executors: { id: number; name: string; enabled: boolean; frozen: boolean; activeJobId: number | null }[]
@@ -49,7 +53,14 @@ export const crawlApi = {
   deleteScanPage: (id: number) => http.delete(`/crawl/scan-pages/${id}`),
   scan: (id: number) => http.post<CrawlJob>(`/crawl/scan-pages/${id}/scan`),
   collectionPages: (page = 0, query = '', siteId?: number, pending = false, size = 50) =>
-    http.get<PageResponse<DiscoveredPage>>('/crawl/collection-pages', { params: { page, size, query, siteId, pending } }),
+    http.get<PageResponse<DiscoveredPage> | CollectionPageResponse>('/crawl/collection-pages', { params: { page, size, query, siteId, pending } })
+      .then(response => ({
+        ...response,
+        // Spring VIA_DTO places pagination metadata inside `page`.
+        data: 'page' in response.data
+          ? { content: response.data.content, ...response.data.page }
+          : response.data,
+      })),
   collectPage: (id: number) => http.post<CrawlJob>(`/crawl/collection-pages/${id}/collect`),
   queues: () => http.get<CrawlSiteQueue[]>('/crawl/queues'),
   assignExecutors: (siteId: number, ids: number[]) => http.put(`/crawl/queues/${siteId}/executors`, ids),
