@@ -150,9 +150,13 @@ public class CrawlWorker {
 
     @Async("crawlerTaskExecutor")
     public void download(Long jobId) {
+        boolean acquired = false;
         try (var session = executorService.acquire(jobId)) {
             if (session == null) return;
+            acquired = true;
             downloadWithExecutor(jobId);
+        } finally {
+            if (acquired) resetRunningAssets(jobId);
         }
     }
 
@@ -277,6 +281,10 @@ public class CrawlWorker {
             page.setErrorMessage(null);
             pageRepository.save(page);
         }
+        resetRunningAssets(jobId);
+    }
+
+    private void resetRunningAssets(Long jobId) {
         for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderById(
                 jobId, CrawlAsset.Status.RUNNING)) {
             asset.setStatus(CrawlAsset.Status.PENDING);

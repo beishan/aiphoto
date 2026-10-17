@@ -72,7 +72,10 @@ class CrawlWorkerExecutorTest {
             if (asset.getId() == null) { asset.setId((long) records.size() + 1); records.add(asset); }
             return asset;
         });
-        when(assets.findByJobIdAndStatusOrderById(1L, com.aiphoto.entity.CrawlAsset.Status.PENDING))
+        when(assets.findByJobIdAndStatusOrderById(1L, com.aiphoto.entity.CrawlAsset.Status.RUNNING))
+                .thenAnswer(invocation -> records.stream().filter(asset -> asset.getStatus()
+                        == com.aiphoto.entity.CrawlAsset.Status.RUNNING).toList());
+        when(assets.findByJobIdAndStatusOrderByIdDesc(1L, com.aiphoto.entity.CrawlAsset.Status.PENDING))
                 .thenAnswer(invocation -> records.stream().filter(asset -> asset.getStatus()
                         == com.aiphoto.entity.CrawlAsset.Status.PENDING).toList());
         when(assets.countByJobIdAndStatus(eq(1L), any())).thenAnswer(invocation ->
