@@ -5,6 +5,8 @@ import com.aiphoto.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -21,6 +23,7 @@ public class CrawlWorkflowService {
     private final CrawlRuleRepository ruleRepository;
     private final CrawlService crawlService;
     private final ObjectMapper mapper;
+    private final CrawlSeenPageRepository seenPageRepository;
 
     public List<CrawlScanPage> scans(Long ownerId) {
         return scanRepository.findByOwnerIdOrderById(ownerId);
@@ -131,6 +134,46 @@ public class CrawlWorkflowService {
         page.setCollectionJobId(job.getId());
         pageRepository.save(page);
         return job;
+    }
+
+    @Transactional
+    public void deleteDiscoveredPage(Long pageId, Long ownerId) {
+        deleteDiscoveredPages(List.of(pageId), ownerId);
+    }
+
+    @Transactional
+    public void deleteDiscoveredPages(List<Long> pageIds, Long ownerId) {
+        if (pageIds == null || pageIds.isEmpty()) throw new IllegalArgumentException("请选择待删除的页面");
+        LinkedHashSet<Long> uniqueIds = new LinkedHashSet<>(pageIds);
+        if (uniqueIds.contains(null)) throw new IllegalArgumentException("页面 ID 无效");
+        if (uniqueIds.size() > 200) throw new IllegalArgumentException("每次最多删除 200 个页面");
+
+        List<CrawlPage> pages = new ArrayList<>();
+        for (Long id : uniqueIds) {
+            CrawlPage page = pageRepository.lockById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("待处理页面不存在"));
+            CrawlJob source = crawlService.getJob(page.getJobId(), ownerId);
+            if (source.getSourcePageId() != null) throw new IllegalArgumentException("只能删除扫描发现的页面");
+            if ((source.getPhase() == CrawlJob.Phase.DOWNLOAD || source.getPhase() == CrawlJob.Phase.REVIEW)
+                    && List.of(CrawlJob.Status.QUEUED, CrawlJob.Status.RUNNING, CrawlJob.Status.PAUSED)
+                            .contains(source.getStatus())) {
+                throw new IllegalStateException("请先完成或取消原采集任务");
+            }
+            if (page.getCollectionJobId() != null) {
+                CrawlJob collection = crawlService.getJob(page.getCollectionJobId(), ownerId);
+                if (List.of(CrawlJob.Status.QUEUED, CrawlJob.Status.RUNNING, CrawlJob.Status.PAUSED)
+                        .contains(collection.getStatus())) {
+                    throw new IllegalStateException("请先完成或取消正在执行的采集任务");
+                }
+            }
+            pages.add(page);
+        }
+
+        for (CrawlPage page : pages) {
+            seenPageRepository.deleteBySiteIdAndUrlHash(
+                    crawlService.getJob(page.getJobId(), ownerId).getSiteId(), page.getUrlHash());
+            pageRepository.delete(page);
+        }
     }
 
     public Page<DiscoveredPage> pages(Long ownerId, Long siteId, String query, boolean pending, Pageable pageable) {

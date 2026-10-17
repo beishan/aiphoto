@@ -62,6 +62,8 @@ export const crawlApi = {
           : response.data,
       })),
   collectPage: (id: number) => http.post<CrawlJob>(`/crawl/collection-pages/${id}/collect`),
+  deleteCollectionPage: (id: number) => http.delete(`/crawl/collection-pages/${id}`),
+  deleteCollectionPages: (ids: number[]) => http.delete('/crawl/collection-pages', { data: ids }),
   queues: () => http.get<CrawlSiteQueue[]>('/crawl/queues'),
   assignExecutors: (siteId: number, ids: number[]) => http.put(`/crawl/queues/${siteId}/executors`, ids),
   inspectionProxies: () => http.get<InspectionProxy[]>('/crawl/inspection-proxies'),

@@ -11,6 +11,8 @@ const props = defineProps<{ mode: 'scans' | 'pages' | 'queues'; sites: CrawlSite
 const emit = defineEmits<{ 'open-job': [job: CrawlJob]; changed: [] }>()
 const scans = ref<CrawlScanPage[]>([])
 const pages = ref<DiscoveredPage[]>([])
+const selectedPageIds = ref<number[]>([])
+const pageTable = ref()
 const queues = ref<CrawlSiteQueue[]>([])
 const siteId = ref<number>()
 const query = ref('')
@@ -58,6 +60,11 @@ async function load(silent = false) {
       if (request === requestId) scans.value = data
     } else if (props.mode === 'pages') {
       const { data } = await crawlApi.collectionPages(pageNumber.value - 1, query.value, siteId.value, pending.value, pageSize.value)
+      if (request === requestId && pageNumber.value > Math.max(1, data.totalPages)) {
+        pageNumber.value = Math.max(1, data.totalPages)
+        await load(silent)
+        return
+      }
       if (request === requestId) { pages.value = data.content; total.value = data.totalElements }
     } else {
       const { data } = await crawlApi.queues()
@@ -66,7 +73,42 @@ async function load(silent = false) {
   } catch (error) { if (!silent) fail(error) }
   finally { if (request === requestId) loading.value = false }
 }
-function search() { pageNumber.value = 1; void load() }
+function resetPageSelection() {
+  selectedPageIds.value = []
+  pageTable.value?.clearSelection()
+}
+function search() { resetPageSelection(); pageNumber.value = 1; void load() }
+function changePage() { resetPageSelection(); void load() }
+function onPageSelectionChange(selection: DiscoveredPage[]) {
+  const visibleIds = new Set(pages.value.map(page => page.id))
+  selectedPageIds.value = [
+    ...selectedPageIds.value.filter(id => !visibleIds.has(id)),
+    ...selection.map(page => page.id),
+  ]
+}
+async function removePage(page: DiscoveredPage) {
+  try { await ElMessageBox.confirm('删除此扫描结果？关联的采集任务和已下载图片会保留。', '删除待采集页', { type: 'warning' }) }
+  catch { return }
+  try {
+    await crawlApi.deleteCollectionPage(page.id)
+    pageTable.value?.toggleRowSelection(page, false)
+    selectedPageIds.value = selectedPageIds.value.filter(id => id !== page.id)
+    await load()
+    ElMessage.success('待采集页已删除')
+  } catch (error) { fail(error) }
+}
+async function removeSelectedPages() {
+  const ids = [...selectedPageIds.value]
+  if (!ids.length) return
+  try { await ElMessageBox.confirm(`删除已选择的 ${ids.length} 个扫描结果？关联的采集任务和已下载图片会保留。`, '批量删除待采集页', { type: 'warning' }) }
+  catch { return }
+  try {
+    await crawlApi.deleteCollectionPages(ids)
+    resetPageSelection()
+    await load()
+    ElMessage.success(`已删除 ${ids.length} 个待采集页`)
+  } catch (error) { fail(error) }
+}
 function editScan(scan?: CrawlScanPage) {
   delete form.id
   Object.assign(form, defaultScan(), scan || {})
@@ -130,7 +172,7 @@ async function manageExecutors() {
 }
 watch([siteId, pending], search)
 watch(() => props.mode, () => { pageNumber.value = 1; void load() })
-onMounted(() => { void load(); timer = setInterval(() => { if (!loading.value) void load(true) }, 5000) })
+onMounted(() => { void load(); timer = setInterval(() => { if (!loading.value && !selectedPageIds.value.length) void load(true) }, 5000) })
 onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 </script>
 
@@ -162,13 +204,15 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="最近扫描" min-width="165"><template #default="{ row }">{{ time(row.lastScanAt) }}</template></el-table-column>
       <el-table-column label="管理" width="125"><template #default="{ row }"><el-button link type="primary" @click="editScan(row)">编辑</el-button><el-button link type="danger" @click="removeScan(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <el-table v-else-if="mode === 'pages'" :data="pages" max-height="58vh" empty-text="尚无扫描结果，运行扫描页任务后会自动出现">
-      <el-table-column label="操作" width="130" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button><el-button v-else-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button></template></el-table-column>
+    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length" @click="removeSelectedPages">批量删除</el-button></div>
+    <el-table v-if="mode === 'pages'" ref="pageTable" :data="pages" row-key="id" max-height="58vh" empty-text="尚无扫描结果，运行扫描页任务后会自动出现" @selection-change="onPageSelectionChange">
+      <el-table-column type="selection" width="48" />
+      <el-table-column label="操作" width="175" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button><el-button v-else-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button><el-button link type="danger" @click="removePage(row)">删除</el-button></template></el-table-column>
       <el-table-column label="采集页面" min-width="340"><template #default="{ row }"><a :href="row.url" :title="row.name || row.url" target="_blank" rel="noopener noreferrer" class="page-title">{{ row.name || row.url }}</a><small v-if="row.name">{{ row.url }}</small><small>{{ siteName(row.siteId) }} · 扫描任务 #{{ row.scanJobId }}</small></template></el-table-column>
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
     </el-table>
-    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="load()" @size-change="search" />
+    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="changePage" @size-change="search" />
     <div v-if="mode === 'queues'" class="queue-grid">
       <article v-for="item in visibleQueues" :key="item.siteId" class="queue-card">
         <header><h3>{{ item.name }}</h3><el-tag :type="item.dedicated ? 'primary' : 'info'">{{ item.dedicated ? '专用队列' : '共享执行器' }}</el-tag></header>
@@ -201,6 +245,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 
 <style scoped>
 .page-title{font-weight:600}
+.page-bulk-bar{display:flex;align-items:center;gap:12px;margin:0 0 12px;color:var(--text-secondary);font-size:13px}
 
 .workflow-panel{padding:24px;min-width:0}.workflow-heading,.queue-card header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.workflow-heading{margin-bottom:24px}.workflow-heading h2,.queue-card h3{margin:0}.workflow-heading p,.field-hint{color:var(--text-secondary);font-size:13px;line-height:1.7}.eyebrow{font-size:10px!important;letter-spacing:.16em;color:var(--accent)!important;margin:0 0 6px}.workflow-toolbar{display:flex;gap:12px;align-items:center;margin-bottom:18px}.workflow-toolbar>.el-select{width:200px;flex-shrink:0}.workflow-toolbar>.el-input{max-width:520px}.workflow-panel :deep(.cell)>small,.workflow-panel :deep(.cell)>a{display:block;margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workflow-panel small{color:var(--text-secondary)}a{color:var(--accent);text-decoration:none}.el-pagination{margin:0 0 16px;padding:10px 12px;background:var(--bg-secondary);border-radius:12px;justify-content:flex-end}.queue-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}.queue-card{border:1px solid var(--separator);border-radius:16px;padding:22px;background:var(--bg-secondary)}.queue-numbers{display:flex;gap:36px;margin:24px 0}.queue-numbers b{font-size:28px;font-variant-numeric:tabular-nums}.queue-numbers small{display:block;margin-top:5px}.executor-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;min-height:26px}.queue-jobs{display:grid;gap:6px;margin-top:16px;max-height:260px;overflow:auto}.queue-jobs button{display:flex;gap:12px;align-items:center;min-height:36px;border:0;background:var(--bg-card);color:var(--text-primary);padding:8px 10px;border-radius:8px;text-align:left;cursor:pointer}.queue-jobs strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue-jobs span{flex-shrink:0;color:var(--accent);font-size:12px}button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}@media(max-width:760px){.workflow-panel{padding:16px}.workflow-heading{flex-direction:column}.workflow-toolbar{flex-wrap:wrap}.workflow-toolbar>.el-input{max-width:100%}.queue-grid{grid-template-columns:1fr}}
 </style>

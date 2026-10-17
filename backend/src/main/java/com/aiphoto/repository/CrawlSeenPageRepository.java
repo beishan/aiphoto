@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface CrawlSeenPageRepository extends JpaRepository<CrawlSeenPage, Long> {
     Optional<CrawlSeenPage> findBySiteIdAndUrlHash(Long siteId, String urlHash);
+    void deleteBySiteIdAndUrlHash(Long siteId, String urlHash);
     @Modifying
     @Query(value = "INSERT INTO crawl_seen_pages (site_id, normalized_url, url_hash) "
             + "VALUES (:siteId, :normalizedUrl, :urlHash) "

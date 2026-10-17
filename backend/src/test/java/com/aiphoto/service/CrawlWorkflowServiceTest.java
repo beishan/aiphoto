@@ -25,11 +25,12 @@ class CrawlWorkflowServiceTest {
     @Mock CrawlJobRepository jobs;
     @Mock CrawlRuleRepository rules;
     @Mock CrawlService crawl;
+    @Mock CrawlSeenPageRepository seenPages;
     private final ObjectMapper mapper = new ObjectMapper();
     private CrawlWorkflowService workflow;
 
     @BeforeEach void setup() {
-        workflow = new CrawlWorkflowService(scans, pages, jobs, rules, crawl, mapper);
+        workflow = new CrawlWorkflowService(scans, pages, jobs, rules, crawl, mapper, seenPages);
     }
 
     private CrawlScanPage scanPage() {

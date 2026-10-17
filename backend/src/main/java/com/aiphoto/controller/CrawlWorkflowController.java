@@ -69,6 +69,16 @@ public class CrawlWorkflowController {
         return workflow.collect(id, owner(auth));
     }
 
+    @DeleteMapping("/collection-pages/{id}")
+    public void deletePage(@PathVariable Long id, Authentication auth) {
+        workflow.deleteDiscoveredPage(id, owner(auth));
+    }
+
+    @DeleteMapping("/collection-pages")
+    public void deletePages(@RequestBody List<Long> ids, Authentication auth) {
+        workflow.deleteDiscoveredPages(ids, owner(auth));
+    }
+
     private Long owner(Authentication auth) {
         return users.findByUsername(auth.getName()).orElseThrow().getId();
     }
