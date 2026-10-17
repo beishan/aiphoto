@@ -115,7 +115,7 @@ const totalDownloaded = computed(() => jobs.value.reduce((total, job) => total +
 const recentJobs = computed(() => jobs.value.slice(0, 6))
 const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
-  { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
+  { label: sites.value.length ? `采集网站  ${sites.value.length}` : '采集网站', value: 'sites' },
   { label: '采集页面', value: 'pages' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
