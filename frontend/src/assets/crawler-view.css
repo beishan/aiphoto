@@ -455,7 +455,56 @@
 }
 
 .task-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
   min-width: 0;
+}
+
+.task-detail-drawer :deep(.el-drawer__body) {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.task-detail :deep(.el-card__body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.task-detail-tabs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.task-detail-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+}
+
+.task-detail-tabs :deep(.el-tab-pane.is-active) {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.task-detail-tabs :deep(.image-assets-pane) {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.task-image-table {
+  flex: 1;
+  min-height: 0;
 }
 
 .progress-card {

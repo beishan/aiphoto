@@ -1067,7 +1067,7 @@ onUnmounted(() => {
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
     </el-dialog>
   </main>
-    <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close class="crawler-controls">
+    <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close class="crawler-controls task-detail-drawer">
       <el-card class="task-detail surface-card" shadow="never">
         <template v-if="activeJob" #header>
           <div class="card-heading task-title"><div><p class="eyebrow">{{ phaseLabel(activeJob.phase) }}</p><h2>{{ activeJob.name }}</h2><p>创建于 {{ formatTime(activeJob.createdAt) }}</p></div><el-tag :type="statusType(activeJob.status)" effect="light" round size="large">{{ statusLabel(activeJob.status) }}</el-tag></div>
@@ -1092,12 +1092,12 @@ onUnmounted(() => {
             <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="taskDrawerVisible = false; activeTab = 'review'">进入待整理区</el-button>
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>
-          <el-tabs v-model="taskDetailTab">
-          <el-tab-pane label="图片采集列表" name="images">
+          <el-tabs v-model="taskDetailTab" class="task-detail-tabs">
+          <el-tab-pane label="图片采集列表" name="images" class="image-assets-pane">
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
           <p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p>
-          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" max-height="260" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
+          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="120"><template #default="{ row }">{{ ({ PENDING: '待下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as Record<string, string>)[row.status] || row.status }}</template></el-table-column>
