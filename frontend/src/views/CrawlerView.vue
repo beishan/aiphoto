@@ -33,7 +33,7 @@ const previewImages = reactive<Record<number, string>>({})
 const busy = ref('')
 const siteDialogVisible = ref(false)
 const siteConfigurationVisible = ref(false)
-const siteConfigurationTab = ref<'basic' | 'rules' | 'scans'>('basic')
+const siteConfigurationTab = ref<'basic' | 'rules' | 'scans' | 'queues'>('basic')
 const siteConfigurationLoading = ref(false)
 const siteSaveBusy = ref(false)
 const albums = ref<Album[]>([])
@@ -76,7 +76,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
 let polling = false
 
-type TabKey = 'overview' | 'sites' | 'pages' | 'queues' | 'tasks' | 'review' | 'skips'
+type TabKey = 'overview' | 'sites' | 'pages' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
@@ -109,7 +109,6 @@ const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
   { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
   { label: '采集页面', value: 'pages' },
-  { label: '采集队列', value: 'queues' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
   { label: reviewJobs.value.length ? `待整理区  ${reviewJobs.value.length}` : '待整理区', value: 'review' },
   { label: imageSkips.value.length ? `跳过管理  ${skipTotal.value}` : '跳过管理', value: 'skips' },
@@ -329,7 +328,7 @@ async function selectSite(site: CrawlSite) {
   await loadRules()
 }
 
-async function openSiteConfiguration(site: CrawlSite, tab: 'basic' | 'rules' | 'scans' = 'basic') {
+async function openSiteConfiguration(site: CrawlSite, tab: 'basic' | 'rules' | 'scans' | 'queues' = 'basic') {
   siteConfigurationTab.value = tab
   siteConfigurationLoading.value = true
   siteConfigurationVisible.value = true
@@ -814,7 +813,7 @@ onUnmounted(() => {
       <el-empty v-else description="尚未配置采集网站"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
     </section>
 
-    <CrawlWorkflowPanel v-else-if="activeTab === 'pages' || activeTab === 'queues'" :mode="activeTab" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+    <CrawlWorkflowPanel v-else-if="activeTab === 'pages'" mode="pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
@@ -920,6 +919,7 @@ onUnmounted(() => {
           <el-tab-pane label="网站设置" name="basic" />
           <el-tab-pane label="解析规则" name="rules" />
           <el-tab-pane label="扫描页" name="scans" />
+          <el-tab-pane label="采集队列" name="queues" />
         </el-tabs>
         <div v-if="!siteConfigurationLoading" class="site-configuration-panels">
           <el-card v-show="siteConfigurationTab === 'basic'" class="site-editor surface-card" shadow="never">
@@ -991,9 +991,10 @@ onUnmounted(() => {
               <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
             </el-collapse>
           </el-card>
-          <CrawlWorkflowPanel v-if="siteConfigurationTab === 'scans' && activeSiteId" :key="activeSiteId"
-            mode="scans" :scoped-site-id="activeSiteId" :sites="sites.filter(site => site.id === activeSiteId)"
-            :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+          <CrawlWorkflowPanel v-if="(siteConfigurationTab === 'scans' || siteConfigurationTab === 'queues') && activeSiteId"
+            :key="`${activeSiteId}-${siteConfigurationTab}`" :mode="siteConfigurationTab"
+            :scoped-site-id="activeSiteId" :sites="sites.filter(site => site.id === activeSiteId)"
+            :jobs="jobs.filter(job => job.siteId === activeSiteId)" @open-job="openWorkflowJob" @changed="loadJobs" />
         </div>
       </div>
       <template #footer><el-button round @click="siteConfigurationVisible = false">关闭</el-button></template>

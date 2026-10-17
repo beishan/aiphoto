@@ -4,11 +4,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { settingApi, type CrawlerExecutor, type CrawlerExecutorRequest, type CrawlerExecutorOptions, type CrawlerProxy, type MihomoProxyNode, type MihomoNodeGroup, type CrawlerExecutionLog } from '@/api/settingApi'
 import { crawlApi } from '@/api/crawlApi'
 import type { CrawlSite } from '@/types'
-const props = defineProps<{ proxies: CrawlerProxy[] }>()
+const props = defineProps<{ proxies: CrawlerProxy[]; scopedSiteId?: number | null }>()
 const executors = ref<CrawlerExecutor[]>([])
 const sites = ref<CrawlSite[]>([])
 const siteFilter = ref<number | null>(null)
-const visibleExecutors = computed(() => executors.value.filter(e => siteFilter.value == null || e.options.siteId === siteFilter.value))
+const visibleExecutors = computed(() => executors.value.filter(e => {
+  const selectedSiteId = props.scopedSiteId ?? siteFilter.value
+  return selectedSiteId == null || e.options.siteId === selectedSiteId
+}))
 const showEditor = ref(false)
 const editingId = ref<number | null>(null)
 const saving = ref(false)
@@ -57,7 +60,7 @@ function selectGroup() {
 async function edit(executor?: CrawlerExecutor) {
   editingId.value = executor?.id ?? null; editorTab.value = 'basic'
   Object.assign(editor, defaults(), executor ? { ...executor, nodes: [...executor.nodes], options: { ...options(), ...executor.options, ordinaryProxies: executor.options.ordinaryProxies.map(p => ({ ...p })) } } : {})
-  if (!executor) { editor.name = `执行器 ${executors.value.length + 1}`; editor.options.siteId = siteFilter.value }
+  if (!executor) { editor.name = `执行器 ${executors.value.length + 1}`; editor.options.siteId = props.scopedSiteId ?? siteFilter.value }
   showEditor.value = true; await loadNodes()
 }
 async function save() {
@@ -127,7 +130,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
 <template>
   <section class="executor-card">
     <div class="heading"><div><h3>执行器配置</h3><p>配置代理、轮换与故障策略；每个执行器同时采集一个任务，策略更新在下一次请求生效。</p></div><el-button :disabled="executors.length >= 16" type="primary" @click="edit()">新增执行器</el-button></div>
-    <div class="toolbar"><el-select v-model="siteFilter" clearable placeholder="全部站点 / 全局执行器"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-button @click="load">刷新配置</el-button></div>
+    <div class="toolbar"><el-select v-if="!scopedSiteId" v-model="siteFilter" clearable placeholder="全部站点 / 全局执行器"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-button @click="load">刷新配置</el-button></div>
     <el-table :data="visibleExecutors" empty-text="暂无执行器">
       <el-table-column label="执行器" min-width="170"><template #default="{ row }"><strong>{{ row.name }}</strong><small>{{ row.options.description || '暂无描述' }}</small><small>{{ sites.find(s => s.id === row.options.siteId)?.name || '全部站点' }}</small></template></el-table-column>
       <el-table-column label="代理方式" min-width="145"><template #default="{ row }">{{ modeLabel(row.proxyMode) }}</template></el-table-column>
@@ -139,7 +142,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
         <el-tab-pane name="basic" label="基础配置">
           <el-form label-position="top"><div class="grid"><el-form-item label="执行器名称"><el-input v-model="editor.name" maxlength="100" /></el-form-item><el-form-item label="启用"><el-switch v-model="editor.enabled" /><small>停用后不接收新任务，已运行任务继续完成。</small></el-form-item></div>
             <el-form-item label="描述"><el-input v-model="editor.options.description" type="textarea" maxlength="500" /></el-form-item>
-            <el-form-item label="采集站点范围"><el-select v-model="editor.options.siteId" clearable placeholder="全部站点"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><small>站点存在专用执行器时，任务仅使用专用执行器；全部停用或冻结后保持排队。</small></el-form-item>
+            <el-form-item label="采集站点范围"><el-select v-model="editor.options.siteId" :disabled="!!scopedSiteId" clearable placeholder="全部站点"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><small>站点存在专用执行器时，任务仅使用专用执行器；全部停用或冻结后保持排队。</small></el-form-item>
           </el-form>
         </el-tab-pane>
         <el-tab-pane name="proxy" label="代理方式">

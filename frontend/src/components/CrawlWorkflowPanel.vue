@@ -37,7 +37,10 @@ const visibleScans = computed(() => scans.value.filter(s => {
   const selectedSiteId = props.scopedSiteId ?? siteId.value
   return !selectedSiteId || s.siteId === selectedSiteId
 }))
-const visibleQueues = computed(() => queues.value.filter(q => !siteId.value || q.siteId === siteId.value))
+const visibleQueues = computed(() => queues.value.filter(q => {
+  const selectedSiteId = props.scopedSiteId ?? siteId.value
+  return !selectedSiteId || q.siteId === selectedSiteId
+}))
 const siteName = (id: number) => props.sites.find(s => s.id === id)?.name || `网站 #${id}`
 const time = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未扫描'
 const status = (value: string) => ({ PENDING: '待采集', QUEUED: '排队中', RUNNING: '运行中', PAUSED: '已暂停', COMPLETED: '已完成', PARTIAL: '部分成功', FAILED: '失败', CANCELLED: '已取消' }[value] || value)
@@ -191,7 +194,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <p class="field-hint">不选择专用执行器时使用共享池；尚未配置任何执行器时使用默认执行器。运行中的执行器须等待任务完成后才能移动。</p>
       <template #footer><el-button @click="queueDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveQueue">保存队列配置</el-button></template>
     </el-dialog>
-    <el-dialog v-model="executorManager" title="采集执行器管理" width="min(1120px, 96vw)" append-to-body destroy-on-close @closed="load()"><CrawlerExecutorsSettingsPanel v-if="executorManager" :proxies="proxies" /></el-dialog>
+    <el-dialog v-model="executorManager" title="采集执行器管理" width="min(1120px, 96vw)" append-to-body destroy-on-close @closed="load()"><CrawlerExecutorsSettingsPanel v-if="executorManager" :proxies="proxies" :scoped-site-id="scopedSiteId" /></el-dialog>
   </section>
 </template>
 
