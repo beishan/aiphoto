@@ -7,7 +7,7 @@ import { settingApi, type CrawlerExecutor, type CrawlerProxy } from '@/api/setti
 import type { CrawlJob, CrawlSite } from '@/types'
 import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
 
-const props = defineProps<{ mode: 'scans' | 'pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[] }>()
+const props = defineProps<{ mode: 'scans' | 'pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[]; scopedSiteId?: number | null }>()
 const emit = defineEmits<{ 'open-job': [job: CrawlJob]; changed: [] }>()
 const scans = ref<CrawlScanPage[]>([])
 const pages = ref<DiscoveredPage[]>([])
@@ -31,9 +31,12 @@ const canManage = computed(() => {
   try { return JSON.parse(sessionStorage.getItem('user') || '{}')?.role === 'ADMIN' }
   catch { return false }
 })
-const defaultScan = (): CrawlScanPage => ({ siteId: props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, scanIntervalMinutes: 360, maxPages: 100 })
+const defaultScan = (): CrawlScanPage => ({ siteId: props.scopedSiteId || props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, scanIntervalMinutes: 360, maxPages: 100 })
 const form = reactive<CrawlScanPage>(defaultScan())
-const visibleScans = computed(() => scans.value.filter(s => !siteId.value || s.siteId === siteId.value))
+const visibleScans = computed(() => scans.value.filter(s => {
+  const selectedSiteId = props.scopedSiteId ?? siteId.value
+  return !selectedSiteId || s.siteId === selectedSiteId
+}))
 const visibleQueues = computed(() => queues.value.filter(q => !siteId.value || q.siteId === siteId.value))
 const siteName = (id: number) => props.sites.find(s => s.id === id)?.name || `网站 #${id}`
 const time = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未扫描'
@@ -139,7 +142,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
         <el-button v-if="mode === 'queues' && canManage" type="primary" @click="manageExecutors">执行器管理</el-button>
       </el-space>
     </header>
-    <div class="workflow-toolbar">
+    <div v-if="!scopedSiteId" class="workflow-toolbar">
       <el-select v-model="siteId" clearable placeholder="全部网站" aria-label="筛选网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select>
       <template v-if="mode === 'pages'">
         <el-input v-model="query" clearable placeholder="搜索页面 URL" :prefix-icon="Search" @keyup.enter="search" @clear="search"><template #append><el-button @click="search">搜索</el-button></template></el-input>
@@ -173,7 +176,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-empty v-if="!visibleQueues.length" description="请先添加采集网站" />
     </div>
     <el-dialog v-model="scanDialog" :title="form.id ? '编辑扫描页' : '新增扫描页'" width="min(620px, 94vw)" append-to-body>
-      <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="form.siteId" :disabled="!!form.id"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-form-item>
+      <el-form label-position="top"><el-form-item label="采集网站"><el-select v-model="form.siteId" :disabled="!!form.id || !!scopedSiteId"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-form-item>
         <el-form-item label="扫描页名称"><el-input v-model="form.name" maxlength="100" placeholder="例如：最新发布、热门图片" /></el-form-item>
         <el-form-item label="扫描入口 URL"><el-input v-model="form.url" maxlength="2048" placeholder="https://example.com/latest/" /></el-form-item>
         <el-form-item label="列表页上限"><el-input-number v-model="form.maxPages" :min="1" :max="1000" /></el-form-item>

@@ -33,7 +33,7 @@ const previewImages = reactive<Record<number, string>>({})
 const busy = ref('')
 const siteDialogVisible = ref(false)
 const siteConfigurationVisible = ref(false)
-const siteConfigurationTab = ref<'basic' | 'rules'>('basic')
+const siteConfigurationTab = ref<'basic' | 'rules' | 'scans'>('basic')
 const siteConfigurationLoading = ref(false)
 const siteSaveBusy = ref(false)
 const albums = ref<Album[]>([])
@@ -76,7 +76,7 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
 let polling = false
 
-type TabKey = 'overview' | 'sites' | 'scans' | 'pages' | 'queues' | 'tasks' | 'review' | 'skips'
+type TabKey = 'overview' | 'sites' | 'pages' | 'queues' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
@@ -108,7 +108,6 @@ const recentJobs = computed(() => jobs.value.slice(0, 6))
 const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
   { label: sites.value.length ? `网站与规则  ${sites.value.length}` : '网站与规则', value: 'sites' },
-  { label: '扫描页', value: 'scans' },
   { label: '采集页面', value: 'pages' },
   { label: '采集队列', value: 'queues' },
   { label: activeJobs.value.length ? `采集任务  ${activeJobs.value.length}` : '采集任务', value: 'tasks' },
@@ -330,7 +329,7 @@ async function selectSite(site: CrawlSite) {
   await loadRules()
 }
 
-async function openSiteConfiguration(site: CrawlSite, tab: 'basic' | 'rules' = 'basic') {
+async function openSiteConfiguration(site: CrawlSite, tab: 'basic' | 'rules' | 'scans' = 'basic') {
   siteConfigurationTab.value = tab
   siteConfigurationLoading.value = true
   siteConfigurationVisible.value = true
@@ -815,13 +814,13 @@ onUnmounted(() => {
           </div>
           <div class="site-stats"><span><b>{{ site.maxListPages }}</b> 列表页</span><span><b>{{ site.maxDetailPages }}</b> 图片页</span><span><b>{{ site.maxImages }}</b> 张图片</span></div>
           <p class="site-health-line">请求间隔 {{ site.minRequestIntervalMillis }} ms · 在扫描页中配置自动扫描周期</p>
-          <footer><el-button type="primary" plain :icon="Search" @click="activeTab = 'scans'">扫描页管理</el-button><el-button :icon="Setting" @click="openSiteConfiguration(site)">网站设置</el-button><el-button :icon="EditPen" @click="openSiteConfiguration(site, 'rules')">解析规则</el-button></footer>
+          <footer><el-button type="primary" plain :icon="Search" @click="openSiteConfiguration(site, 'scans')">扫描页管理</el-button><el-button :icon="Setting" @click="openSiteConfiguration(site)">网站设置</el-button><el-button :icon="EditPen" @click="openSiteConfiguration(site, 'rules')">解析规则</el-button></footer>
         </article>
       </div>
       <el-empty v-else description="尚未配置采集网站"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
     </section>
 
-    <CrawlWorkflowPanel v-else-if="activeTab === 'scans' || activeTab === 'pages' || activeTab === 'queues'" :mode="activeTab" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+    <CrawlWorkflowPanel v-else-if="activeTab === 'pages' || activeTab === 'queues'" :mode="activeTab" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
@@ -926,6 +925,7 @@ onUnmounted(() => {
         <el-tabs v-model="siteConfigurationTab" class="site-configuration-tabs" stretch>
           <el-tab-pane label="网站设置" name="basic" />
           <el-tab-pane label="解析规则" name="rules" />
+          <el-tab-pane label="扫描页" name="scans" />
         </el-tabs>
         <div v-if="!siteConfigurationLoading" class="site-configuration-panels">
           <el-card v-show="siteConfigurationTab === 'basic'" class="site-editor surface-card" shadow="never">
@@ -936,7 +936,7 @@ onUnmounted(() => {
                 <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
                 <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
               </el-row>
-              <el-alert type="info" :closable="false" title="扫描入口与周期请在“扫描页”中单独管理。" />
+              <el-alert type="info" :closable="false" title="扫描入口与周期请在当前配置弹窗的“扫描页”标签中管理。" />
               <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
                 :proxies="inspectionProxies" :loading="inspectionBusy === 'edit'"
                 @refresh="loadInspectionProxies" @inspect="inspectSite('edit')" />
@@ -988,7 +988,7 @@ onUnmounted(() => {
                   <el-col :xs="24" :md="12"><el-form-item label="详情下一页选择器"><el-input v-model="form.detailNextSelector" placeholder="可留空" /></el-form-item></el-col>
                   <el-col :xs="24" :md="12"><el-form-item label="每个详情页组上限"><el-input-number v-model="form.maxPagesPerDetail" :min="1" :max="100" controls-position="right" /></el-form-item></el-col>
                 </el-row>
-                <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" @click="siteConfigurationVisible = false; activeTab = 'scans'">管理扫描页</el-button></div>
+                <div class="form-actions"><el-button :icon="VideoPlay" :loading="busy === 'preview'" @click="testRule">测试规则</el-button><el-button :icon="CircleCheck" @click="saveRule()">保存规则</el-button><el-button type="primary" :icon="Search" @click="siteConfigurationTab = 'scans'">管理扫描页</el-button></div>
               </el-form>
             </div>
             <el-alert v-if="previewImageError" class="preview-error" type="warning" show-icon :closable="false" :title="`首个图片页解析失败：${previewImageError}`" />
@@ -997,6 +997,9 @@ onUnmounted(() => {
               <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
             </el-collapse>
           </el-card>
+          <CrawlWorkflowPanel v-if="siteConfigurationTab === 'scans' && activeSiteId" :key="activeSiteId"
+            mode="scans" :scoped-site-id="activeSiteId" :sites="sites.filter(site => site.id === activeSiteId)"
+            :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
         </div>
       </div>
       <template #footer><el-button round @click="siteConfigurationVisible = false">关闭</el-button></template>
@@ -1013,7 +1016,7 @@ onUnmounted(() => {
           <el-col :xs="24" :md="14"><el-form-item label="网站入口" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="createSiteForm.allowedHosts" placeholder="留空时自动使用起始 URL 的域名；多个域名用逗号分隔" /></el-form-item></el-col>
         </el-row>
-              <el-alert type="info" :closable="false" title="扫描入口与周期请在“扫描页”中单独管理。" />
+              <el-alert type="info" :closable="false" title="创建网站后，可在网站配置弹窗的“扫描页”标签中添加入口和设置周期。" />
         <SiteInspectionNetwork v-model:mode="createSiteForm.inspectionProxyMode" v-model:proxy-id="createSiteForm.inspectionProxyId"
           :proxies="inspectionProxies" :loading="inspectionBusy === 'create'"
           @refresh="loadInspectionProxies" @inspect="inspectSite('create')" />
