@@ -370,6 +370,7 @@ public class CrawlService {
             throw new IllegalStateException("当前任务不能继续或重试");
         }
         if (job.getPhase() == CrawlJob.Phase.DOWNLOAD || job.getPhase() == CrawlJob.Phase.REVIEW) {
+            refreshDownloadRuleSnapshot(job);
             if (emptyCompletedDownload) {
                 for (CrawlPage page : pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
                         jobId, CrawlPage.Status.SUCCEEDED)) {
@@ -396,6 +397,18 @@ public class CrawlService {
         job.setErrorMessage(null);
         job.setFinishedAt(null);
         return jobRepository.save(job);
+    }
+
+    private void refreshDownloadRuleSnapshot(CrawlJob job) {
+        if (job.getRuleId() == null) return;
+        CrawlRule rule = getRule(job.getRuleId(), job.getOwnerId());
+        CrawlSite site = getSite(rule.getSiteId(), job.getOwnerId());
+        applySiteConfig(rule, site);
+        try {
+            job.setRuleSnapshot(objectMapper.writeValueAsString(rule));
+        } catch (Exception exception) {
+            throw new IllegalStateException("无法更新任务规则快照", exception);
+        }
     }
 
     public CrawlRule getRule(Long ruleId, Long ownerId) {

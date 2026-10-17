@@ -81,17 +81,30 @@ class CrawlServiceTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    @Test void retryRevisitsSuccessfulPagesContainingFailedImages() {
+    @Test void retryRevisitsSuccessfulPagesContainingFailedImages() throws Exception {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.PARTIAL);
+        job.setRuleId(2L);
+        CrawlRule rule = new CrawlRule();
+        rule.setId(2L); rule.setOwnerId(9L); rule.setSiteId(3L);
+        rule.setImageUrlIncludes(null);
+        CrawlSite site = new CrawlSite();
+        site.setId(3L); site.setOwnerId(9L); site.setStartUrl("https://example.com/");
+        site.setBlockedHosts("");
         var page = new com.aiphoto.entity.CrawlPage();
         page.setStatus(com.aiphoto.entity.CrawlPage.Status.SUCCEEDED);
         when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));
+        when(ruleRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(rule));
+        when(siteRepository.findByIdAndOwnerId(3L, 9L)).thenReturn(Optional.of(site));
         when(pageRepository.pagesWithFailedAssets(1L)).thenReturn(List.of(page));
+        when(jobRepository.save(job)).thenReturn(job);
         crawlService.prepareResumeOrRetry(1L, 9L);
         assertThat(page.getStatus()).isEqualTo(com.aiphoto.entity.CrawlPage.Status.PENDING);
         assertThat(job.getPhase()).isEqualTo(CrawlJob.Phase.DOWNLOAD);
         assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.QUEUED);
+        assertThat(job.getRuleSnapshot()).isNotBlank();
+        assertThat(new ObjectMapper().readValue(job.getRuleSnapshot(), CrawlRule.class).getImageUrlIncludes())
+                .isNull();
     }
 
     @Test
