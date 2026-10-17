@@ -67,7 +67,21 @@ const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
 const taskDetailTab = ref('images')
-const taskAssetView = ref<'table' | 'cards'>('table')
+const taskAssetViewCacheKey = (() => {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || 'null') as { id?: number | string; username?: string } | null
+    const identity = user?.id ?? user?.username
+    return identity === undefined || identity === null || identity === '' ? null : `aiphoto:crawler-task-asset-view:${identity}`
+  } catch {
+    return null
+  }
+})()
+function readTaskAssetView(): 'table' | 'cards' {
+  if (!taskAssetViewCacheKey) return 'table'
+  try { return localStorage.getItem(taskAssetViewCacheKey) === 'cards' ? 'cards' : 'table' }
+  catch { return 'table' }
+}
+const taskAssetView = ref<'table' | 'cards'>(readTaskAssetView())
 const previewViewerVisible = ref(false)
 const previewViewerAsset = ref<CrawlAsset | null>(null)
 const previewViewerIndex = ref(0)
@@ -853,6 +867,11 @@ function imageTypeLabel(asset: CrawlAsset | null) {
 }
 
 watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(taskAssetView, value => {
+  if (taskAssetViewCacheKey) {
+    try { localStorage.setItem(taskAssetViewCacheKey, value) } catch { /* View preference remains active for this page. */ }
+  }
+})
 watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
