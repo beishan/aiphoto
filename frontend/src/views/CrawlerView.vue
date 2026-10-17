@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  CircleCheck, CircleClose, Collection, Connection, Delete, Download, EditPen, FolderOpened,
-  List, Loading, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, Warning,
+  ArrowLeft, ArrowRight, CircleCheck, Close, Collection, Connection, Delete, Download, EditPen,
+  FolderOpened, List, Loading, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, View, Warning,
 } from '@element-plus/icons-vue'
 import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
@@ -67,6 +67,14 @@ const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
 const taskDetailTab = ref('images')
 const taskAssetView = ref<'table' | 'cards'>('table')
+const previewViewerVisible = ref(false)
+const previewViewerAsset = ref<CrawlAsset | null>(null)
+const previewViewerIndex = ref(0)
+const previewViewerUrl = ref('')
+const previewViewerLoading = ref(false)
+const previewViewerPages = reactive<Record<number, CrawlAsset[]>>({})
+let previewViewerRequest = 0
+let previewViewerObjectUrl = ''
 const taskKind = ref('')
 const taskSiteId = ref<number>()
 const taskPage = ref(1)
@@ -313,6 +321,87 @@ async function loadPreviews() {
       previewImages[asset.id] = URL.createObjectURL(data)
     } catch { /* failed assets intentionally have no preview */ }
   }))
+}
+
+function revokePreviewViewerObjectUrl() {
+  if (previewViewerObjectUrl) URL.revokeObjectURL(previewViewerObjectUrl)
+  previewViewerObjectUrl = ''
+  previewViewerUrl.value = ''
+}
+
+async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
+  previewViewerIndex.value = index
+  previewViewerAsset.value = asset
+  previewViewerRequest += 1
+  const request = previewViewerRequest
+  revokePreviewViewerObjectUrl()
+  previewViewerLoading.value = true
+  try {
+    const { data } = await crawlApi.content(asset.id)
+    const objectUrl = URL.createObjectURL(data)
+    if (request !== previewViewerRequest || !previewViewerVisible.value) {
+      URL.revokeObjectURL(objectUrl)
+      return
+    }
+    previewViewerObjectUrl = objectUrl
+    previewViewerUrl.value = objectUrl
+  } catch {
+    if (request === previewViewerRequest && previewViewerVisible.value) {
+      previewViewerUrl.value = previewImages[asset.id] || ''
+    }
+  } finally {
+    if (request === previewViewerRequest) previewViewerLoading.value = false
+  }
+}
+
+function openAssetPreview(asset: CrawlAsset) {
+  const indexInPage = assets.value.findIndex(item => item.id === asset.id)
+  if (indexInPage < 0 || !previewImages[asset.id]) return
+  previewViewerPages[assetPage.value] = assets.value.slice()
+  previewViewerVisible.value = true
+  void loadPreviewViewerAsset(asset, assetPage.value * assetPageSize + indexInPage)
+}
+
+async function stepPreviewViewer(direction: -1 | 1) {
+  if (!previewViewerVisible.value || previewViewerLoading.value) return
+  const targetIndex = previewViewerIndex.value + direction
+  if (targetIndex < 0 || targetIndex >= assetTotal.value || !activeJobId.value) return
+  const targetPage = Math.floor(targetIndex / assetPageSize)
+  let pageAssets = previewViewerPages[targetPage]
+  if (!pageAssets) {
+    try {
+      const { data } = await crawlApi.assets(activeJobId.value, targetPage, assetPageSize)
+      pageAssets = data.content
+      previewViewerPages[targetPage] = pageAssets
+    } catch {
+      ElMessage.error('无法加载相邻页面的图片列表')
+      return
+    }
+  }
+  if (!previewViewerVisible.value) return
+  const asset = pageAssets[targetIndex % assetPageSize]
+  if (asset) await loadPreviewViewerAsset(asset, targetIndex)
+}
+
+function closePreviewViewer() {
+  previewViewerVisible.value = false
+  previewViewerRequest += 1
+  previewViewerLoading.value = false
+  previewViewerAsset.value = null
+  revokePreviewViewerObjectUrl()
+}
+
+function handlePreviewViewerKeydown(event: KeyboardEvent) {
+  if (!previewViewerVisible.value) return
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    void stepPreviewViewer(-1)
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    void stepPreviewViewer(1)
+  } else if (event.key === 'Escape') {
+    closePreviewViewer()
+  }
 }
 
 async function saveRule(showMessage = true) {
@@ -741,7 +830,8 @@ function formatBytes(size?: number) {
   return size < 1024 * 1024 ? `${Math.round(size / 1024)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-function imageTypeLabel(asset: CrawlAsset) {
+function imageTypeLabel(asset: CrawlAsset | null) {
+  if (!asset) return '图片'
   const mimeSubtype = asset.contentType?.split('/').pop()?.split(';')[0]?.trim()
   let imagePath = ''
   try { imagePath = new URL(asset.imageUrl).pathname } catch { /* use the original filename fallback */ }
@@ -791,9 +881,13 @@ onMounted(async () => {
     } catch { /* A transient polling failure is retried on the next interval. */ }
     finally { polling = false }
   }, 2500)
+  window.addEventListener('keydown', handlePreviewViewerKeydown)
 })
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
+  window.removeEventListener('keydown', handlePreviewViewerKeydown)
+  previewViewerRequest += 1
+  revokePreviewViewerObjectUrl()
   Object.values(previewImages).forEach(URL.revokeObjectURL)
 })
 </script>
@@ -1154,9 +1248,8 @@ onUnmounted(() => {
                 <span class="task-image-info-tag task-image-type-tag">{{ imageTypeLabel(asset) }}</span>
                 <span class="task-image-info-tag task-image-dimensions-tag">{{ asset.width && asset.height ? `${asset.width} × ${asset.height}` : '未知尺寸' }} · {{ asset.fileSize ? formatBytes(asset.fileSize) : '未知大小' }}</span>
                 <span v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-info-tag task-image-proxy-tag">代理：{{ imageProgress.currentProxyName }}</span>
+                <el-button class="task-image-preview-button" circle size="small" :icon="View" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
                 <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="task-image-progress-track"><i /></span></div>
-                <span v-if="asset.status === 'DOWNLOADED'" class="task-image-result task-image-result-success" title="下载成功" aria-label="下载成功"><el-icon><CircleCheck /></el-icon></span>
-                <span v-else-if="asset.status === 'FAILED'" class="task-image-result task-image-result-failed" title="下载失败" aria-label="下载失败"><el-icon><CircleClose /></el-icon></span>
               </div>
               <div v-if="asset.errorMessage" class="task-image-card-copy"><small class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
             </article>
@@ -1182,6 +1275,32 @@ onUnmounted(() => {
         <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
       </el-card>
     </el-drawer>
+    <Teleport to="body">
+      <Transition name="collection-preview">
+        <div v-if="previewViewerVisible" class="collection-preview-overlay" @click.self="closePreviewViewer">
+          <section class="collection-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
+            <header class="collection-preview-header">
+              <strong :title="previewViewerAsset?.originalFilename || ''">{{ previewViewerAsset?.originalFilename || '图片预览' }}</strong>
+              <span>{{ previewViewerIndex + 1 }} / {{ assetTotal }}</span>
+              <el-button class="collection-preview-close" circle :icon="Close" aria-label="关闭预览" @click="closePreviewViewer" />
+            </header>
+            <div class="collection-preview-stage">
+              <el-button class="collection-preview-nav collection-preview-previous" circle :icon="ArrowLeft" aria-label="上一张" :disabled="previewViewerIndex <= 0 || previewViewerLoading" @click="stepPreviewViewer(-1)" />
+              <div class="collection-preview-image-wrap">
+                <img v-if="previewViewerUrl" :src="previewViewerUrl" :alt="previewViewerAsset?.originalFilename || '采集图片预览'" />
+                <span v-else>{{ previewViewerLoading ? '正在加载原图…' : '图片预览不可用' }}</span>
+              </div>
+              <el-button class="collection-preview-nav collection-preview-next" circle :icon="ArrowRight" aria-label="下一张" :disabled="previewViewerIndex + 1 >= assetTotal || previewViewerLoading" @click="stepPreviewViewer(1)" />
+            </div>
+            <footer class="collection-preview-footer">
+              <span>{{ imageTypeLabel(previewViewerAsset) }}</span>
+              <span>{{ previewViewerAsset?.width && previewViewerAsset?.height ? `${previewViewerAsset.width} × ${previewViewerAsset.height}` : '未知尺寸' }}</span>
+              <span>{{ previewViewerAsset?.fileSize ? formatBytes(previewViewerAsset.fileSize) : '未知大小' }}</span>
+            </footer>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
     <el-dialog v-model="filteredImagesDialogVisible" append-to-body width="min(1000px, calc(100vw - 28px))" class="filtered-images-dialog">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Warning /></el-icon></span><div><h2>图片过滤详情</h2><p>{{ selectedFilteredPage?.name || selectedFilteredPage?.url }}</p></div></div></template>
       <el-table :data="filteredImageRows(selectedFilteredPage)" max-height="65vh" table-layout="fixed">
