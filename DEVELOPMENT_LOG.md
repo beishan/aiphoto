@@ -14,8 +14,7 @@
 
 ### 验证
 
-- `backend`：`mvn test-compile -DskipTests` 成功；`git diff --check` 通过。
-- `CrawlServiceTest` 已编译，但测试运行受当前 Windows 环境限制：Mockito 动态加载 Java agent 时管道访问被拒绝，测试进程未能完成。
+- `backend`：`mvn test-compile -DskipTests` 成功；`mvn -Dtest=CrawlServiceTest test` 通过（22 项）；`git diff --check` 通过。
 
 
 本文件记录每次需求开发的目标、主要改动和验证结果，最新记录放在最前面。
