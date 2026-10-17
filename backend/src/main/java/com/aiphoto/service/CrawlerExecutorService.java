@@ -246,7 +246,6 @@ public class CrawlerExecutorService {
         CrawlerNodeGroup group = id == null ? new CrawlerNodeGroup() : groupRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("节点组不存在"));
         if (id != null && !Objects.equals(group.getProxyId(), proxyId)) throw new IllegalArgumentException("节点组不属于该系统代理");
-        if (id != null && groupUsed(id)) throw new IllegalArgumentException("节点组已被执行器引用，请先解除引用再编辑");
         group.setProxyId(proxyId); group.setName(request.name().trim()); group.setControlGroup(request.controlGroup());
         group.setHost(request.host().trim()); group.setPort(request.port()); group.setNodesJson(mapper.writeValueAsString(nodes));
         return groupView(groupRepository.saveAndFlush(group));
@@ -405,6 +404,7 @@ public class CrawlerExecutorService {
         private final Map<String, Integer> nodeAttempts = new HashMap<>();
         private final Map<String, String> failedProxies = new HashMap<>();
         private String requestUrl;
+        private RequestEntry requestEntry;
         private String proxyName;
         private String requestNode;
         private long startedNanos;
@@ -425,6 +425,7 @@ public class CrawlerExecutorService {
                 if (options.isFrozen()) throw waitFor("执行器已人工冻结", null);
                 if (state.resetPending) { resetCounters(state); state.resetPending = false; if (managedMihomo() && !readNodes(executor.getNodesJson()).contains(state.node)) state.node = null; }
                 triedNodes.clear(); failedProxies.clear(); proxyAttempts.clear(); nodeAttempts.clear(); state.requestProxyIds.clear(); forceSwitch = false;
+                requestEntry = snapshotRequestEntry();
                 requestUrl = url; requestNode = null; proxyName = null; state.activeProxyName = null; attempts = 0; startedNanos = System.nanoTime(); activeStartedNanos = startedNanos; inRequest = true;
             }
         }
@@ -447,7 +448,9 @@ public class CrawlerExecutorService {
                     prepareNode(proxy);
                     String host = proxy.getHost(); int port = proxy.getPort();
                     if (options.getNodeGroupId() != null) {
-                        var group = groupRepository.findById(options.getNodeGroupId()).orElseThrow(); host = group.getHost(); port = group.getPort();
+                        RequestEntry entry = requestEntry;
+                        if (entry == null) requestEntry = entry = snapshotRequestEntry();
+                        host = entry.host(); port = entry.port();
                     }
                     proxies.add(new CrawlerSettingsService.ProxyConfig(proxy.getId(), host, port, proxy.getUsername(), secrets.decrypt(proxy.getPasswordCiphertext())));
                 } else {
@@ -466,6 +469,11 @@ public class CrawlerExecutorService {
             }
             synchronized (CrawlerExecutorService.this) { proxies.forEach(proxy -> state.requestProxyIds.add(proxy.id())); }
             return new CrawlerSettingsService.NetworkSnapshot(direct, base.connectTimeoutSeconds(), base.requestTimeoutSeconds(), base.minRequestIntervalMillis(), base.maxRetries(), base.retryBaseDelayMillis(), List.copyOf(proxies));
+        }
+        private RequestEntry snapshotRequestEntry() {
+            if (executor == null || !managedMihomo() || options.getNodeGroupId() == null) return null;
+            CrawlerNodeGroup group = groupRepository.findById(options.getNodeGroupId()).orElseThrow();
+            return new RequestEntry(group.getHost(), group.getPort());
         }
         private WaitingException waitFor(String reason, Instant until) {
             state.waitingJobId = state.jobId; state.waitUntil = until == null ? null : until.toString(); state.error = "执行器等待：" + reason;
@@ -633,6 +641,7 @@ public class CrawlerExecutorService {
         private boolean resetPending;
     }
     public record SwitchEvent(String time, String from, String to, boolean success, String reason) {}
+    private record RequestEntry(String host, int port) {}
     public record ProxyStateView(String key, String name, boolean available, int failures, String coolingUntil, String reason) {}
     public record ExecutorRequest(String name, boolean enabled, String proxyMode, Long proxyId, String proxyGroup,
             List<String> nodes, String switchMode, int rotateAfterRequests, int cooldownSeconds, CrawlerExecutorOptions options) {

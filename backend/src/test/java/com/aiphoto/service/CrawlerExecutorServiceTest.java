@@ -289,6 +289,26 @@ class CrawlerExecutorServiceTest {
         }
     }
 
+    @Test void editingReferencedGroupEntryTakesEffectOnNextRequestOnly() throws Exception {
+        var group = new com.aiphoto.entity.CrawlerNodeGroup(); group.setId(9L); group.setProxyId(2L); group.setName("Dedicated");
+        group.setControlGroup("Crawler"); group.setHost("old-entry"); group.setPort(7899); group.setNodesJson("[\"A\",\"B\"]");
+        when(groupRepository.findById(9L)).thenReturn(Optional.of(group));
+        when(groupRepository.saveAndFlush(group)).thenReturn(group);
+        executor.setOptionsJson("{\"nodeGroupId\":9}");
+        try (var session = service.acquire(10L)) {
+            session.begin("https://example.com/first.jpg");
+            assertThat(session.network().proxies().getFirst().host()).isEqualTo("old-entry");
+
+            service.saveGroup(2L, 9L, new CrawlerExecutorService.GroupRequest("Dedicated", "Crawler", "new-entry", 7990, List.of("A", "B")));
+            assertThat(session.network().proxies().getFirst().host()).isEqualTo("old-entry");
+            assertThat(group.getHost()).isEqualTo("new-entry");
+
+            session.begin("https://example.com/second.jpg");
+            assertThat(session.network().proxies().getFirst().host()).isEqualTo("new-entry");
+            assertThat(session.network().proxies().getFirst().port()).isEqualTo(7990);
+        }
+    }
+
     @Test void referencedNodeGroupCannotBeDeleted() {
         var group = new com.aiphoto.entity.CrawlerNodeGroup(); group.setId(9L); group.setProxyId(2L);
         when(groupRepository.findById(9L)).thenReturn(Optional.of(group)); executor.setOptionsJson("{\"nodeGroupId\":9}");
