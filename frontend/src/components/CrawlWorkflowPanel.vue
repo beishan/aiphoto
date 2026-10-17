@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Download, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { crawlApi, type CrawlScanPage, type DiscoveredPage, type CrawlSiteQueue } from '@/api/crawlApi'
 import { settingApi, type CrawlerExecutor, type CrawlerProxy } from '@/api/settingApi'
 import type { CrawlJob, CrawlSite } from '@/types'
@@ -12,6 +12,8 @@ const emit = defineEmits<{ 'open-job': [job: CrawlJob]; changed: [] }>()
 const scans = ref<CrawlScanPage[]>([])
 const pages = ref<DiscoveredPage[]>([])
 const selectedPageIds = ref<number[]>([])
+const selectedPages = reactive(new Map<number, DiscoveredPage>())
+const selectedCollectableIds = computed(() => [...selectedPages.values()].filter(page => page.collectable).map(page => page.id))
 const pageTable = ref()
 const queues = ref<CrawlSiteQueue[]>([])
 const siteId = ref<number>()
@@ -47,7 +49,8 @@ const visibleQueues = computed(() => queues.value.filter(q => {
 const siteName = (id: number) => props.sites.find(s => s.id === id)?.name || `网站 #${id}`
 const time = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未扫描'
 const status = (value: string) => ({ PENDING: '待采集', QUEUED: '排队中', RUNNING: '运行中', PAUSED: '已暂停', COMPLETED: '已完成', PARTIAL: '部分成功', FAILED: '失败', CANCELLED: '已取消' }[value] || value)
-const fail = (error: any) => ElMessage.error(error?.response?.data?.message || '操作失败，请重试')
+const errorText = (error: any) => error?.response?.data?.message || error?.message || '操作失败，请重试'
+const fail = (error: any) => ElMessage.error(errorText(error))
 let timer: ReturnType<typeof setInterval> | undefined
 let requestId = 0
 
@@ -75,16 +78,17 @@ async function load(silent = false) {
 }
 function resetPageSelection() {
   selectedPageIds.value = []
+  selectedPages.clear()
   pageTable.value?.clearSelection()
 }
 function search() { resetPageSelection(); pageNumber.value = 1; void load() }
 function changePage() { resetPageSelection(); void load() }
 function onPageSelectionChange(selection: DiscoveredPage[]) {
   const visibleIds = new Set(pages.value.map(page => page.id))
-  selectedPageIds.value = [
-    ...selectedPageIds.value.filter(id => !visibleIds.has(id)),
-    ...selection.map(page => page.id),
-  ]
+  const selectedVisibleIds = new Set(selection.map(page => page.id))
+  visibleIds.forEach(id => { if (!selectedVisibleIds.has(id)) selectedPages.delete(id) })
+  selection.forEach(page => selectedPages.set(page.id, page))
+  selectedPageIds.value = [...selectedPages.keys()]
 }
 async function removePage(page: DiscoveredPage) {
   try { await ElMessageBox.confirm('删除此扫描结果？关联的采集任务和已下载图片会保留。', '删除待采集页', { type: 'warning' }) }
@@ -108,6 +112,35 @@ async function removeSelectedPages() {
     await load()
     ElMessage.success(`已删除 ${ids.length} 个待采集页`)
   } catch (error) { fail(error) }
+}
+async function collectSelectedPages() {
+  const ids = [...selectedCollectableIds.value]
+  if (!ids.length) return
+  action.value = 'collect-selected'
+  const succeeded: number[] = []
+  const failures: string[] = []
+  try {
+    for (let offset = 0; offset < ids.length; offset += 10) {
+      const batch = ids.slice(offset, offset + 10)
+      const results = await Promise.all(batch.map(async id => {
+        try { await crawlApi.collectPage(id); return { id } }
+        catch (error) { return { id, error } }
+      }))
+      results.forEach(result => {
+        if ('error' in result) {
+          const page = selectedPages.get(result.id)
+          failures.push(`${page?.name || page?.url || `#${result.id}`}: ${errorText(result.error)}`)
+        } else succeeded.push(result.id)
+      })
+    }
+    emit('changed')
+    resetPageSelection()
+    await load()
+    if (failures.length) {
+      const details = failures.slice(0, 3).join('；')
+      ElMessage.warning(`已创建 ${succeeded.length} 个采集任务，${failures.length} 个失败：${details}${failures.length > 3 ? '；…' : ''}`)
+    } else ElMessage.success(`已创建 ${succeeded.length} 个采集任务并加入网站队列`)
+  } finally { action.value = '' }
 }
 function editScan(scan?: CrawlScanPage) {
   delete form.id
@@ -204,7 +237,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="最近扫描" min-width="165"><template #default="{ row }">{{ time(row.lastScanAt) }}</template></el-table-column>
       <el-table-column label="管理" width="125"><template #default="{ row }"><el-button link type="primary" @click="editScan(row)">编辑</el-button><el-button link type="danger" @click="removeScan(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length" @click="removeSelectedPages">批量删除</el-button><el-button :icon="Refresh" circle aria-label="刷新列表" @click="load()" /></div>
+    <div v-if="mode === 'pages'" class="page-bulk-bar"><span>已选择 {{ selectedPageIds.length }} 条</span><el-button type="danger" plain size="small" :disabled="!selectedPageIds.length || !!action" @click="removeSelectedPages">批量删除</el-button><el-button type="primary" plain size="small" :icon="Download" :loading="action === 'collect-selected'" :disabled="!selectedCollectableIds.length || !!action" @click="collectSelectedPages">批量采集（{{ selectedCollectableIds.length }}）</el-button><el-button :icon="Refresh" circle aria-label="刷新列表" :disabled="!!action" @click="load()" /></div>
     <el-table v-if="mode === 'pages'" ref="pageTable" :data="pages" row-key="id" max-height="58vh" empty-text="尚无扫描结果，运行扫描页任务后会自动出现" @selection-change="onPageSelectionChange">
       <el-table-column type="selection" width="48" />
       <el-table-column label="采集" width="90" fixed="left"><template #default="{ row }"><el-button v-if="row.collectable" type="primary" plain size="small" :loading="action === `collect-${row.id}`" @click="collect(row)">采集</el-button></template></el-table-column>
