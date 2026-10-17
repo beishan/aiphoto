@@ -61,7 +61,7 @@ public class CrawlWorkflowController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         return workflow.pages(owner(auth), siteId, query, pending,
-                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(200, size))));
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(1000, size))));
     }
 
     @PostMapping("/collection-pages/{id}/collect")

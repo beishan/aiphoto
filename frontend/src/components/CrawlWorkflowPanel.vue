@@ -213,7 +213,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
       <el-table-column label="操作" width="145" fixed="right"><template #default="{ row }"><el-button v-if="row.collectionJobId" link type="primary" @click="openTask(row.collectionJobId)">查看任务</el-button><el-button link type="danger" @click="removePage(row)">删除</el-button></template></el-table-column>
     </el-table>
-    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="changePage" @size-change="search" />
+    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100, 200, 1000]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="changePage" @size-change="search" />
     <div v-if="mode === 'queues'" class="queue-grid">
       <article v-for="item in visibleQueues" :key="item.siteId" class="queue-card">
         <header><h3>{{ item.name }}</h3><el-tag :type="item.dedicated ? 'primary' : 'info'">{{ item.dedicated ? '专用队列' : '共享执行器' }}</el-tag></header>
