@@ -32,6 +32,42 @@ class CrawlWorkerExecutorTest {
     @Mock CrawlAssetSourceRepository sources;
     @InjectMocks CrawlWorker worker;
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "<p>没有图片</p>, 图片选择器未匹配到元素",
+            "<img title='photo'>, 没有有效图片地址",
+            "<img src='/blocked.jpg'>, 全部被包含 / 排除规则过滤"
+    })
+    void emptyExtractionReportsCauseInsteadOfSuccess(String html, String reason) throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
+        rule.setImageUrlExcludes("blocked");
+        com.aiphoto.entity.CrawlPage page = new com.aiphoto.entity.CrawlPage();
+        page.setId(2L); page.setUrl("https://example.com/detail");
+        when(executors.acquire(1L)).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(pages.findByJobIdAndStatusAndIncludedTrueOrderById(
+                1L, com.aiphoto.entity.CrawlPage.Status.PENDING)).thenReturn(java.util.List.of(page));
+        when(pages.countByJobIdAndStatusIn(eq(1L), anyList())).thenReturn(1L);
+        when(fetcher.fetch(anyString(), any(), anyLong(), anyLong())).thenReturn(
+                new SafeHttpFetcher.FetchedResource(java.net.URI.create(page.getUrl()),
+                        "text/html", html.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        worker.download(1L);
+
+        assertThat(page.getStatus()).isEqualTo(com.aiphoto.entity.CrawlPage.Status.FAILED);
+        assertThat(page.getErrorMessage()).contains(reason).contains("通过过滤 0");
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.PARTIAL);
+        assertThat(job.getFailCount()).isEqualTo(1);
+        verify(fetcher, never()).fetchImage(anyString(), any(), anyLong(), anyLong());
+        verify(session, never()).taskCompleted(anyString());
+        verify(session).close();
+    }
+
     @Test void controlFailurePausesDiscoveryAndReleasesExecutor() throws Exception {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
         CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");

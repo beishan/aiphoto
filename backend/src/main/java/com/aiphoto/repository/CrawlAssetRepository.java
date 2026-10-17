@@ -45,6 +45,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     Optional<CrawlAsset> findByIdAndJobId(Long id, Long jobId);
     Optional<CrawlAsset> findByJobIdAndUrlHash(Long jobId, String urlHash);
     List<CrawlAsset> findByIdInAndJobId(List<Long> ids, Long jobId);
+    long countByJobId(Long jobId);
     long countByJobIdAndStatus(Long jobId, CrawlAsset.Status status);
     List<CrawlAsset> findByJobIdAndStatus(Long jobId, CrawlAsset.Status status);
     List<CrawlAsset> findByJobIdAndStatusAndFileHashPhashIsNotNullOrderById(

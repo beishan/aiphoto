@@ -58,6 +58,29 @@ class CrawlServiceTest {
                 crawlerSettingsService);
     }
 
+    @Test void emptyCompletedDownloadCanBeRetriedForDiagnosis() {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
+        job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);
+        var page = new com.aiphoto.entity.CrawlPage();
+        page.setStatus(com.aiphoto.entity.CrawlPage.Status.SUCCEEDED);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));
+        when(pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
+                1L, com.aiphoto.entity.CrawlPage.Status.SUCCEEDED)).thenReturn(List.of(page));
+        crawlService.prepareResumeOrRetry(1L, 9L);
+        assertThat(page.getStatus()).isEqualTo(com.aiphoto.entity.CrawlPage.Status.PENDING);
+        assertThat(job.getPhase()).isEqualTo(CrawlJob.Phase.DOWNLOAD);
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.QUEUED);
+    }
+
+    @Test void completedDownloadWithImageRecordsCannotBeRetried() {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
+        job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));
+        when(assetRepository.countByJobId(1L)).thenReturn(1L);
+        assertThatThrownBy(() -> crawlService.prepareResumeOrRetry(1L, 9L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     @Test void retryRevisitsSuccessfulPagesContainingFailedImages() {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.PARTIAL);

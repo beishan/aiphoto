@@ -175,8 +175,12 @@ public class CrawlWorker {
                 if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
                         >= rule.getMaxImages()) break;
                 page.setStatus(CrawlPage.Status.RUNNING);
+                page.setErrorMessage(null);
                 pageRepository.save(page);
                 try {
+                    int matchedImages = 0;
+                    int validImageUrls = 0;
+                    int acceptedImageUrls = 0;
                     ArrayDeque<String> detailQueue = new ArrayDeque<>();
                     Set<String> detailVisited = new HashSet<>();
                     detailQueue.add(page.getUrl());
@@ -193,13 +197,16 @@ public class CrawlWorker {
                         for (Element element : document.select(rule.getImageSelector())) {
                             if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
                                     >= rule.getMaxImages()) break;
+                            matchedImages++;
                             String imageUrl = CrawlRuleMatcher.extractImageUrl(
                                     element, rule.getImageAttributes(), resource.finalUri());
                             if (imageUrl == null) continue;
+                            validImageUrls++;
                             if (!CrawlRuleMatcher.matches(
                                     imageUrl, rule.getImageUrlIncludes(), rule.getImageUrlExcludes())) {
                                 continue;
                             }
+                            acceptedImageUrls++;
                             downloadAsset(jobId, job.getOwnerId(), page, rule, imageUrl);
                         }
                         if (rule.getDetailNextSelector() != null && !rule.getDetailNextSelector().isBlank()) {
@@ -208,6 +215,15 @@ public class CrawlWorker {
                                 if (!next.isBlank()) detailQueue.addLast(next);
                             }
                         }
+                    }
+                    if (acceptedImageUrls == 0) {
+                        String reason = matchedImages == 0
+                                ? "图片选择器未匹配到元素，请检查页面内容及图片选择器"
+                                : validImageUrls == 0
+                                        ? "匹配元素中没有有效图片地址，请检查图片属性配置"
+                                        : "图片地址全部被包含 / 排除规则过滤";
+                        throw new IllegalArgumentException(reason + "（匹配元素 " + matchedImages
+                                + "，有效地址 " + validImageUrls + "，通过过滤 0）");
                     }
                     page.setStatus(CrawlPage.Status.SUCCEEDED);
                     executorService.current().pageCompleted(page.getId());

@@ -342,12 +342,22 @@ public class CrawlService {
     @Transactional
     public CrawlJob prepareResumeOrRetry(Long jobId, Long ownerId) {
         CrawlJob job = getJob(jobId, ownerId);
+        boolean emptyCompletedDownload = job.getPhase() == CrawlJob.Phase.REVIEW
+                && job.getStatus() == CrawlJob.Status.COMPLETED
+                && assetRepository.countByJobId(jobId) == 0;
         if (job.getStatus() == CrawlJob.Status.RUNNING || job.getStatus() == CrawlJob.Status.QUEUED
                 || job.getStatus() == CrawlJob.Status.CANCELLED || job.getPhase() == CrawlJob.Phase.REVIEW
-                && job.getStatus() == CrawlJob.Status.COMPLETED) {
+                && job.getStatus() == CrawlJob.Status.COMPLETED && !emptyCompletedDownload) {
             throw new IllegalStateException("当前任务不能继续或重试");
         }
         if (job.getPhase() == CrawlJob.Phase.DOWNLOAD || job.getPhase() == CrawlJob.Phase.REVIEW) {
+            if (emptyCompletedDownload) {
+                for (CrawlPage page : pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
+                        jobId, CrawlPage.Status.SUCCEEDED)) {
+                    page.setStatus(CrawlPage.Status.PENDING);
+                    page.setErrorMessage(null);
+                }
+            }
             for (CrawlPage page : pageRepository.pagesWithFailedAssets(jobId)) {
                 page.setStatus(CrawlPage.Status.PENDING);
                 page.setErrorMessage(null);

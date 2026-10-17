@@ -237,7 +237,7 @@ async function loadJobDetail() {
   const [jobResult, pageResult, assetResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
-    crawlApi.assets(jobId, assetPage.value, assetPageSize, assetStatus.value, exactDuplicateOnly.value, similarOnly.value),
+    crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value),
   ])
   if (request !== detailRequest || jobId !== activeJobId.value) return
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
@@ -259,7 +259,7 @@ async function loadJobDetail() {
 }
 
 async function loadPreviews() {
-  const wanted = reviewAssets.value.filter(asset => !['FAILED', 'SKIPPED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
+  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['FAILED', 'SKIPPED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
@@ -702,6 +702,7 @@ watch(activeTab, tab => {
     activeJobId.value = jobs.value[0].id
   }
 })
+watch(taskDrawerVisible, () => { assetPage.value = 0; void loadJobDetail() })
 watch(assetStatus, () => { assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void loadJobDetail() })
@@ -1033,11 +1034,11 @@ onUnmounted(() => {
 
     <el-dialog append-to-body v-model="pageAssetsDialogVisible" width="min(980px, calc(100vw - 28px))" destroy-on-close class="crawler-controls">
       <template #header><div class="dialog-heading"><span class="dialog-icon"><el-icon><Picture /></el-icon></span><div><h2>{{ selectedSourcePage?.name || '链接采集结果' }}</h2><p>{{ selectedSourcePage?.url }}</p></div></div></template>
-      <el-alert v-if="!pageAssets.length" type="info" :closable="false" title="这个链接尚未提取到图片，或还未进入下载阶段。" />
+      <el-alert v-if="!pageAssets.length" type="info" :closable="false" :title="selectedSourcePage?.errorMessage || '这个链接暂无图片记录；请查看任务执行状态及页面失败原因。'" />
       <div v-else class="asset-grid page-result-grid">
         <el-card v-for="asset in pageAssets" :key="asset.id" class="asset-card surface-card" shadow="never">
           <div class="asset-preview"><el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" /><div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div></div>
-          <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.status }} · {{ formatBytes(asset.fileSize) }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small></div>
+          <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.status }} · {{ formatBytes(asset.fileSize) }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
         </el-card>
       </div>
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
@@ -1062,17 +1063,19 @@ onUnmounted(() => {
           <el-space class="task-actions" wrap>
             <el-button v-if="['DISCOVERY','AWAITING_CONFIRMATION'].includes(activeJob.phase)" type="primary" :icon="Download" round @click="taskDrawerVisible = false; activeTab = 'pages'">前往采集页面</el-button>
             <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
-            <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
+            <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status) || (activeJob.phase === 'REVIEW' && activeJob.status === 'COMPLETED' && assetTotal === 0)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
             <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
             <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="taskDrawerVisible = false; activeTab = 'review'">进入待整理区</el-button>
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>
-          <el-table v-if="activeJob.sourcePageId" :data="assets" max-height="260" empty-text="正在等待采集图片">
+          <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看下方页面失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
+          <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" max-height="260" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看下方页面原因'">
+            <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" prop="status" width="120" />
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
-          <el-pagination v-if="activeJob.sourcePageId && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
+          <el-pagination v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />
           <el-divider />
           <div class="card-heading page-heading"><div><h3>图片页清单</h3><p>扫描发现的页面可在采集页面中创建独立任务。</p></div><el-space v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" wrap><el-button size="small" @click="setCurrentPagesIncluded(true)">保留本页</el-button><el-button size="small" @click="setCurrentPagesIncluded(false)">排除本页</el-button></el-space></div>
           <el-input v-model="pageQuery" class="page-search" clearable placeholder="搜索图片页名称或 URL" :prefix-icon="Search" @keyup.enter="searchPages" @clear="searchPages"><template #append><el-button @click="searchPages">搜索</el-button></template></el-input>
@@ -1080,6 +1083,7 @@ onUnmounted(() => {
             <el-table-column v-if="activeJob.phase === 'AWAITING_CONFIRMATION'" label="保留" width="72" align="center"><template #default="{ row }"><el-checkbox :model-value="row.included" @change="onPageIncludedChange(row, $event)" /></template></el-table-column>
             <el-table-column label="图片页名称 / URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><span :class="{ excluded: !row.included }">{{ row.name || row.url }}</span><small v-if="row.name" class="source-page-url">{{ row.url }}</small></template></el-table-column>
           <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCEEDED' ? 'success' : 'info'" effect="light" round>{{ row.status }}</el-tag></template></el-table-column>
+          <el-table-column label="页面失败原因" prop="errorMessage" min-width="240" />
           <el-table-column label="采集结果" width="110"><template #default="{ row }"><el-button link type="primary" @click="viewPageAssets(row)">查看图片</el-button></template></el-table-column>
           </el-table>
           <el-pagination v-if="pageTotal > pagePageSize" class="pagination" layout="prev, pager, next, total" :current-page="pagePage + 1" :page-size="pagePageSize" :total="pageTotal" @current-change="changePageListPage" />
