@@ -172,8 +172,6 @@ public class CrawlWorker {
                 if (page.getCollectionJobId() != null) continue;
                 if (stopped(jobId)) return;
                 if (!queueService.renew(jobId, workerId)) return;
-                if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
-                        >= rule.getMaxImages()) break;
                 page.setStatus(CrawlPage.Status.RUNNING);
                 page.setErrorMessage(null);
                 pageRepository.save(page);
@@ -195,8 +193,6 @@ public class CrawlWorker {
                         Document document = Jsoup.parse(
                                 new String(resource.bytes(), StandardCharsets.UTF_8), resource.finalUri().toString());
                         for (Element element : document.select(rule.getImageSelector())) {
-                            if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
-                                    >= rule.getMaxImages()) break;
                             matchedImages++;
                             String imageUrl = CrawlRuleMatcher.extractImageUrl(
                                     element, rule.getImageAttributes(), resource.finalUri());
@@ -207,7 +203,7 @@ public class CrawlWorker {
                                 continue;
                             }
                             acceptedImageUrls++;
-                            downloadAsset(jobId, job.getOwnerId(), page, rule, imageUrl);
+                            registerAsset(jobId, page, imageUrl);
                         }
                         if (rule.getDetailNextSelector() != null && !rule.getDetailNextSelector().isBlank()) {
                             for (Element link : document.select(rule.getDetailNextSelector())) {
@@ -245,6 +241,19 @@ public class CrawlWorker {
                         totalFailures);
                 job.setPagesProcessed(processed);
             }
+            // Publish all discovered URLs before starting any image download.
+            for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderById(
+                    jobId, CrawlAsset.Status.PENDING)) {
+                if (stopped(jobId) || !queueService.renew(jobId, workerId)) return;
+                if (assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED)
+                        >= rule.getMaxImages()) {
+                    asset.setStatus(CrawlAsset.Status.SKIPPED);
+                    asset.setErrorMessage("已达到任务图片下载数量上限");
+                    assetRepository.save(asset);
+                    continue;
+                }
+                downloadAsset(jobId, job.getOwnerId(), rule, asset);
+            }
             if (stopped(jobId)) return;
             job = jobRepository.findById(jobId).orElseThrow();
             job.setPhase(CrawlJob.Phase.REVIEW);
@@ -268,16 +277,9 @@ public class CrawlWorker {
             page.setErrorMessage(null);
             pageRepository.save(page);
         }
-        for (CrawlAsset asset : assetRepository.findByJobIdAndStatus(
-                jobId, CrawlAsset.Status.PENDING)) {
-            asset.setStatus(CrawlAsset.Status.FAILED);
-            asset.setErrorMessage("上次执行中断，已重新处理来源页面");
-            assetRepository.save(asset);
-        }
     }
 
-    private void downloadAsset(
-            Long jobId, Long ownerId, CrawlPage page, CrawlRule rule, String imageUrl) throws Exception {
+    private void registerAsset(Long jobId, CrawlPage page, String imageUrl) {
         String normalized = SafeHttpFetcher.normalize(imageUrl);
         String urlHash = SafeHttpFetcher.urlHash(normalized);
         CrawlAsset asset = assetRepository.findByJobIdAndUrlHash(jobId, urlHash).orElse(null);
@@ -293,16 +295,21 @@ public class CrawlWorker {
             asset = assetRepository.save(asset);
         }
         recordSource(asset, page);
-        if (asset.getStatus() != CrawlAsset.Status.FAILED
-                && asset.getStatus() != CrawlAsset.Status.PENDING) return;
-        asset.setStatus(CrawlAsset.Status.PENDING);
-        asset.setErrorMessage(null);
-        asset = assetRepository.save(asset);
-        var skip = imageSkipRepository.findByOwnerIdAndUrlHash(ownerId, urlHash).orElse(null);
-        if (skip != null && normalized.equals(skip.getNormalizedUrl())) {
+        if (asset.getStatus() == CrawlAsset.Status.FAILED) {
+            asset.setStatus(CrawlAsset.Status.PENDING);
+            asset.setErrorMessage(null);
+            assetRepository.save(asset);
+        }
+    }
+
+    private void downloadAsset(
+            Long jobId, Long ownerId, CrawlRule rule, CrawlAsset asset) throws Exception {
+        String imageUrl = asset.getImageUrl();
+        var skip = imageSkipRepository.findByOwnerIdAndUrlHash(ownerId, asset.getUrlHash()).orElse(null);
+        if (skip != null && asset.getNormalizedUrl().equals(skip.getNormalizedUrl())) {
             skip.setSkipCount(skip.getSkipCount() + 1);
             skip.setLastSkippedAt(LocalDateTime.now());
-            if (skip.getSourcePageUrl() == null) skip.setSourcePageUrl(page.getUrl());
+            if (skip.getSourcePageUrl() == null) skip.setSourcePageUrl(asset.getSourcePageUrl());
             imageSkipRepository.save(skip);
             asset.setStatus(CrawlAsset.Status.SKIPPED);
             asset.setErrorMessage("已按永久跳过规则跳过");

@@ -259,7 +259,7 @@ async function loadJobDetail() {
 }
 
 async function loadPreviews() {
-  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['FAILED', 'SKIPPED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
+  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
@@ -543,7 +543,7 @@ async function loadPageAssets() {
     activeJobId.value, pageAssetsPage.value, 48, '', false, false, selectedSourcePage.value.id)
   pageAssets.value = data.content
   pageAssetsTotal.value = data.totalElements
-  await Promise.all(pageAssets.value.filter(asset => asset.status !== 'FAILED' && asset.status !== 'SKIPPED' && !previewImages[asset.id]).map(async asset => {
+  await Promise.all(pageAssets.value.filter(asset => !['PENDING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).map(async asset => {
     try {
       const { data: image } = await crawlApi.thumbnail(asset.id)
       previewImages[asset.id] = URL.createObjectURL(image)
@@ -1055,6 +1055,7 @@ onUnmounted(() => {
             <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
             <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>
             <el-descriptions-item label="已处理图片页">{{ activeJob.pagesProcessed }}</el-descriptions-item>
+            <el-descriptions-item v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" label="已解析图片链接">{{ assetTotal }}</el-descriptions-item>
             <el-descriptions-item label="已下载图片">{{ activeJob.imagesDownloaded }}</el-descriptions-item>
             <el-descriptions-item label="失败项目">{{ activeJob.failCount }}</el-descriptions-item>
             <el-descriptions-item label="执行次数">{{ activeJob.attemptCount }}</el-descriptions-item>
@@ -1069,10 +1070,11 @@ onUnmounted(() => {
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看下方页面失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
+          <p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p>
           <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" :data="assets" max-height="260" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看下方页面原因'">
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
-            <el-table-column label="状态" prop="status" width="120" />
+            <el-table-column label="状态" width="120"><template #default="{ row }">{{ ({ PENDING: '待下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as Record<string, string>)[row.status] || row.status }}</template></el-table-column>
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
           <el-pagination v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && assetTotal > assetPageSize" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" layout="prev, pager, next, total" @current-change="changeAssetPage" />

@@ -33,6 +33,87 @@ class CrawlWorkerExecutorTest {
     @InjectMocks CrawlWorker worker;
 
     @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"false, 10", "true, 10", "false, 1"})
+    void registersAllPagesBeforeDownloadingAndPreservesPendingOnResume(
+            boolean interrupt, int maxImages) throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
+        rule.setMaxImages(maxImages);
+        var first = new com.aiphoto.entity.CrawlPage();
+        first.setId(11L); first.setUrl("https://example.com/first");
+        var second = new com.aiphoto.entity.CrawlPage();
+        second.setId(12L); second.setUrl("https://example.com/second");
+        var sourcePages = java.util.List.of(first, second);
+        var records = new java.util.ArrayList<com.aiphoto.entity.CrawlAsset>();
+        var attempted = new java.util.ArrayList<String>();
+        when(executors.acquire(1L)).thenReturn(session);
+        when(executors.current()).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(pages.findByJobIdAndStatusAndIncludedTrueOrderById(
+                1L, com.aiphoto.entity.CrawlPage.Status.PENDING)).thenAnswer(invocation ->
+                        sourcePages.stream().filter(page -> page.getStatus()
+                                == com.aiphoto.entity.CrawlPage.Status.PENDING).toList());
+        when(fetcher.fetch(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            String url = invocation.getArgument(0);
+            String html = url.endsWith("first")
+                    ? "<img src='/a.webp'><img src='/b.webp'>"
+                    : "<img src='/a.webp'><img src='/c.webp'>";
+            return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "text/html",
+                    html.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        });
+        when(assets.findByJobIdAndUrlHash(eq(1L), anyString())).thenAnswer(invocation ->
+                records.stream().filter(asset -> asset.getUrlHash().equals(invocation.getArgument(1))).findFirst());
+        when(assets.save(any())).thenAnswer(invocation -> {
+            com.aiphoto.entity.CrawlAsset asset = invocation.getArgument(0);
+            if (asset.getId() == null) { asset.setId((long) records.size() + 1); records.add(asset); }
+            return asset;
+        });
+        when(assets.findByJobIdAndStatusOrderById(1L, com.aiphoto.entity.CrawlAsset.Status.PENDING))
+                .thenAnswer(invocation -> records.stream().filter(asset -> asset.getStatus()
+                        == com.aiphoto.entity.CrawlAsset.Status.PENDING).toList());
+        when(assets.countByJobIdAndStatus(eq(1L), any())).thenAnswer(invocation ->
+                records.stream().filter(asset -> asset.getStatus() == invocation.getArgument(1)).count());
+        when(fetcher.fetchImage(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            assertThat(records).hasSize(3);
+            assertThat(sourcePages).allMatch(page -> page.getStatus() == com.aiphoto.entity.CrawlPage.Status.SUCCEEDED);
+            String url = invocation.getArgument(0);
+            attempted.add(url);
+            if (interrupt && attempted.size() == 1) {
+                throw new CrawlerExecutorService.ControlException("暂停下载", null);
+            }
+            return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "image/webp", new byte[]{0});
+        });
+
+        worker.download(1L);
+        if (interrupt) {
+            assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.PAUSED);
+            assertThat(records).allMatch(asset -> asset.getStatus() == com.aiphoto.entity.CrawlAsset.Status.PENDING);
+            worker.download(1L);
+        }
+
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.COMPLETED);
+        assertThat(records.stream().filter(asset -> asset.getStatus()
+                == com.aiphoto.entity.CrawlAsset.Status.DOWNLOADED)).hasSize(Math.min(maxImages, 3));
+        assertThat(records).noneMatch(asset -> asset.getStatus() == com.aiphoto.entity.CrawlAsset.Status.PENDING);
+        if (maxImages == 1) {
+            assertThat(records.subList(1, 3)).allMatch(asset ->
+                    asset.getStatus() == com.aiphoto.entity.CrawlAsset.Status.SKIPPED
+                            && asset.getErrorMessage().contains("数量上限"));
+        }
+        assertThat(attempted).containsExactlyElementsOf(interrupt
+                ? java.util.List.of("https://example.com/a.webp", "https://example.com/a.webp",
+                        "https://example.com/b.webp", "https://example.com/c.webp")
+                : maxImages == 1 ? java.util.List.of("https://example.com/a.webp")
+                        : java.util.List.of("https://example.com/a.webp", "https://example.com/b.webp", "https://example.com/c.webp"));
+        verify(fetcher, times(2)).fetch(anyString(), any(), anyLong(), anyLong());
+        verify(sources, times(4)).save(any());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({
             "<p>没有图片</p>, 图片选择器未匹配到元素",
             "<img title='photo'>, 没有有效图片地址",
