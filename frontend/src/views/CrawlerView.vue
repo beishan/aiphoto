@@ -66,9 +66,15 @@ const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
 const taskKind = ref('')
 const taskSiteId = ref<number>()
+const taskPage = ref(1)
+const taskPageSize = ref(20)
 const filteredJobs = computed(() => jobs.value.filter(job =>
   (!taskSiteId.value || job.siteId === taskSiteId.value)
   && (!taskKind.value || (taskKind.value === 'scan' ? !job.sourcePageId && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(job.phase) : !!job.sourcePageId || ['DOWNLOAD', 'REVIEW'].includes(job.phase)))))
+const paginatedJobs = computed(() => {
+  const start = (taskPage.value - 1) * taskPageSize.value
+  return filteredJobs.value.slice(start, start + taskPageSize.value)
+})
 const pageAssets = ref<CrawlAsset[]>([])
 const pageAssetsTotal = ref(0)
 const pageAssetsPage = ref(0)
@@ -695,6 +701,7 @@ function formatBytes(size?: number) {
 }
 
 watch(activeJobId, () => { assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review' && activeJob.value?.phase !== 'REVIEW') {
     activeJobId.value = reviewJobs.value[0]?.id ?? null
@@ -820,7 +827,7 @@ onUnmounted(() => {
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
       <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-space>
-      <el-table :data="filteredJobs" empty-text="暂无任务，先从扫描页发起扫描" @row-click="openWorkflowJob">
+      <el-table :data="paginatedJobs" empty-text="暂无任务，先从扫描页发起扫描" @row-click="openWorkflowJob">
         <el-table-column label="任务" min-width="270"><template #default="{ row }"><el-button link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button><small class="task-site-name">{{ sites.find(site => site.id === row.siteId)?.name }}</small></template></el-table-column>
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
         <el-table-column label="进度" min-width="170"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" /></template></el-table-column>
@@ -829,6 +836,7 @@ onUnmounted(() => {
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="创建时间" width="155"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
       </el-table>
+      <el-pagination v-if="filteredJobs.length" class="pagination" v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20, 50, 100]" :total="filteredJobs.length" layout="total, sizes, prev, pager, next, jumper" @size-change="taskPage = 1" />
     </section>
 
     <section v-else-if="activeTab === 'review'" class="review-workspace" role="tabpanel">

@@ -16,6 +16,7 @@ const siteId = ref<number>()
 const query = ref('')
 const pending = ref(false)
 const pageNumber = ref(1)
+const pageSize = ref(50)
 const total = ref(0)
 const loading = ref(false)
 const action = ref('')
@@ -56,7 +57,7 @@ async function load(silent = false) {
       const { data } = await crawlApi.scanPages()
       if (request === requestId) scans.value = data
     } else if (props.mode === 'pages') {
-      const { data } = await crawlApi.collectionPages(pageNumber.value - 1, query.value, siteId.value, pending.value)
+      const { data } = await crawlApi.collectionPages(pageNumber.value - 1, query.value, siteId.value, pending.value, pageSize.value)
       if (request === requestId) { pages.value = data.content; total.value = data.totalElements }
     } else {
       const { data } = await crawlApi.queues()
@@ -167,7 +168,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
     </el-table>
-    <el-pagination v-if="mode === 'pages' && total" v-model:current-page="pageNumber" :page-size="50" :total="total" layout="total, prev, pager, next" @current-change="load()" />
+    <el-pagination v-if="mode === 'pages' && total" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="load()" @size-change="search" />
     <div v-if="mode === 'queues'" class="queue-grid">
       <article v-for="item in visibleQueues" :key="item.siteId" class="queue-card">
         <header><h3>{{ item.name }}</h3><el-tag :type="item.dedicated ? 'primary' : 'info'">{{ item.dedicated ? '专用队列' : '共享执行器' }}</el-tag></header>

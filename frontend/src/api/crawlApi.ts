@@ -48,8 +48,8 @@ export const crawlApi = {
     : http.post<CrawlScanPage>('/crawl/scan-pages', page),
   deleteScanPage: (id: number) => http.delete(`/crawl/scan-pages/${id}`),
   scan: (id: number) => http.post<CrawlJob>(`/crawl/scan-pages/${id}/scan`),
-  collectionPages: (page = 0, query = '', siteId?: number, pending = false) =>
-    http.get<PageResponse<DiscoveredPage>>('/crawl/collection-pages', { params: { page, size: 50, query, siteId, pending } }),
+  collectionPages: (page = 0, query = '', siteId?: number, pending = false, size = 50) =>
+    http.get<PageResponse<DiscoveredPage>>('/crawl/collection-pages', { params: { page, size, query, siteId, pending } }),
   collectPage: (id: number) => http.post<CrawlJob>(`/crawl/collection-pages/${id}/collect`),
   queues: () => http.get<CrawlSiteQueue[]>('/crawl/queues'),
   assignExecutors: (siteId: number, ids: number[]) => http.put(`/crawl/queues/${siteId}/executors`, ids),
