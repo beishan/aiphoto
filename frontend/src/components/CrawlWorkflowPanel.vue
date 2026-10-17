@@ -153,7 +153,6 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
         <el-checkbox v-model="pending">仅待采集</el-checkbox>
       </template>
     </div>
-    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="load()" @size-change="search" />
     <el-table v-if="mode === 'scans'" :data="visibleScans" empty-text="暂无扫描页，先添加一个扫描入口">
       <el-table-column label="操作" width="90" fixed="left"><template #default="{ row }"><el-button type="primary" plain size="small" :loading="action === `scan-${row.id}`" @click="scan(row)">扫描</el-button></template></el-table-column>
       <el-table-column label="扫描页" min-width="230"><template #default="{ row }"><strong>{{ row.name }}</strong><small>{{ siteName(row.siteId) }}</small><a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a></template></el-table-column>
@@ -169,6 +168,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="row.status === 'FAILED' ? 'danger' : row.status === 'COMPLETED' ? 'success' : 'info'">{{ status(row.status) }}</el-tag></template></el-table-column>
       <el-table-column label="发现时间" min-width="165"><template #default="{ row }">{{ time(row.createdAt) }}</template></el-table-column>
     </el-table>
+    <el-pagination v-if="mode === 'pages'" class="pages-pagination" v-model:current-page="pageNumber" v-model:page-size="pageSize" :page-sizes="[20, 50, 100]" :total="total" layout="total, sizes, prev, pager, next, jumper" @current-change="load()" @size-change="search" />
     <div v-if="mode === 'queues'" class="queue-grid">
       <article v-for="item in visibleQueues" :key="item.siteId" class="queue-card">
         <header><h3>{{ item.name }}</h3><el-tag :type="item.dedicated ? 'primary' : 'info'">{{ item.dedicated ? '专用队列' : '共享执行器' }}</el-tag></header>
