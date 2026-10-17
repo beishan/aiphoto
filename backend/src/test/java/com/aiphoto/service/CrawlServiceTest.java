@@ -88,9 +88,9 @@ class CrawlServiceTest {
         var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
-        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/", "blocked.example", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/", "<a href='/detail'>detail</a>"));
-        when(fetcher.fetchForInspection("https://example.com/detail", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/detail", "blocked.example", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/detail", "<img src='/original.jpg'>"));
         CrawlRule rule = new CrawlRule();
         rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
@@ -110,7 +110,7 @@ class CrawlServiceTest {
         var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("DIRECT", null)).thenReturn(network);
-        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/", "blocked.example", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/", "<p>No links</p>"));
         CrawlRule rule = new CrawlRule();
         rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
@@ -124,10 +124,10 @@ class CrawlServiceTest {
     @Test
     void inspectionReturnsMetadataUsingDraftProxy() throws Exception {
         CrawlSite site = inspectionSite();
-        site.setId(null); site.setAllowedHosts("");
+        site.setId(null); site.setBlockedHosts("");
         var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
-        when(fetcher.fetchForInspection("https://example.com/", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/", "", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/", "<title>Example</title><meta name='description' content='Gallery'>"));
 
         var info = crawlService.inspectSite(site, 9L);
@@ -169,13 +169,25 @@ class CrawlServiceTest {
         assertThat(crawlService.saveSite(site, 9L).getDiscoveryUrls()).isNull();
     }
 
+    @Test void emptyBlacklistStaysEmptyAndAllowsExternalDiscoveryPages() {
+        CrawlSite site = inspectionSite(); site.setBlockedHosts("");
+        site.setDiscoveryUrls("https://other.example/list");
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+        var saved = crawlService.saveSite(site, 9L);
+        assertThat(saved.getBlockedHosts()).isEmpty();
+        assertThat(saved.getDiscoveryUrls()).isEqualTo("https://other.example/list");
+    }
+
     @Test
-    void discoveryPageValidationRejectsUnauthorizedHostsAndInvalidUrls() {
+    void discoveryPageValidationRejectsBlockedHostsAndInvalidUrls() {
         CrawlSite site = inspectionSite();
         when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         for (String invalid : List.of("https://other.com/list", "/relative", "ftp://example.com/list",
                 "https://user:password@example.com/list", "https://example.com:8443/list")) {
+            site.setBlockedHosts("other.com");
             site.setDiscoveryUrls(invalid);
             assertThatThrownBy(() -> crawlService.saveSite(site, 9L))
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("发现页");
@@ -200,9 +212,9 @@ class CrawlServiceTest {
         var network = new CrawlerSettingsService.NetworkSnapshot(false, 5, 10, 0, 0, 0, List.of());
         when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         when(crawlerSettingsService.inspectionNetwork("SELECTED", 7L)).thenReturn(network);
-        when(fetcher.fetchForInspection("https://example.com/list/a", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/list/a", "blocked.example", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/list/a", "<a href='/detail'>detail</a>"));
-        when(fetcher.fetchForInspection("https://example.com/detail", "example.com", 5242880L, 1000L, network))
+        when(fetcher.fetchForInspection("https://example.com/detail", "blocked.example", 5242880L, 1000L, network))
                 .thenReturn(html("https://example.com/detail", "<img src='/image.jpg'>"));
         CrawlRule rule = new CrawlRule();
         rule.setSiteId(2L); rule.setName("test"); rule.setDetailSelector("a");
@@ -236,7 +248,7 @@ class CrawlServiceTest {
     private CrawlSite inspectionSite() {
         CrawlSite site = new CrawlSite();
         site.setId(2L); site.setName("Example"); site.setStartUrl("https://example.com/");
-        site.setAllowedHosts("example.com"); site.setInspectionProxyMode("SELECTED");
+        site.setBlockedHosts("blocked.example"); site.setInspectionProxyMode("SELECTED");
         site.setInspectionProxyId(7L);
         return site;
     }
@@ -343,7 +355,7 @@ class CrawlServiceTest {
         site.setOwnerId(9L);
         site.setName("示例站点");
         site.setStartUrl("https://example.com/gallery");
-        site.setAllowedHosts("example.com,cdn.example.com");
+        site.setBlockedHosts("blocked.example,ads.example.com");
         site.setMinRequestIntervalMillis(10_000L);
         CrawlRule input = new CrawlRule();
         input.setSiteId(3L);
@@ -359,7 +371,7 @@ class CrawlServiceTest {
         verify(ruleRepository).deactivateAll(3L);
         assertThat(saved.getEnabled()).isTrue();
         assertThat(saved.getStartUrl()).isEqualTo("https://example.com/gallery");
-        assertThat(saved.getAllowedHosts()).isEqualTo("example.com,cdn.example.com");
+        assertThat(saved.getBlockedHosts()).isEqualTo("blocked.example,ads.example.com");
         assertThat(saved.getMinRequestIntervalMillis()).isEqualTo(10_000L);
     }
 

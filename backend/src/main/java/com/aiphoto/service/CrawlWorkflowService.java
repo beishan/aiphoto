@@ -39,11 +39,10 @@ public class CrawlWorkflowService {
         URI uri = URI.create(url);
         if (url.length() > 2048 || uri.getHost() == null || uri.getUserInfo() != null
                 || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
-                || (uri.getPort() != -1 && uri.getPort() != 80 && uri.getPort() != 443)
-                || java.util.Arrays.stream(site.getAllowedHosts().split(","))
-                    .noneMatch(host -> host.trim().equalsIgnoreCase(uri.getHost()))) {
-            throw new IllegalArgumentException("扫描页必须是允许域名内的 HTTP/HTTPS 地址");
+                || (uri.getPort() != -1 && uri.getPort() != 80 && uri.getPort() != 443)) {
+            throw new IllegalArgumentException("扫描页必须是标准端口的 HTTP/HTTPS 地址");
         }
+        CrawlHostPolicy.requireNotBlocked(uri, site.getBlockedHosts());
         int interval = input.getScanIntervalMinutes() == null ? 360 : input.getScanIntervalMinutes();
         int maxPages = input.getMaxPages() == null ? 100 : input.getMaxPages();
         if (interval < 5 || interval > 10080 || maxPages < 1 || maxPages > 1000) {

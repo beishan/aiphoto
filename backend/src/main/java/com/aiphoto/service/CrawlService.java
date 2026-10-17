@@ -61,14 +61,11 @@ public class CrawlService {
         site.setOwnerId(ownerId);
         site.setName(requireText(input.getName(), "网站名称"));
         site.setStartUrl(SafeHttpFetcher.normalize(startUrl));
-        String allowedHosts = input.getAllowedHosts() == null || input.getAllowedHosts().isBlank()
-                ? start.getHost().toLowerCase() : input.getAllowedHosts().trim().toLowerCase();
-        boolean startAllowed = java.util.Arrays.stream(allowedHosts.split(","))
-                .map(String::trim).anyMatch(start.getHost()::equalsIgnoreCase);
-        if (!startAllowed) throw new IllegalArgumentException("允许域名必须包含起始网站域名");
-        site.setAllowedHosts(allowedHosts);
+        String blockedHosts = CrawlHostPolicy.normalizeBlacklist(input.getBlockedHosts());
+        CrawlHostPolicy.requireNotBlocked(start, blockedHosts);
+        site.setBlockedHosts(blockedHosts);
         List<String> discoveryUrls = validatedDiscoveryUrls(
-                input.getDiscoveryUrls(), site.getStartUrl(), allowedHosts);
+                input.getDiscoveryUrls(), site.getStartUrl(), blockedHosts);
         site.setDiscoveryUrls(input.getDiscoveryUrls() == null || input.getDiscoveryUrls().isBlank()
                 ? null : String.join("\n", discoveryUrls));
         site.setMaxListPages(clamp(input.getMaxListPages(), 1, 1000, 100));
@@ -127,7 +124,7 @@ public class CrawlService {
                 proxyMode == null ? site.getInspectionProxyMode() : proxyMode,
                 proxyMode == null ? site.getInspectionProxyId() : proxyId);
         SafeHttpFetcher.FetchedResource resource = fetcher.fetchForInspection(
-                rule.getDiscoveryUrls().get(0), rule.getAllowedHosts(), MAX_HTML_BYTES,
+                rule.getDiscoveryUrls().get(0), rule.getBlockedHosts(), MAX_HTML_BYTES,
                 rule.getMinRequestIntervalMillis(), network);
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
@@ -159,7 +156,7 @@ public class CrawlService {
             CrawlerSettingsService.NetworkSnapshot network) throws Exception {
         if (detailUrls.isEmpty()) return List.of();
         SafeHttpFetcher.FetchedResource resource = fetcher.fetchForInspection(
-                detailUrls.get(0), rule.getAllowedHosts(), MAX_HTML_BYTES,
+                detailUrls.get(0), rule.getBlockedHosts(), MAX_HTML_BYTES,
                 rule.getMinRequestIntervalMillis(), network);
         requireHtml(resource.contentType());
         Document document = Jsoup.parse(
@@ -183,8 +180,8 @@ public class CrawlService {
         if (input.getId() != null) getSite(input.getId(), ownerId);
         String startUrl = requireText(input.getStartUrl(), "起始 URL");
         URI start = validateStartUrl(startUrl);
-        String hosts = input.getAllowedHosts() == null || input.getAllowedHosts().isBlank()
-                ? start.getHost() : input.getAllowedHosts();
+        String hosts = CrawlHostPolicy.normalizeBlacklist(input.getBlockedHosts());
+        CrawlHostPolicy.requireNotBlocked(start, hosts);
         var network = crawlerSettingsService.inspectionNetwork(
                 input.getInspectionProxyMode(), input.getInspectionProxyId());
         long interval = input.getMinRequestIntervalMillis() == null ? 1000L
@@ -236,12 +233,9 @@ public class CrawlService {
         return start;
     }
 
-    private List<String> validatedDiscoveryUrls(String value, String fallback, String allowedHosts) {
+    private List<String> validatedDiscoveryUrls(String value, String fallback, String blockedHosts) {
         if (value == null || value.isBlank()) return List.of(SafeHttpFetcher.normalize(fallback));
         if (value.length() > 50_000) throw new IllegalArgumentException("发现页配置过长");
-        java.util.Set<String> hosts = java.util.Arrays.stream(allowedHosts.split(","))
-                .map(String::trim).map(host -> host.toLowerCase(java.util.Locale.ROOT))
-                .collect(java.util.stream.Collectors.toSet());
         java.util.LinkedHashSet<String> urls = new java.util.LinkedHashSet<>();
         for (String line : value.split("\\R")) {
             String url = line.trim();
@@ -253,8 +247,10 @@ public class CrawlService {
             } catch (IllegalArgumentException exception) {
                 throw new IllegalArgumentException("发现页 URL 无效：" + exception.getMessage());
             }
-            if (!hosts.contains(uri.getHost().toLowerCase(java.util.Locale.ROOT))) {
-                throw new IllegalArgumentException("发现页域名必须在允许访问的域名中：" + uri.getHost());
+            try {
+                CrawlHostPolicy.requireNotBlocked(uri, blockedHosts);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalArgumentException("发现页" + exception.getMessage());
             }
             urls.add(SafeHttpFetcher.normalize(url));
             if (urls.size() > 20) throw new IllegalArgumentException("最多配置 20 个发现页入口");
@@ -265,8 +261,8 @@ public class CrawlService {
     private void applySiteConfig(CrawlRule rule, CrawlSite site) {
         rule.setStartUrl(site.getStartUrl());
         rule.setDiscoveryUrls(validatedDiscoveryUrls(
-                site.getDiscoveryUrls(), site.getStartUrl(), site.getAllowedHosts()));
-        rule.setAllowedHosts(site.getAllowedHosts());
+                site.getDiscoveryUrls(), site.getStartUrl(), site.getBlockedHosts()));
+        rule.setBlockedHosts(site.getBlockedHosts());
         rule.setMaxListPages(site.getMaxListPages());
         rule.setMaxDetailPages(site.getMaxDetailPages());
         rule.setMaxImages(site.getMaxImages());

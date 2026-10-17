@@ -86,7 +86,7 @@ class CrawlWorkerExecutorTest {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
         CrawlRule rule = new CrawlRule();
         rule.setStartUrl("https://example.com/");
-        rule.setAllowedHosts("example.com"); rule.setDetailSelector("a.detail"); rule.setNextSelector("a.next");
+        rule.setBlockedHosts("example.com"); rule.setDetailSelector("a.detail"); rule.setNextSelector("a.next");
         rule.setSiteId(2L);
         rule.setDiscoveryUrls(java.util.List.of("https://example.com/a", "https://example.com/b"));
         when(executors.acquire(1L)).thenReturn(session);
@@ -115,7 +115,7 @@ class CrawlWorkerExecutorTest {
     void oneFailedEntryDoesNotPreventOtherEntriesFromDiscovery() throws Exception {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setRuleSnapshot("snapshot");
         CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
-        rule.setAllowedHosts("example.com"); rule.setDetailSelector("a");
+        rule.setBlockedHosts("example.com"); rule.setDetailSelector("a");
         rule.setDiscoveryUrls(java.util.List.of("https://example.com/a", "https://example.com/b"));
         when(executors.acquire(1L)).thenReturn(session);
         when(queue.newWorkerId()).thenReturn("worker");

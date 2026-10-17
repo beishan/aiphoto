@@ -17,11 +17,9 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -36,15 +34,15 @@ public class SafeHttpFetcher {
     private final ConcurrentHashMap<String, Long> nextRequestAt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, HttpClient> clients = new ConcurrentHashMap<>();
 
-    public FetchedResource fetch(String url, String allowedHosts, long maxBytes) throws Exception {
-        return fetch(url, allowedHosts, maxBytes, 0L);
+    public FetchedResource fetch(String url, String blockedHosts, long maxBytes) throws Exception {
+        return fetch(url, blockedHosts, maxBytes, 0L);
     }
 
     public FetchedResource fetch(
-            String url, String allowedHosts, long maxBytes, long siteMinRequestIntervalMillis)
+            String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis)
             throws Exception {
         CrawlerExecutorService.Session session = executorService.current();
-        if (session == null) return fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, null);
+        if (session == null) return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null);
         Exception failure = null;
         try {
             session.begin(url);
@@ -52,7 +50,7 @@ public class SafeHttpFetcher {
             for (int attempt = 0; attempt < attempts; attempt++) {
                 managedClients.set(new java.util.ArrayList<>());
                 try {
-                    FetchedResource result = fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, session);
+                    FetchedResource result = fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, session);
                     session.success();
                     return result;
                 } catch (IOException exception) {
@@ -75,21 +73,21 @@ public class SafeHttpFetcher {
     }
 
     public FetchedResource fetchForInspection(
-            String url, String allowedHosts, long maxBytes, long siteMinRequestIntervalMillis,
+            String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis,
             CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
-        return fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, null, settings);
+        return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null, settings);
     }
 
-    private FetchedResource fetchResource(String url, String allowedHosts, long maxBytes,
+    private FetchedResource fetchResource(String url, String blockedHosts, long maxBytes,
             long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session) throws Exception {
-        return fetchResource(url, allowedHosts, maxBytes, siteMinRequestIntervalMillis, session,
+        return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, session,
                 session == null ? crawlerSettingsService.networkSnapshot() : session.network());
     }
 
-    private FetchedResource fetchResource(String url, String allowedHosts, long maxBytes,
+    private FetchedResource fetchResource(String url, String blockedHosts, long maxBytes,
             long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session,
             CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
-        Set<String> hosts = parseHosts(allowedHosts);
+        Set<String> hosts = CrawlHostPolicy.parse(blockedHosts);
         URI uri = URI.create(url);
         validate(uri, hosts);
         long requestIntervalMillis = Math.max(
@@ -308,7 +306,7 @@ public class SafeHttpFetcher {
         }
     }
 
-    static void validate(URI uri, Set<String> allowedHosts) throws Exception {
+    static void validate(URI uri, Set<String> blockedHosts) throws Exception {
         String scheme = uri.getScheme();
         String host = uri.getHost();
         if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) || host == null
@@ -316,8 +314,8 @@ public class SafeHttpFetcher {
             throw new IllegalArgumentException("只允许不含用户信息的 HTTP/HTTPS URL");
         }
         String normalizedHost = host.toLowerCase(Locale.ROOT);
-        if (!allowedHosts.contains(normalizedHost)) {
-            throw new IllegalArgumentException("域名不在允许列表: " + normalizedHost);
+        if (CrawlHostPolicy.isBlocked(normalizedHost, blockedHosts)) {
+            throw new IllegalArgumentException("域名在禁止访问列表中：" + normalizedHost);
         }
         int port = uri.getPort();
         if (port != -1 && port != 80 && port != 443) {
@@ -344,14 +342,6 @@ public class SafeHttpFetcher {
         }
         byte[] bytes = address.getAddress();
         return bytes.length != 16 || ((bytes[0] & 0xfe) != 0xfc);
-    }
-
-    private static Set<String> parseHosts(String value) {
-        return Arrays.stream(value.split(","))
-                .map(String::trim)
-                .map(host -> host.toLowerCase(Locale.ROOT))
-                .filter(host -> !host.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
     }
 
     private byte[] readLimited(InputStream input, long maxBytes) throws Exception {

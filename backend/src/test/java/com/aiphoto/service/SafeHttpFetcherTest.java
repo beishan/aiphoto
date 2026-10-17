@@ -23,10 +23,40 @@ class SafeHttpFetcherTest {
         assertThat(first).hasSize(64).isEqualTo(second);
     }
 
+    @Test void emptyBlacklistAllowsPublicTargets() throws Exception {
+        SafeHttpFetcher.validate(URI.create("https://8.8.8.8/image"), Set.of());
+    }
+
+    @Test void blocksRedirectDestinationsBeforeRequestingThem() throws Exception {
+        var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
+        var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
+        var fetcher = new SafeHttpFetcher(settings, executors);
+        var client = org.mockito.Mockito.mock(java.net.http.HttpClient.class);
+        @SuppressWarnings("unchecked")
+        java.net.http.HttpResponse<java.io.InputStream> response = org.mockito.Mockito.mock(java.net.http.HttpResponse.class);
+        org.mockito.Mockito.when(response.statusCode()).thenReturn(302);
+        org.mockito.Mockito.when(response.body()).thenReturn(new java.io.ByteArrayInputStream(new byte[0]));
+        org.mockito.Mockito.when(response.headers()).thenReturn(java.net.http.HttpHeaders.of(
+                java.util.Map.of("location", java.util.List.of("https://cdn.66img.cc/image.jpg")), (a, b) -> true));
+        org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any()))
+                .thenReturn(response);
+        @SuppressWarnings("unchecked")
+        var clients = (java.util.Map<String, java.net.http.HttpClient>)
+                org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
+        clients.put("direct:5", client);
+        var network = new CrawlerSettingsService.NetworkSnapshot(true, 5, 10, 0, 0, 0, java.util.List.of());
+        assertThatThrownBy(() -> fetcher.fetchForInspection("http://8.8.8.8/", "66img.cc", 100, 0, network))
+                .hasMessageContaining("禁止访问列表");
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.times(1)).send(
+                org.mockito.ArgumentMatchers.any(java.net.http.HttpRequest.class),
+                org.mockito.ArgumentMatchers.<java.net.http.HttpResponse.BodyHandler<java.io.InputStream>>any());
+    }
+
     @Test
-    void rejectsLoopbackTargetsEvenWhenHostIsAllowed() {
+    void rejectsLoopbackTargetsWithAnEmptyBlacklist() {
         assertThatThrownBy(() -> SafeHttpFetcher.validate(
-                URI.create("http://127.0.0.1/image"), Set.of("127.0.0.1")))
+                URI.create("http://127.0.0.1/image"), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("非公网地址");
     }
@@ -34,17 +64,17 @@ class SafeHttpFetcherTest {
     @Test
     void rejectsPrivateIpv6Targets() {
         assertThatThrownBy(() -> SafeHttpFetcher.validate(
-                URI.create("http://[fd00::1]/image"), Set.of("[fd00::1]")))
+                URI.create("http://[fd00::1]/image"), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsCredentialsAndNonStandardPorts() {
         assertThatThrownBy(() -> SafeHttpFetcher.validate(
-                URI.create("https://user:pass@example.com/"), Set.of("example.com")))
+                URI.create("https://user:pass@example.com/"), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> SafeHttpFetcher.validate(
-                URI.create("https://example.com:8443/"), Set.of("example.com")))
+                URI.create("https://example.com:8443/"), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -106,10 +136,10 @@ class SafeHttpFetcherTest {
                         new CrawlerSettingsService.ProxyConfig(7L, "localhost", 7890, null, null)));
 
         if (status == 200) {
-            assertThat(fetcher.fetchForInspection("http://8.8.8.8/", "8.8.8.8", 10, 0, network).bytes())
+            assertThat(fetcher.fetchForInspection("http://8.8.8.8/", "", 10, 0, network).bytes())
                     .containsExactly((byte) 1);
         } else {
-            assertThatThrownBy(() -> fetcher.fetchForInspection("http://8.8.8.8/", "8.8.8.8", 10, 0, network))
+            assertThatThrownBy(() -> fetcher.fetchForInspection("http://8.8.8.8/", "", 10, 0, network))
                     .isInstanceOf(java.io.IOException.class);
         }
         org.mockito.Mockito.verifyNoInteractions(settings, executors, otherClient);

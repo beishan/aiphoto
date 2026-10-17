@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Data
 @NoArgsConstructor
 @Entity
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties("allowedHosts")
 @Table(name = "crawl_rules")
 public class CrawlRule {
 
@@ -46,7 +47,7 @@ public class CrawlRule {
     private String detailNextSelector;
     private Integer maxPagesPerDetail = 20;
     @Transient
-    private String allowedHosts;
+    private String blockedHosts = "";
     @Transient
     private Integer maxListPages = 100;
     @Transient

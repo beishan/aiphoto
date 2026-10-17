@@ -81,14 +81,14 @@ const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
   discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
-  name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
+  name: '', startUrl: '', blockedHosts: '', maxListPages: 100, maxDetailPages: 1000,
   maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
   scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
 const createSiteForm = reactive<CrawlSite>({
   discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
-  name: '', startUrl: '', allowedHosts: '', maxListPages: 100, maxDetailPages: 1000,
+  name: '', startUrl: '', blockedHosts: '', maxListPages: 100, maxDetailPages: 1000,
   maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
   scheduleEnabled: false, dailyScanTime: '03:00',
 })
@@ -140,7 +140,7 @@ async function inspectSite(target: 'edit' | 'create') {
   inspectionBusy.value = target
   try {
     const { data } = await crawlApi.inspectSite(snapshot)
-    if (model.id !== snapshot.id || model.startUrl !== snapshot.startUrl || model.allowedHosts !== snapshot.allowedHosts
+    if (model.id !== snapshot.id || model.startUrl !== snapshot.startUrl || model.blockedHosts !== snapshot.blockedHosts
       || model.inspectionProxyMode !== snapshot.inspectionProxyMode
       || model.inspectionProxyId !== snapshot.inspectionProxyId) return
     if (target === 'edit') siteInfo.value = data
@@ -152,9 +152,9 @@ async function inspectSite(target: 'edit' | 'create') {
   } finally { inspectionBusy.value = '' }
 }
 
-watch(() => [siteForm.id, siteForm.startUrl, siteForm.discoveryUrls, siteForm.allowedHosts, siteForm.inspectionProxyMode, siteForm.inspectionProxyId],
+watch(() => [siteForm.id, siteForm.startUrl, siteForm.discoveryUrls, siteForm.blockedHosts, siteForm.inspectionProxyMode, siteForm.inspectionProxyId],
   () => { siteInfo.value = null; previewUrls.value = []; previewImageUrls.value = []; previewImageError.value = '' })
-watch(() => [createSiteForm.startUrl, createSiteForm.allowedHosts, createSiteForm.inspectionProxyMode, createSiteForm.inspectionProxyId],
+watch(() => [createSiteForm.startUrl, createSiteForm.blockedHosts, createSiteForm.inspectionProxyMode, createSiteForm.inspectionProxyId],
   () => { createSiteInfo.value = null })
 
 async function loadSites() {
@@ -353,7 +353,7 @@ function selectRuleById(id: string) {
 function resetCreateSiteForm() {
   Object.assign(createSiteForm, {
     discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
-    id: undefined, name: '', startUrl: '', allowedHosts: '', maxListPages: 100,
+    id: undefined, name: '', startUrl: '', blockedHosts: '', maxListPages: 100,
     maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
     minRequestIntervalMillis: 1000,
     scheduleEnabled: false, dailyScanTime: '03:00', lastScheduledScanDate: null,
@@ -365,7 +365,7 @@ function applyT66yPreset() {
     name: 't66y 图片版',
     startUrl: 'https://t66y.com/thread0806.php?fid=16',
     discoveryUrls: 'https://t66y.com/thread0806.php?fid=16',
-    allowedHosts: 't66y.com,23img.com,23lmg.com',
+    blockedHosts: '',
     maxListPages: 100,
     maxDetailPages: 5000,
     maxImages: 10000,
@@ -386,9 +386,6 @@ async function saveSite() {
     ElMessage.warning('请填写网站名称和起始 URL')
     return
   }
-  if (!siteForm.allowedHosts) {
-    try { siteForm.allowedHosts = new URL(siteForm.startUrl).hostname } catch { /* backend validates */ }
-  }
   try {
     const { data } = await crawlApi.saveSite({ ...siteForm })
     Object.assign(siteForm, data)
@@ -405,9 +402,6 @@ async function createSite() {
   if (!createSiteForm.name || !createSiteForm.startUrl) {
     ElMessage.warning('请填写网站名称和起始 URL')
     return
-  }
-  if (!createSiteForm.allowedHosts) {
-    try { createSiteForm.allowedHosts = new URL(createSiteForm.startUrl).hostname } catch { /* backend validates */ }
   }
   siteSaveBusy.value = true
   try {
@@ -782,7 +776,7 @@ onUnmounted(() => {
         <el-card class="quick-card surface-card" shadow="never">
           <template #header><div class="card-heading"><div><p class="eyebrow">QUICK START</p><h2>快速开始</h2></div></div></template>
           <el-timeline>
-            <el-timeline-item type="primary" hollow><strong>添加采集网站</strong><p>限定入口与允许访问的域名</p></el-timeline-item>
+            <el-timeline-item type="primary" hollow><strong>添加采集网站</strong><p>配置网站入口与域名黑名单</p></el-timeline-item>
             <el-timeline-item type="primary" hollow><strong>配置解析规则</strong><p>选择图片页链接与原图节点</p></el-timeline-item>
             <el-timeline-item type="success" hollow><strong>启动扫描</strong><p>扫描结果进入采集页面，按需发起采集</p></el-timeline-item>
           </el-timeline>
@@ -934,7 +928,7 @@ onUnmounted(() => {
               <el-row :gutter="16">
                 <el-col :xs="24" :md="10"><el-form-item label="网站名称"><el-input v-model="siteForm.name" placeholder="例如：家庭活动图库" /></el-form-item></el-col>
                 <el-col :xs="24" :md="14"><el-form-item label="网站入口"><el-input v-model="siteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
-                <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="siteForm.allowedHosts" placeholder="多个域名用逗号分隔，包含图片 CDN"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
+                <el-col :span="24"><el-form-item label="不允许访问的域名"><el-input v-model="siteForm.blockedHosts" placeholder="留空默认允许所有公网域名；多个域名用逗号分隔"><template #prefix><el-icon><Connection /></el-icon></template></el-input></el-form-item></el-col>
               </el-row>
               <el-alert type="info" :closable="false" title="扫描入口与周期请在当前配置弹窗的“扫描页”标签中管理。" />
               <SiteInspectionNetwork v-model:mode="siteForm.inspectionProxyMode" v-model:proxy-id="siteForm.inspectionProxyId"
@@ -1014,7 +1008,7 @@ onUnmounted(() => {
         <el-row :gutter="16">
           <el-col :xs="24" :md="10"><el-form-item label="网站名称" required><el-input v-model="createSiteForm.name" autofocus placeholder="例如：家庭活动图库" /></el-form-item></el-col>
           <el-col :xs="24" :md="14"><el-form-item label="网站入口" required><el-input v-model="createSiteForm.startUrl" placeholder="https://example.com/gallery" /></el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="允许访问的域名"><el-input v-model="createSiteForm.allowedHosts" placeholder="留空时自动使用起始 URL 的域名；多个域名用逗号分隔" /></el-form-item></el-col>
+          <el-col :span="24"><el-form-item label="不允许访问的域名"><el-input v-model="createSiteForm.blockedHosts" placeholder="留空默认允许所有公网域名；多个域名用逗号分隔" /></el-form-item></el-col>
         </el-row>
               <el-alert type="info" :closable="false" title="创建网站后，可在网站配置弹窗的“扫描页”标签中添加入口和设置周期。" />
         <SiteInspectionNetwork v-model:mode="createSiteForm.inspectionProxyMode" v-model:proxy-id="createSiteForm.inspectionProxyId"
@@ -1030,7 +1024,7 @@ onUnmounted(() => {
           <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="createSiteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
         </el-row>
-        <el-alert type="info" show-icon :closable="false" title="采集器只会访问允许域名中的页面和图片资源。" />
+        <el-alert type="info" show-icon :closable="false" title="默认允许访问公网域名；黑名单包含其子域名，页面、图片及重定向均会校验。" />
       </el-form>
       <template #footer><el-button round @click="siteDialogVisible = false">取消</el-button><el-button type="primary" :icon="Plus" round :loading="siteSaveBusy" @click="createSite">创建网站</el-button></template>
     </el-dialog>

@@ -149,7 +149,7 @@ export interface CrawlSite {
   id?: number
   name: string
   startUrl: string
-  allowedHosts: string
+  blockedHosts: string
   maxListPages: number
   maxDetailPages: number
   maxImages: number

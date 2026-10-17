@@ -688,3 +688,8 @@ FROM crawl_sites s CROSS JOIN LATERAL regexp_split_to_table(
 WHERE s.scan_pages_migrated = FALSE AND TRIM(entry.url) <> '';
 UPDATE crawl_sites SET schedule_enabled = FALSE, scan_pages_migrated = TRUE WHERE scan_pages_migrated = FALSE;
 ALTER TABLE crawl_sites ALTER COLUMN scan_pages_migrated SET DEFAULT TRUE;
+
+-- Domain policy changed from an allowlist to an empty-by-default denylist (0.18.0).
+-- Retain the legacy column for older schema backfills; never turn allowed domains into blocked ones.
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS blocked_hosts VARCHAR(1000) NOT NULL DEFAULT '';
+ALTER TABLE crawl_sites ALTER COLUMN allowed_hosts SET DEFAULT '';

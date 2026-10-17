@@ -95,7 +95,7 @@ public class CrawlWorker {
                 if (!visited.add(normalized)) continue;
                 try {
                     SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                            normalized, rule.getAllowedHosts(), MAX_HTML_BYTES,
+                            normalized, rule.getBlockedHosts(), MAX_HTML_BYTES,
                             rule.getMinRequestIntervalMillis());
                     requireHtml(resource.contentType());
                     Document document = Jsoup.parse(
@@ -184,7 +184,7 @@ public class CrawlWorker {
                         String detailUrl = SafeHttpFetcher.normalize(detailQueue.removeFirst());
                         if (!detailVisited.add(detailUrl)) continue;
                         SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                                detailUrl, rule.getAllowedHosts(), MAX_HTML_BYTES,
+                                detailUrl, rule.getBlockedHosts(), MAX_HTML_BYTES,
                                 rule.getMinRequestIntervalMillis());
                         requireHtml(resource.contentType());
                         Document document = Jsoup.parse(
@@ -294,7 +294,7 @@ public class CrawlWorker {
         }
         try {
             SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
-                    imageUrl, rule.getAllowedHosts(), rule.getMaxFileBytes(),
+                    imageUrl, rule.getBlockedHosts(), rule.getMaxFileBytes(),
                     pageHostInterval(imageUrl, rule));
             if (!resource.contentType().startsWith("image/")) {
                 throw new IllegalArgumentException("响应不是图片");

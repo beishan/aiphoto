@@ -13,6 +13,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Data
 @NoArgsConstructor
 @Entity
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties("allowedHosts")
 @Table(name = "crawl_sites")
 public class CrawlSite {
 
@@ -27,7 +28,7 @@ public class CrawlSite {
     @Column(columnDefinition = "TEXT")
     private String discoveryUrls;
     @Column(nullable = false, length = 1000)
-    private String allowedHosts;
+    private String blockedHosts = "";
     private Integer maxListPages = 100;
     private Integer maxDetailPages = 1000;
     private Integer maxImages = 5000;

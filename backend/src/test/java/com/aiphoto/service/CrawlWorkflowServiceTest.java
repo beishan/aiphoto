@@ -150,11 +150,11 @@ class CrawlWorkflowServiceTest {
         assertThat(result.collectionJobId()).isEqualTo(20L);
     }
 
-    @Test void scanUrlMustBelongToTheSiteAndIntervalMustBeValid() {
-        CrawlSite site = new CrawlSite(); site.setId(2L); site.setAllowedHosts("example.com");
+    @Test void scanUrlMustNotBeBlockedAndIntervalMustBeValid() {
+        CrawlSite site = new CrawlSite(); site.setId(2L); site.setBlockedHosts("other.example");
         when(crawl.getSite(2L, 9L)).thenReturn(site);
         CrawlScanPage input = scanPage(); input.setUrl("https://other.example/latest");
-        assertThatThrownBy(() -> workflow.saveScan(null, input, 9L)).hasMessageContaining("允许域名");
+        assertThatThrownBy(() -> workflow.saveScan(null, input, 9L)).hasMessageContaining("禁止访问列表");
         input.setUrl("https://example.com/latest"); input.setScanIntervalMinutes(1);
         assertThatThrownBy(() -> workflow.saveScan(null, input, 9L)).hasMessageContaining("周期");
         verify(scans, never()).save(any());
