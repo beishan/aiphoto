@@ -293,11 +293,12 @@ public class CrawlWorker {
             return;
         }
         try {
-            SafeHttpFetcher.FetchedResource resource = fetcher.fetch(
+            SafeHttpFetcher.FetchedResource resource = fetcher.fetchImage(
                     imageUrl, rule.getBlockedHosts(), rule.getMaxFileBytes(),
                     pageHostInterval(imageUrl, rule));
             if (!resource.contentType().startsWith("image/")) {
-                throw new IllegalArgumentException("响应不是图片");
+                throw new IllegalArgumentException("图床返回的不是图片（" + resource.contentType()
+                        + "），请检查原图属性及图床访问规则");
             }
             BufferedImage image = ImageIO.read(new ByteArrayInputStream(resource.bytes()));
             if (image == null && !"image/webp".equals(resource.contentType())) {

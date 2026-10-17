@@ -28,6 +28,8 @@ import org.springframework.stereotype.Component;
 public class SafeHttpFetcher {
 
     private static final int MAX_REDIRECTS = 5;
+    private static final String PAGE_ACCEPT = "text/html,image/*;q=0.9,*/*;q=0.1";
+    private static final String IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.9,*/*;q=0.1";
     private final CrawlerSettingsService crawlerSettingsService;
     private final CrawlerExecutorService executorService;
     private final ThreadLocal<java.util.List<HttpClient>> managedClients = new ThreadLocal<>();
@@ -41,8 +43,21 @@ public class SafeHttpFetcher {
     public FetchedResource fetch(
             String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis)
             throws Exception {
+        return fetchWithAccept(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, PAGE_ACCEPT);
+    }
+
+    /** Prefer image bytes: some hosts redirect HTML-preferring requests to a viewer page. */
+    public FetchedResource fetchImage(
+            String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis)
+            throws Exception {
+        return fetchWithAccept(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, IMAGE_ACCEPT);
+    }
+
+    private FetchedResource fetchWithAccept(
+            String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis,
+            String accept) throws Exception {
         CrawlerExecutorService.Session session = executorService.current();
-        if (session == null) return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null);
+        if (session == null) return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null, accept);
         Exception failure = null;
         try {
             session.begin(url);
@@ -50,7 +65,7 @@ public class SafeHttpFetcher {
             for (int attempt = 0; attempt < attempts; attempt++) {
                 managedClients.set(new java.util.ArrayList<>());
                 try {
-                    FetchedResource result = fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, session);
+                    FetchedResource result = fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, session, accept);
                     session.success();
                     return result;
                 } catch (IOException exception) {
@@ -75,18 +90,18 @@ public class SafeHttpFetcher {
     public FetchedResource fetchForInspection(
             String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis,
             CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
-        return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null, settings);
+        return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, null, settings, PAGE_ACCEPT);
     }
 
     private FetchedResource fetchResource(String url, String blockedHosts, long maxBytes,
-            long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session) throws Exception {
+            long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session, String accept) throws Exception {
         return fetchResource(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, session,
-                session == null ? crawlerSettingsService.networkSnapshot() : session.network());
+                session == null ? crawlerSettingsService.networkSnapshot() : session.network(), accept);
     }
 
     private FetchedResource fetchResource(String url, String blockedHosts, long maxBytes,
             long siteMinRequestIntervalMillis, CrawlerExecutorService.Session session,
-            CrawlerSettingsService.NetworkSnapshot settings) throws Exception {
+            CrawlerSettingsService.NetworkSnapshot settings, String accept) throws Exception {
         Set<String> hosts = CrawlHostPolicy.parse(blockedHosts);
         URI uri = URI.create(url);
         validate(uri, hosts);
@@ -98,7 +113,7 @@ public class SafeHttpFetcher {
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(settings.requestTimeoutSeconds()))
                     .header("User-Agent", "aiphoto-crawler/1.0")
-                    .header("Accept", "text/html,image/*;q=0.9,*/*;q=0.1")
+                    .header("Accept", accept)
                     .GET()
                     .build();
             HttpResponse<InputStream> response = sendWithRetry(request, settings, session);

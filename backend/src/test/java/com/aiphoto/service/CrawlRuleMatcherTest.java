@@ -65,6 +65,19 @@ class CrawlRuleMatcherTest {
     }
 
     @Test
+    void prefersOriginalImageAttributeToViewerLinkAndDisplaySource() {
+        var element = Jsoup.parse("""
+                <img iyl-data="http://a.d/adblo_ck.jpg"
+                     data-link="https://23img.com/l/?i=/i/2026/10/15/12azaff.jpg"
+                     ess-data="https://23img.com/i/2026/10/15/12azaff.jpg"
+                     referrerpolicy="no-referrer" src="https://23img.com/thumbnail.jpg">
+                """).selectFirst("img");
+        assertThat(CrawlRuleMatcher.extractImageUrl(element,
+                "ess-data,src,data-original,data-src,srcset", URI.create("https://t66y.com/thread.html")))
+                .isEqualTo("https://23img.com/i/2026/10/15/12azaff.jpg");
+    }
+
+    @Test
     void t66ySelectorsExcludeStickyRowsAndOnlyFollowNextPage() {
         var document = Jsoup.parse("""
                 <div class='pages'>
