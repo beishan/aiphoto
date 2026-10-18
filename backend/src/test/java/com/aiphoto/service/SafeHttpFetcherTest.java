@@ -17,6 +17,55 @@ class SafeHttpFetcherTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void imageStopsFailoverAtConfiguredLimitInsteadOfTryingEveryNode() throws Exception {
+        var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
+        var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
+        var session = org.mockito.Mockito.mock(CrawlerExecutorService.Session.class);
+        var client = org.mockito.Mockito.mock(HttpClient.class);
+        var fetcher = new SafeHttpFetcher(settings, executors);
+        org.mockito.Mockito.when(settings.networkSnapshot()).thenReturn(imageNetwork(60, 0));
+        org.mockito.Mockito.when(executors.current()).thenReturn(session);
+        org.mockito.Mockito.when(session.network()).thenReturn(imageNetwork(60, 0));
+        org.mockito.Mockito.when(session.autoFailover()).thenReturn(true);
+        org.mockito.Mockito.when(session.nodeCount()).thenReturn(10);
+        org.mockito.Mockito.when(session.maxImageNodeSwitches()).thenReturn(1);
+        var clients = (java.util.Map<String, HttpClient>)
+                org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
+        clients.put("direct:5", client);
+        org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(HttpRequest.class),
+                org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any()))
+                .thenThrow(new java.io.IOException("node unavailable"));
+
+        assertThatThrownBy(() -> fetcher.fetchImage("https://8.8.8.8/image.jpg", "", 100, 0))
+                .isInstanceOf(SafeHttpFetcher.NodeSwitchLimitException.class)
+                .hasMessageContaining("1 次");
+        org.mockito.Mockito.verify(session, org.mockito.Mockito.times(2))
+                .failure(org.mockito.ArgumentMatchers.any(java.io.IOException.class));
+        org.mockito.Mockito.verify(session, org.mockito.Mockito.times(2)).network();
+    }
+
+    @Test
+    void nodeSwitchBudgetCountsTransitionsButNotSameNodeRetries() throws Exception {
+        var budget = new SafeHttpFetcher.NodeSwitchBudget(1);
+        budget.use("a"); budget.use("a");
+        budget.use("b"); budget.use("b");
+        assertThatThrownBy(() -> budget.use("a"))
+                .isInstanceOf(SafeHttpFetcher.NodeSwitchLimitException.class)
+                .hasMessageContaining("1 次");
+    }
+
+    @Test
+    void zeroBudgetAllowsOnlyInitialNodeAndEachImageGetsFreshBudget() throws Exception {
+        var budget = new SafeHttpFetcher.NodeSwitchBudget(0);
+        budget.use("a"); budget.use("a");
+        assertThatThrownBy(() -> budget.use("direct"))
+                .isInstanceOf(SafeHttpFetcher.NodeSwitchLimitException.class);
+        new SafeHttpFetcher.NodeSwitchBudget(0).use("b");
+        assertThat(new CrawlerExecutorOptions().getMaxImageNodeSwitches()).isEqualTo(3);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void imageRetriesShareOneDeadlineAndDoNotLeaveTheWorkerInterrupted() throws Exception {
         var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
         var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);

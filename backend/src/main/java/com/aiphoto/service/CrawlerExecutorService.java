@@ -172,6 +172,7 @@ public class CrawlerExecutorService {
         if (options.getDescription() != null && options.getDescription().length() > 500) throw new IllegalArgumentException("描述最多 500 字");
         if (!Set.of("ORDERED", "RANDOM").contains(Objects.toString(options.getSelectionStrategy(), ""))) throw new IllegalArgumentException("无效选用顺序");
         range(options.getFailureThreshold(), 1, 10, "连续异常阈值");
+        range(options.getMaxImageNodeSwitches(), 0, 255, "单张图片最多切换节点数");
         range(options.getDefaultProxyCooldownSeconds(), 10, 604800, "普通代理冷却");
         range(options.getRotationSeconds(), 30, 604800, "轮换时间");
         range(options.getRotationPages(), 1, 1000000, "轮换页面数");
@@ -445,6 +446,7 @@ public class CrawlerExecutorService {
         }
         public boolean managedMihomo() { return executor != null && "MIHOMO".equals(executor.getProxyMode()); }
         public int nodeCount() { return managedMihomo() ? readNodes(executor.getNodesJson()).size() : 1; }
+        public int maxImageNodeSwitches() { return options.getMaxImageNodeSwitches(); }
         public boolean autoFailover() { return managedMihomo() && !"MANUAL".equals(executor.getSwitchMode()) && ("FAILOVER".equals(executor.getSwitchMode()) || options.isFailover()); }
         public boolean ordinaryAvailable(Long id) { synchronized (CrawlerExecutorService.this) { return !cooling(state, "proxy:" + id); } }
         public void proxyAttempt(Long id) { synchronized (CrawlerExecutorService.this) { attempts++; proxyName = id == null ? "直连" : requireProxy(id).getName(); requestNode = managedMihomo() ? state.node : null; state.activeProxyName = managedMihomo() ? requestNode : proxyName; if (id != null) proxyAttempts.merge(id, 1, Integer::sum); if (requestNode != null) nodeAttempts.merge(requestNode, 1, Integer::sum); } }

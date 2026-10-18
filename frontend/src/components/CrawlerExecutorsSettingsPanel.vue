@@ -19,7 +19,7 @@ const editorTab = ref('basic')
 const catalog = ref<Record<string, MihomoProxyNode>>({})
 const savedGroups = ref<MihomoNodeGroup[]>([])
 const loadingNodes = ref(false)
-const options = (): CrawlerExecutorOptions => ({ description: '', siteId: null, frozen: false, selectionStrategy: 'ORDERED', ordinaryProxies: [], defaultProxyCooldownSeconds: 300, failureThreshold: 2, manualNode: null, failover: true, rotationSeconds: 300, rotationPages: 50, rotationImages: 100, rotationTasks: 1, nodeGroupId: null })
+const options = (): CrawlerExecutorOptions => ({ description: '', siteId: null, frozen: false, selectionStrategy: 'ORDERED', ordinaryProxies: [], defaultProxyCooldownSeconds: 300, failureThreshold: 2, maxImageNodeSwitches: 3, manualNode: null, failover: true, rotationSeconds: 300, rotationPages: 50, rotationImages: 100, rotationTasks: 1, nodeGroupId: null })
 const defaults = (): CrawlerExecutorRequest => ({ name: '', enabled: true, proxyMode: 'DEFAULT', proxyId: null, proxyGroup: '', nodes: [], switchMode: 'MANUAL', rotateAfterRequests: 100, cooldownSeconds: 300, options: options() })
 const editor = reactive(defaults())
 const current = computed(() => executors.value.find(e => e.id === editingId.value))
@@ -147,6 +147,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); logRequest++ })
         </el-tab-pane>
         <el-tab-pane name="proxy" label="代理方式">
           <el-form label-position="top">
+            <el-form-item label="单张图片最多切换节点数"><el-input-number v-model="editor.options.maxImageNodeSwitches" :min="0" :max="255" /><small>默认 3 次，0 表示只用当前节点；不含首次节点，同节点重试不计数，普通代理切换与直连回退也计数。下一张图片生效。</small></el-form-item>
             <el-form-item label="代理方式"><el-select v-model="editor.proxyMode" @change="changeMode"><el-option label="默认普通代理池" value="DEFAULT" /><el-option label="直连" value="DIRECT" /><el-option label="普通代理 · 指定代理列表" value="SELECTED" /><el-option label="Mihomo · 系统代理与备用节点组" value="MIHOMO" /></el-select></el-form-item>
             <template v-if="editor.proxyMode !== 'DIRECT'">
               <el-form-item label="代理 / 节点选用顺序"><el-select v-model="editor.options.selectionStrategy"><el-option label="按顺序" value="ORDERED" /><el-option label="随机（节点避免立即重复）" value="RANDOM" /></el-select></el-form-item>

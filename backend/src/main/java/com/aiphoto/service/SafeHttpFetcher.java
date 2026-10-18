@@ -39,6 +39,25 @@ public class SafeHttpFetcher {
     private static final String PAGE_ACCEPT = "text/html,image/*;q=0.9,*/*;q=0.1";
     private static final String IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.9,*/*;q=0.1";
     private static final ThreadLocal<ImageDownloadDeadline> IMAGE_DEADLINE = new ThreadLocal<>();
+    private static final ThreadLocal<NodeSwitchBudget> IMAGE_NODE_BUDGET = new ThreadLocal<>();
+
+    static final class NodeSwitchBudget {
+        private final int limit;
+        private String current;
+        private int switches;
+        NodeSwitchBudget(int limit) { this.limit = limit; }
+        void use(String node) throws NodeSwitchLimitException {
+            if (current != null && !current.equals(node)) {
+                if (switches >= limit) throw new NodeSwitchLimitException(limit);
+                switches++;
+            }
+            current = node;
+        }
+    }
+
+    static final class NodeSwitchLimitException extends IOException {
+        NodeSwitchLimitException(int limit) { super("单张图片节点切换已达到上限（" + limit + " 次）"); }
+    }
     private static final ScheduledExecutorService BODY_TIMEOUTS = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "crawler-response-timeout");
         thread.setDaemon(true);
@@ -71,6 +90,7 @@ public class SafeHttpFetcher {
         ImageDownloadDeadline deadline = new ImageDownloadDeadline(
                 () -> crawlerSettingsService.networkSnapshot().imageDownloadTimeoutSeconds());
         IMAGE_DEADLINE.set(deadline);
+        IMAGE_NODE_BUDGET.set(new NodeSwitchBudget(3));
         try {
             FetchedResource resource = fetchWithAccept(
                     url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, IMAGE_ACCEPT);
@@ -81,6 +101,7 @@ public class SafeHttpFetcher {
         } finally {
             deadline.close();
             IMAGE_DEADLINE.remove();
+            IMAGE_NODE_BUDGET.remove();
         }
     }
 
@@ -92,7 +113,10 @@ public class SafeHttpFetcher {
         Exception failure = null;
         try {
             session.begin(url);
+            if (IMAGE_ACCEPT.equals(accept)) IMAGE_NODE_BUDGET.set(new NodeSwitchBudget(session.maxImageNodeSwitches()));
             int attempts = session.autoFailover() ? session.nodeCount() : 1;
+            boolean imageSwitchLimited = IMAGE_ACCEPT.equals(accept) && attempts > session.maxImageNodeSwitches() + 1;
+            if (IMAGE_ACCEPT.equals(accept)) attempts = Math.min(attempts, session.maxImageNodeSwitches() + 1);
             for (int attempt = 0; attempt < attempts; attempt++) {
                 managedClients.set(new java.util.ArrayList<>());
                 try {
@@ -101,8 +125,16 @@ public class SafeHttpFetcher {
                     return result;
                 } catch (IOException exception) {
                     checkImageDeadline();
+                    if (exception instanceof NodeSwitchLimitException) throw exception;
                     if (exception instanceof HttpStatusException status && !status.nodeFailure()) throw exception;
                     session.failure(exception);
+                    if (!(exception instanceof CrawlerExecutorService.ControlException)
+                            && imageSwitchLimited && attempt + 1 == attempts) {
+                        NodeSwitchLimitException limit = new NodeSwitchLimitException(session.maxImageNodeSwitches());
+                        limit.initCause(exception);
+                        throw limit;
+                    }
+                    if (IMAGE_ACCEPT.equals(accept) && attempt + 1 == attempts) throw exception;
                     if (!(exception instanceof CrawlerExecutorService.ControlException)) session.waitIfUnavailable();
                     if (exception instanceof CrawlerExecutorService.ControlException || attempt + 1 == attempts) throw exception;
                 } finally {
@@ -198,6 +230,7 @@ public class SafeHttpFetcher {
                 throw exception;
             } catch (IOException exception) {
                 checkImageDeadline();
+                if (exception instanceof NodeSwitchLimitException) throw exception;
                 lastFailure = exception;
                 if (attempt >= retries) throw exception;
                 awaitRetry(attempt, settings.retryBaseDelayMillis(), null);
@@ -244,6 +277,8 @@ public class SafeHttpFetcher {
         IOException lastFailure = null;
         for (CrawlerSettingsService.ProxyConfig proxy : settings.proxies()) {
             if (session != null && !session.managedMihomo() && !session.ordinaryAvailable(proxy.id())) continue;
+            NodeSwitchBudget budget = IMAGE_NODE_BUDGET.get();
+            if (budget != null && (session == null || !session.managedMihomo())) budget.use("proxy:" + proxy.id());
             try {
                 if (session != null) session.proxyAttempt(proxy.id());
                 HttpResponse<byte[]> response = sendWithBodyTimeout(
@@ -269,6 +304,8 @@ public class SafeHttpFetcher {
             }
         }
         if (settings.directFallback()) {
+            NodeSwitchBudget budget = IMAGE_NODE_BUDGET.get();
+            if (budget != null) budget.use("direct");
             if (session != null) session.proxyAttempt(null);
             return sendWithBodyTimeout(directClient(settings.connectTimeoutSeconds()), request,
                     maxBytes, timeoutSeconds);

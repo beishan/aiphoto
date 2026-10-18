@@ -13,6 +13,7 @@ public class CrawlerExecutorOptions {
     private List<ProxyChoice> ordinaryProxies = new ArrayList<>();
     private int defaultProxyCooldownSeconds = 300;
     private int failureThreshold = 2;
+    private int maxImageNodeSwitches = 3;
     private String manualNode;
     private boolean failover = true;
     private int rotationSeconds = 300;

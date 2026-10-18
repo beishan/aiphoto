@@ -71,6 +71,7 @@ export interface CrawlerExecutorOptions {
   ordinaryProxies: { proxyId: number; cooldownSeconds: number | null }[]
   defaultProxyCooldownSeconds: number
   failureThreshold: number
+  maxImageNodeSwitches: number
   manualNode: string | null
   failover: boolean
   rotationSeconds: number
