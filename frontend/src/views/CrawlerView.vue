@@ -50,7 +50,7 @@ const targetAlbumId = ref<number | null>(null)
 const targetTagIds = ref<number[]>([])
 const batchNote = ref('')
 const assetPage = ref(0)
-const assetPageSize = 60
+const reviewPageSizes = [20, 60, 100, 200]
 const assetTotal = ref(0)
 const reviewSourcePageId = ref<number | null>(null)
 const reviewSourcePages = ref<{ id: number; name: string | null; url: string; assetCount: number }[]>([])
@@ -98,6 +98,27 @@ function readTaskAssetView(): 'table' | 'cards' {
   catch { return 'table' }
 }
 const taskAssetView = ref<'table' | 'cards'>(readTaskAssetView())
+const reviewPageSizeCacheKey = taskAssetViewCacheKey?.replace('crawler-task-asset-view', 'crawler-review-page-size')
+function readReviewPageSize() {
+  try {
+    const size = Number(reviewPageSizeCacheKey ? localStorage.getItem(reviewPageSizeCacheKey) : null)
+    return reviewPageSizes.includes(size) ? size : 60
+  } catch { return 60 }
+}
+const reviewPageSize = ref(readReviewPageSize())
+const assetPageSize = computed(() => taskDrawerVisible.value || activeTab.value !== 'review' ? 60 : reviewPageSize.value)
+function changeReviewPageSize(size: number) {
+  if (!reviewPageSizes.includes(size)) return
+  reviewRequest++
+  reviewPageSize.value = size
+  assetPage.value = 0
+  selectedAssets.value = new Set()
+  closePreviewViewer()
+  if (reviewPageSizeCacheKey) {
+    try { localStorage.setItem(reviewPageSizeCacheKey, String(size)) } catch { /* Keep the current selection in memory. */ }
+  }
+  void loadReviewData()
+}
 const previewViewerVisible = ref(false)
 const previewViewerAsset = ref<CrawlAsset | null>(null)
 const previewViewerIndex = ref(0)
@@ -250,7 +271,7 @@ async function loadReviewData() {
   try {
     const [pagesResult, assetsResult] = await Promise.all([
       crawlApi.reviewPages(),
-      crawlApi.reviewAssets(assetPage.value, assetPageSize, assetStatus.value,
+      crawlApi.reviewAssets(assetPage.value, assetPageSize.value, assetStatus.value,
         exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value),
     ])
     if (request !== reviewRequest) return
@@ -401,7 +422,7 @@ async function loadJobDetail() {
   const [jobResult, pageResult, assetResult, progressResult, scanResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
-    showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
+    showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize.value, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
     taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
     taskDrawerVisible.value && activeJob.value && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(activeJob.value.phase)
       ? crawlApi.scanResults(jobId, scanResultPage.value) : Promise.resolve(null),
@@ -432,7 +453,7 @@ async function loadJobDetail() {
 }
 
 async function loadPreviews() {
-  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).slice(0, 80)
+  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id])
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
@@ -478,20 +499,20 @@ function openAssetPreview(asset: CrawlAsset) {
   Object.keys(previewViewerPages).forEach(key => delete previewViewerPages[Number(key)])
   previewViewerPages[assetPage.value] = assets.value.slice()
   previewViewerVisible.value = true
-  void loadPreviewViewerAsset(asset, assetPage.value * assetPageSize + indexInPage)
+  void loadPreviewViewerAsset(asset, assetPage.value * assetPageSize.value + indexInPage)
 }
 
 async function stepPreviewViewer(direction: -1 | 1) {
   if (!previewViewerVisible.value || previewViewerLoading.value) return
   const targetIndex = previewViewerIndex.value + direction
   if (targetIndex < 0 || targetIndex >= assetTotal.value) return
-  const targetPage = Math.floor(targetIndex / assetPageSize)
+  const targetPage = Math.floor(targetIndex / assetPageSize.value)
   let pageAssets = previewViewerPages[targetPage]
   if (!pageAssets) {
     try {
       const { data } = taskDrawerVisible.value && activeJobId.value
-        ? await crawlApi.assets(activeJobId.value, targetPage, assetPageSize)
-        : await crawlApi.reviewAssets(targetPage, assetPageSize, assetStatus.value,
+        ? await crawlApi.assets(activeJobId.value, targetPage, assetPageSize.value)
+        : await crawlApi.reviewAssets(targetPage, assetPageSize.value, assetStatus.value,
           exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value)
       pageAssets = data.content
       previewViewerPages[targetPage] = pageAssets
@@ -501,7 +522,7 @@ async function stepPreviewViewer(direction: -1 | 1) {
     }
   }
   if (!previewViewerVisible.value) return
-  const asset = pageAssets[targetIndex % assetPageSize]
+  const asset = pageAssets[targetIndex % assetPageSize.value]
   if (asset) await loadPreviewViewerAsset(asset, targetIndex)
 }
 
@@ -1237,7 +1258,7 @@ onUnmounted(() => {
             <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
           </el-card>
         </div>
-        <el-pagination class="pagination" layout="total, prev, pager, next, jumper" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
+        <el-pagination class="pagination" layout="total, sizes, prev, pager, next, jumper" :page-sizes="reviewPageSizes" :current-page="assetPage + 1" :page-size="reviewPageSize" @size-change="changeReviewPageSize" :total="assetTotal" @current-change="changeAssetPage" />
         <el-collapse v-if="deletedAssets.length" class="deleted-collapse surface-card"><el-collapse-item :title="`已删除（${deletedAssets.length}）`" name="deleted"><el-table :data="deletedAssets" size="small"><el-table-column label="文件" prop="originalFilename" min-width="240" /><el-table-column label="大小" width="120"><template #default="{ row }">{{ formatBytes(row.fileSize) }}</template></el-table-column><el-table-column label="" width="90"><template #default="{ row }"><el-button link type="primary" @click="restoreDeleted(row)">恢复</el-button></template></el-table-column></el-table></el-collapse-item></el-collapse>
       </template>
     </section>
