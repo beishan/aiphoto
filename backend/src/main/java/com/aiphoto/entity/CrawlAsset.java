@@ -50,6 +50,15 @@ public class CrawlAsset {
     private String note;
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
+    private Long downloadStartedAtMillis;
+    private Long downloadDurationMillis;
+
+    @Transient
+    public Long getDownloadElapsedMillis() {
+        if (downloadDurationMillis != null) return downloadDurationMillis;
+        if (status != Status.RUNNING || downloadStartedAtMillis == null) return null;
+        return Math.max(0L, System.currentTimeMillis() - downloadStartedAtMillis);
+    }
     @Transient
     private Long exactDuplicateCount = 0L;
     @Transient

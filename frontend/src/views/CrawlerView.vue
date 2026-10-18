@@ -50,6 +50,8 @@ const assetTotal = ref(0)
 const reviewSourcePageId = ref<number | null>(null)
 const reviewSourcePages = ref<{ id: number; name: string | null; url: string; assetCount: number }[]>([])
 const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null })
+const downloadClock = ref(Date.now())
+const downloadTimingReceivedAt = ref(Date.now())
 const assetStatus = ref('')
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
@@ -111,6 +113,7 @@ const selectedSourcePage = ref<CrawlPage | null>(null)
 const filteredImagesDialogVisible = ref(false)
 const selectedFilteredPage = ref<CrawlPage | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let downloadClockTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
 let reviewRequest = 0
 let polling = false
@@ -301,6 +304,29 @@ function assetStatusLabel(asset: CrawlAsset) {
   return ({ PENDING: '待下载', RUNNING: '正在下载', DOWNLOADED: '已下载', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除', DUPLICATE: '重复图片', IMPORTED: '已入库' } as const)[asset.status]
 }
 
+function imageIsDownloading(asset: CrawlAsset) {
+  return activeJob.value?.status === 'RUNNING' && asset.status === 'RUNNING'
+    && asset.downloadStartedAtMillis != null && asset.downloadDurationMillis == null
+}
+
+function imageElapsedLabel(asset: CrawlAsset) {
+  let elapsed = asset.downloadDurationMillis ?? asset.downloadElapsedMillis
+  if (elapsed == null) return '—'
+  if (imageIsDownloading(asset)) elapsed += Math.max(0, downloadClock.value - downloadTimingReceivedAt.value)
+  const tenths = Math.floor(Math.max(0, elapsed) / 100)
+  const seconds = Math.floor(tenths / 10) % 60
+  const minutes = Math.floor(tenths / 600) % 60
+  const hours = Math.floor(tenths / 36000)
+  return `${hours ? `${hours}:` : ''}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths % 10}`
+}
+
+watch(() => taskDrawerVisible.value && taskImageAssets.value.some(imageIsDownloading), running => {
+  if (downloadClockTimer) clearInterval(downloadClockTimer)
+  downloadClockTimer = null
+  downloadClock.value = Date.now()
+  if (running) downloadClockTimer = setInterval(() => { downloadClock.value = Date.now() }, 100)
+})
+
 function filteredImageRows(page: CrawlPage | null) {
   if (!page?.filteredImagesJson) return [] as { url: string; reason: string }[]
   try {
@@ -359,6 +385,8 @@ async function loadJobDetail() {
     assetTotal.value = assetResult.data.totalElements
   }
   imageProgress.value = progressResult?.data || { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }
+  downloadTimingReceivedAt.value = Date.now()
+  downloadClock.value = downloadTimingReceivedAt.value
   for (const key of Object.keys(previewImages)) {
     const id = Number(key)
     if (!assets.value.some(asset => asset.id === id)) {
@@ -1004,6 +1032,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
+  if (downloadClockTimer) clearInterval(downloadClockTimer)
   window.removeEventListener('keydown', handlePreviewViewerKeydown)
   previewViewerRequest += 1
   revokePreviewViewerObjectUrl()
@@ -1356,6 +1385,7 @@ onUnmounted(() => {
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="150"><template #default="{ row }">{{ assetStatusLabel(row) }}</template></el-table-column>
+            <el-table-column label="采集耗时" width="135"><template #default="{ row }"><span class="download-timer" :class="{ 'is-running': imageIsDownloading(row) }" role="timer" aria-live="off" title="本次采集耗时，包含等待、重试和图片处理；重试任务后重新计时"><i v-if="imageIsDownloading(row)" class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(row) }}</span></template></el-table-column>
             <el-table-column label="代理节点" width="150"><template #default="{ row }"><el-tag v-if="row.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" size="small" effect="plain">{{ imageProgress.currentProxyName }}</el-tag><span v-else>—</span></template></el-table-column>
             <el-table-column label="失败原因" prop="errorMessage" min-width="180" show-overflow-tooltip />
           </el-table>
@@ -1368,8 +1398,9 @@ onUnmounted(() => {
                 <span class="task-image-info-tag task-image-dimensions-tag">{{ asset.width && asset.height ? `${asset.width} × ${asset.height}` : '未知尺寸' }} · {{ asset.fileSize ? formatBytes(asset.fileSize) : '未知大小' }}</span>
                 <span v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-info-tag task-image-proxy-tag">代理：{{ imageProgress.currentProxyName }}</span>
                 <el-button class="task-image-preview-button" circle size="small" :icon="View" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
-                <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="task-image-progress-track"><i /></span></div>
+                <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="download-timer is-running" role="timer" aria-live="off"><i class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(asset) }}</span><span class="task-image-progress-track"><i /></span></div>
               </div>
+              <div class="task-image-timing-row" title="本次采集耗时，包含等待、重试和图片处理；重试任务后重新计时"><span>采集耗时</span><span class="download-timer" :class="{ 'is-running': imageIsDownloading(asset) }">{{ imageElapsedLabel(asset) }}</span></div>
               <div v-if="asset.errorMessage" class="task-image-card-copy"><small class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
             </article>
             <el-empty v-if="!assets.length" class="task-image-empty" :description="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'" />

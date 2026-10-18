@@ -208,6 +208,9 @@ export interface CrawlPage {
 }
 
 export interface CrawlAsset {
+  downloadStartedAtMillis?: number | null
+  downloadDurationMillis?: number | null
+  downloadElapsedMillis?: number | null
   id: number
   jobId: number
   sourcePageUrl: string

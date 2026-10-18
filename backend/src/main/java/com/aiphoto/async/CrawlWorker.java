@@ -340,6 +340,9 @@ public class CrawlWorker {
             assetRepository.save(asset);
             return;
         }
+        long downloadStartedNanos = System.nanoTime();
+        asset.setDownloadStartedAtMillis(System.currentTimeMillis());
+        asset.setDownloadDurationMillis(null);
         asset.setStatus(CrawlAsset.Status.RUNNING);
         asset.setErrorMessage(null);
         assetRepository.save(asset);
@@ -378,8 +381,11 @@ public class CrawlWorker {
         } catch (Exception exception) {
             asset.setStatus(CrawlAsset.Status.FAILED);
             asset.setErrorMessage(shortMessage(exception));
+        } finally {
+            asset.setDownloadDurationMillis(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                    System.nanoTime() - downloadStartedNanos));
+            assetRepository.save(asset);
         }
-        assetRepository.save(asset);
         jobRepository.updateImageProgress(jobId,
                 (int) assetRepository.countByJobIdAndStatus(jobId, CrawlAsset.Status.DOWNLOADED));
         if (asset.getStatus() == CrawlAsset.Status.DOWNLOADED) executorService.current().imageCompleted(asset.getId());

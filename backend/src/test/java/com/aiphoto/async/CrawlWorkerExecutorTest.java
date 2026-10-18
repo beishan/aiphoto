@@ -32,6 +32,28 @@ class CrawlWorkerExecutorTest {
     @Mock CrawlAssetSourceRepository sources;
     @InjectMocks CrawlWorker worker;
 
+    @Test
+    void failedDownloadsPersistTheirElapsedTime() throws Exception {
+        var asset = new com.aiphoto.entity.CrawlAsset();
+        asset.setId(3L);
+        asset.setImageUrl("https://example.com/a.webp");
+        var rule = new CrawlRule();
+        rule.setStartUrl("https://example.com/");
+        when(fetcher.fetchImage(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            assertThat(asset.getDownloadStartedAtMillis()).isNotNull();
+            assertThat(asset.getDownloadDurationMillis()).isNull();
+            throw new java.net.http.HttpTimeoutException("图片超时");
+        });
+
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                worker, "downloadAsset", 1L, 9L, rule, asset);
+
+        assertThat(asset.getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.FAILED);
+        assertThat(asset.getDownloadDurationMillis()).isNotNull().isGreaterThanOrEqualTo(0L);
+        assertThat(asset.getDownloadElapsedMillis()).isEqualTo(asset.getDownloadDurationMillis());
+        verify(assets, times(2)).save(asset);
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({"false, 10", "true, 10", "false, 1"})
     void registersAllPagesBeforeDownloadingAndPreservesPendingOnResume(
@@ -94,6 +116,7 @@ class CrawlWorkerExecutorTest {
         worker.download(1L);
         if (interrupt) {
             assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.PAUSED);
+            assertThat(records.getFirst().getDownloadDurationMillis()).isNotNull();
             assertThat(records).allMatch(asset -> asset.getStatus() == com.aiphoto.entity.CrawlAsset.Status.PENDING);
             worker.download(1L);
         }
@@ -101,6 +124,12 @@ class CrawlWorkerExecutorTest {
         assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.COMPLETED);
         assertThat(records.stream().filter(asset -> asset.getStatus()
                 == com.aiphoto.entity.CrawlAsset.Status.DOWNLOADED)).hasSize(Math.min(maxImages, 3));
+        assertThat(records.stream().filter(asset -> asset.getStatus()
+                == com.aiphoto.entity.CrawlAsset.Status.DOWNLOADED))
+                .allSatisfy(asset -> {
+                    assertThat(asset.getDownloadStartedAtMillis()).isNotNull();
+                    assertThat(asset.getDownloadDurationMillis()).isNotNull().isGreaterThanOrEqualTo(0L);
+                });
         assertThat(records).noneMatch(asset -> asset.getStatus() == com.aiphoto.entity.CrawlAsset.Status.PENDING);
         if (maxImages == 1) {
             assertThat(records.subList(1, 3)).allMatch(asset ->

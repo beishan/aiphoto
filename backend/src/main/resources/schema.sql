@@ -457,6 +457,8 @@ CREATE TABLE IF NOT EXISTS crawl_assets (
     imported_photo_id BIGINT REFERENCES photos(id) ON DELETE SET NULL,
     note TEXT,
     error_message TEXT,
+    download_started_at_millis BIGINT,
+    download_duration_millis BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(job_id, url_hash)
 );
@@ -464,6 +466,8 @@ ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS file_hash_phash VARCHAR(16);
 ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_group_id BIGINT;
 ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS similarity_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS download_started_at_millis BIGINT;
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS download_duration_millis BIGINT;
 
 CREATE TABLE IF NOT EXISTS crawl_asset_sources (
     id BIGSERIAL PRIMARY KEY,

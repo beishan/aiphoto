@@ -1,3 +1,39 @@
+.download-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.download-timer.is-running { color: var(--accent); }
+.download-timer-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+  animation: download-clock-pulse 1.2s ease-out infinite;
+}
+.task-image-download-mask .download-timer { color: #fff; font-size: 22px; }
+.task-image-timing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+@keyframes download-clock-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  80%, 100% { box-shadow: 0 0 0 6px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .download-timer-dot { animation: none; }
+}
+
 .crawler-page {
   display: grid;
   gap: 16px;
