@@ -12,6 +12,8 @@ import org.hibernate.annotations.CreationTimestamp;
 @Entity
 @Table(name = "crawl_jobs")
 public class CrawlJob {
+    public static final int SCAN_PRIORITY = 100;
+    public static final int DOWNLOAD_PRIORITY = 75;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,6 +33,13 @@ public class CrawlJob {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status = Status.QUEUED;
+    private Integer priority;
+
+    public Integer getPriority() {
+        if (priority != null) return priority;
+        return phase == Phase.DISCOVERY || phase == Phase.AWAITING_CONFIRMATION
+                ? SCAN_PRIORITY : DOWNLOAD_PRIORITY;
+    }
     private Integer listProcessed = 0;
     private Integer pagesFound = 0;
     private Integer pagesProcessed = 0;

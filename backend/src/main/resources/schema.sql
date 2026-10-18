@@ -396,6 +396,7 @@ CREATE TABLE IF NOT EXISTS crawl_jobs (
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(100);
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS priority INTEGER;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS site_id BIGINT REFERENCES crawl_sites(id) ON DELETE RESTRICT;
 UPDATE crawl_jobs j SET site_id = r.site_id
 FROM crawl_rules r WHERE j.site_id IS NULL AND j.rule_id = r.id;

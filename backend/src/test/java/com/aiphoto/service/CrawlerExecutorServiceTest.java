@@ -3,6 +3,7 @@ package com.aiphoto.service;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.aiphoto.entity.CrawlerExecutor;
+import com.aiphoto.entity.CrawlJob;
 import com.aiphoto.entity.CrawlerProxy;
 import com.aiphoto.repository.CrawlerExecutorRepository;
 import com.aiphoto.repository.CrawlerProxyRepository;
@@ -55,6 +56,56 @@ class CrawlerExecutorServiceTest {
         }
         assertThat(service.current()).isNull();
         try (var second = service.acquire(11L)) { assertThat(second).isNotNull(); }
+    }
+
+    @Test void defaultExecutorYieldsToWaitingHigherPriorityTasks() {
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of());
+        var download = priorityJob(10L, 1L, CrawlJob.Phase.DOWNLOAD);
+        var scan = priorityJob(11L, 2L, CrawlJob.Phase.DISCOVERY);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(download));
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(scan));
+        when(jobRepository.findHigherPriorityRunnableJobs(eq(75), any())).thenReturn(List.of(scan));
+        assertThat(service.acquire(10L)).isNull();
+        try (var acquired = service.acquire(11L)) { assertThat(acquired).isNotNull(); }
+    }
+
+    @Test void sharedExecutorCannotBeTakenByALowerPriorityWorkerDispatchedFirst() {
+        var download = priorityJob(10L, 1L, CrawlJob.Phase.DOWNLOAD);
+        var scan = priorityJob(11L, 2L, CrawlJob.Phase.DISCOVERY);
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(download));
+        when(jobRepository.findHigherPriorityRunnableJobs(eq(75), any())).thenReturn(List.of(scan));
+        assertThat(service.acquire(10L)).isNull();
+    }
+
+    @Test void highPriorityTasksInADedicatedSiteDoNotBlockOtherSharedQueues() {
+        var dedicated = new CrawlerExecutor();
+        dedicated.setId(2L); dedicated.setName("Dedicated");
+        dedicated.setProxyMode("DIRECT"); dedicated.setOptionsJson("{\"siteId\":2}");
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(executor, dedicated));
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(priorityJob(10L, 1L, CrawlJob.Phase.DOWNLOAD)));
+        when(jobRepository.findHigherPriorityRunnableJobs(eq(75), any()))
+                .thenReturn(List.of(priorityJob(11L, 2L, CrawlJob.Phase.DISCOVERY)));
+        try (var acquired = service.acquire(10L)) { assertThat(acquired).isNotNull(); }
+    }
+
+    @Test void aRunningHighPriorityTaskDoesNotPreventUseOfAnotherFreeExecutor() {
+        var another = new CrawlerExecutor();
+        another.setId(2L); another.setName("Second"); another.setProxyMode("DIRECT");
+        when(repository.findById(2L)).thenReturn(Optional.of(another));
+        when(repository.findAllByOrderByIdAsc()).thenReturn(List.of(executor, another));
+        var scan = priorityJob(11L, 1L, CrawlJob.Phase.DISCOVERY);
+        when(jobRepository.findById(11L)).thenReturn(Optional.of(scan));
+        when(jobRepository.findById(10L)).thenReturn(Optional.of(priorityJob(10L, 1L, CrawlJob.Phase.DOWNLOAD)));
+        when(jobRepository.findHigherPriorityRunnableJobs(eq(75), any())).thenReturn(List.of(scan));
+        try (var high = service.acquire(11L); var low = service.acquire(10L)) {
+            assertThat(high).isNotNull();
+            assertThat(low).isNotNull();
+        }
+    }
+
+    private CrawlJob priorityJob(Long id, Long siteId, CrawlJob.Phase phase) {
+        CrawlJob job = new CrawlJob(); job.setId(id); job.setSiteId(siteId); job.setPhase(phase);
+        return job;
     }
 
     @Test void siteQueueRunsOneJobPerAssignedExecutorAndRejectsDuplicateDispatch() {

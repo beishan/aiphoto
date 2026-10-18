@@ -25,6 +25,11 @@ const sites = ref<CrawlSite[]>([])
 const rules = ref<CrawlRule[]>([])
 const activeSiteId = ref<number | null>(null)
 const jobs = ref<CrawlJob[]>([])
+const priorityOptions = [
+  { label: '最高', value: 100 }, { label: '高', value: 75 },
+  { label: '普通', value: 50 }, { label: '低', value: 25 }, { label: '最低', value: 0 },
+]
+const prioritySaving = ref(new Set<number>())
 const pages = ref<CrawlPage[]>([])
 const assets = ref<CrawlAsset[]>([])
 const activeJobId = ref<number | null>(null)
@@ -220,6 +225,19 @@ async function loadRules(preferredRuleId?: number) {
 async function loadJobs() {
   jobs.value = (await crawlApi.jobs()).data
   if (!activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
+}
+
+async function updateJobPriority(job: CrawlJob, priority: number | null) {
+  prioritySaving.value = new Set([...prioritySaving.value, job.id])
+  try {
+    await crawlApi.updateJobPriority(job.id, priority === -1 ? null : priority)
+    await loadJobs()
+    ElMessage.success('任务优先级已更新')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '更新优先级失败')
+  } finally {
+    prioritySaving.value = new Set([...prioritySaving.value].filter(id => id !== job.id))
+  }
 }
 async function loadReviewData() {
   const request = ++reviewRequest
@@ -1130,6 +1148,7 @@ onUnmounted(() => {
       <el-table :data="paginatedJobs" empty-text="暂无任务，先从扫描页发起扫描" @row-click="openWorkflowJob">
         <el-table-column label="任务" min-width="270"><template #default="{ row }"><div class="task-title-cell"><el-tag v-if="sites.find(site => site.id === row.siteId)?.name" class="task-site-tag" size="small" effect="plain" :title="sites.find(site => site.id === row.siteId)?.name">{{ sites.find(site => site.id === row.siteId)?.name }}</el-tag><el-button class="task-title-button" link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button></div></template></el-table-column>
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
+        <el-table-column label="优先级" width="125"><template #default="{ row }"><div @click.stop><el-select :model-value="row.priority" size="small" :disabled="prioritySaving.has(row.id)" aria-label="任务优先级" @change="updateJobPriority(row, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></div></template></el-table-column>
         <el-table-column label="进度" min-width="170"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" /></template></el-table-column>
         <el-table-column label="发现页面" prop="pagesFound" width="100" />
         <el-table-column label="已下载图片" prop="imagesDownloaded" width="110" />
@@ -1359,6 +1378,7 @@ onUnmounted(() => {
         <template v-if="activeJob">
           <div class="progress-card"><div><strong>{{ ['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) ? '图片采集进度' : '任务进度' }}</strong><span>{{ detailProgress(activeJob) }}%</span></div><el-progress :percentage="detailProgress(activeJob)" :stroke-width="10" :show-text="false" /><small v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && imageProgress.total">已处理 {{ imageProgress.processed }} / {{ imageProgress.total }} 张 · 下载成功 {{ imageProgress.downloaded }} 张</small></div>
           <el-descriptions :column="3" border class="job-stats">
+            <el-descriptions-item label="优先级"><el-select :model-value="activeJob.priority" size="small" :disabled="prioritySaving.has(activeJob.id)" aria-label="当前任务优先级" @change="updateJobPriority(activeJob, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></el-descriptions-item>
             <el-descriptions-item label="已扫描列表页">{{ activeJob.listProcessed }}</el-descriptions-item>
             <el-descriptions-item label="已发现图片页">{{ activeJob.pagesFound }}</el-descriptions-item>
             <el-descriptions-item label="已处理图片页">{{ activeJob.pagesProcessed }}</el-descriptions-item>

@@ -122,6 +122,14 @@ public class CrawlController {
         return crawlService.imageProgress(jobId, userId(authentication));
     }
 
+    @PatchMapping("/jobs/{jobId}/priority")
+    public CrawlJob updateJobPriority(@PathVariable Long jobId, Authentication authentication,
+            @RequestBody JobPriorityRequest request) {
+        return crawlService.updateJobPriority(jobId, userId(authentication), request.priority());
+    }
+
+    public record JobPriorityRequest(Integer priority) {}
+
     @GetMapping("/jobs/{jobId}/pages")
     public CrawlService.PageResult listPages(
             @PathVariable Long jobId,

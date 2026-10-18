@@ -85,6 +85,7 @@ export const crawlApi = {
   jobs: () => http.get<CrawlJob[]>('/crawl/jobs'),
   createJob: (ruleId: number) => http.post<{ jobId: number }>('/crawl/jobs', { ruleId }),
   job: (id: number) => http.get<CrawlJob>(`/crawl/jobs/${id}`),
+  updateJobPriority: (id: number, priority: number | null) => http.patch<CrawlJob>(`/crawl/jobs/${id}/priority`, { priority }),
   imageProgress: (id: number) => http.get<CrawlImageProgress>(`/crawl/jobs/${id}/image-progress`),
   pages: (id: number, page = 0, size = 50, query = '') => http.get<PageResponse<CrawlPage> & { includedElements: number }>(`/crawl/jobs/${id}/pages`, { params: { page, size, query: query || undefined } }),
   selectPages: (jobId: number, ids: number[], included: boolean) => http.patch<{ success: number; included: number }>(`/crawl/jobs/${jobId}/pages`, { ids, included }),

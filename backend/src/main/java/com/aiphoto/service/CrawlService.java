@@ -293,7 +293,8 @@ public class CrawlService {
 
     public List<CrawlJob> listJobs(Long ownerId) {
         return jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
-                .sorted(java.util.Comparator.comparingInt(CrawlService::jobListPriority))
+                .sorted(java.util.Comparator.comparingInt(CrawlService::jobListPriority)
+                        .thenComparingInt(job -> jobListPriority(job) < 2 ? -job.getPriority() : 0))
                 .toList();
     }
 
@@ -306,6 +307,16 @@ public class CrawlService {
     public CrawlJob getJob(Long jobId, Long ownerId) {
         return jobRepository.findByIdAndOwnerId(jobId, ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("采集任务不存在"));
+    }
+
+    @Transactional
+    public CrawlJob updateJobPriority(Long jobId, Long ownerId, Integer priority) {
+        if (priority != null && (priority < 0 || priority > 100)) {
+            throw new IllegalArgumentException("优先级必须在 0 至 100 之间");
+        }
+        CrawlJob job = getJob(jobId, ownerId);
+        job.setPriority(priority);
+        return jobRepository.save(job);
     }
 
     public ImageProgress imageProgress(Long jobId, Long ownerId) {

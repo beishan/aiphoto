@@ -267,19 +267,33 @@ public class CrawlerExecutorService {
 
     public synchronized Session acquire(Long jobId) {
         if (states.values().stream().anyMatch(state -> Objects.equals(state.jobId, jobId))) return null;
+        CrawlJob requested = jobRepository.findById(jobId).orElse(null);
+        List<CrawlJob> higherPriority = requested == null || requested.getPriority() >= 100
+                ? List.of() : jobRepository.findHigherPriorityRunnableJobs(
+                        requested.getPriority(), LocalDateTime.now()).stream()
+                        .filter(job -> states.values().stream()
+                                .noneMatch(state -> Objects.equals(state.jobId, job.getId())))
+                        .toList();
         List<CrawlerExecutor> executors = repository.findAllByOrderByIdAsc();
         if (executors.isEmpty()) {
-            if (active(0L)) return null;
+            if (active(0L) || !higherPriority.isEmpty()) return null;
             RuntimeState state = states.computeIfAbsent(0L, ignored -> new RuntimeState()); state.jobId = jobId;
             Session session = new Session(null, state); current.set(session); return session;
         }
-        Long siteId = jobRepository.findById(jobId).map(CrawlJob::getSiteId).orElse(null);
+        Long siteId = requested == null ? null : requested.getSiteId();
+        Set<Long> dedicatedSites = executors.stream().map(e -> options(e).getSiteId())
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
         List<CrawlerExecutor> matching = executors.stream().filter(e -> Objects.equals(options(e).getSiteId(), siteId) && options(e).getSiteId() != null).toList();
         if (!matching.isEmpty()) executors = matching; // Dedicated site configuration does not fall back to a global executor.
         for (CrawlerExecutor executor : executors) {
             var options = options(executor);
             if (!executor.getEnabled() || options.isFrozen() || active(executor.getId())
                     || (options.getSiteId() != null && !Objects.equals(options.getSiteId(), siteId))) continue;
+            // Async dispatch order alone cannot enforce priority: lower-priority
+            // workers must also yield at admission, and only within a shared pool.
+            if (higherPriority.stream().anyMatch(job -> options.getSiteId() != null
+                    ? Objects.equals(options.getSiteId(), job.getSiteId())
+                    : !dedicatedSites.contains(job.getSiteId()))) continue;
             if ("MIHOMO".equals(executor.getProxyMode()) && executor.getProxyId() != null) {
                 CrawlerProxy proxy = proxyRepository.findById(executor.getProxyId()).orElse(null);
                 if (proxy == null || !proxy.getEnabled()) continue;

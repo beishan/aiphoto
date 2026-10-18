@@ -17,10 +17,26 @@ public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
     boolean existsBySiteIdAndStatusIn(Long siteId, Collection<CrawlJob.Status> statuses);
     boolean existsByScanPageIdAndStatusIn(Long scanPageId, Collection<CrawlJob.Status> statuses);
 
-    @Query(value = "SELECT id FROM crawl_jobs WHERE status = 'QUEUED' "
-            + "OR (status = 'RUNNING' AND (lease_until IS NULL OR lease_until < :now)) "
-            + "ORDER BY created_at", nativeQuery = true)
+    @Query("select j.id from CrawlJob j where (j.status = com.aiphoto.entity.CrawlJob.Status.QUEUED "
+            + "or (j.status = com.aiphoto.entity.CrawlJob.Status.RUNNING "
+            + "and (j.leaseUntil is null or j.leaseUntil < :now))) "
+            + "and j.phase in (com.aiphoto.entity.CrawlJob.Phase.DISCOVERY, "
+            + "com.aiphoto.entity.CrawlJob.Phase.DOWNLOAD, com.aiphoto.entity.CrawlJob.Phase.REVIEW) "
+            + "order by coalesce(j.priority, case when j.phase = com.aiphoto.entity.CrawlJob.Phase.DISCOVERY "
+            + "or j.phase = com.aiphoto.entity.CrawlJob.Phase.AWAITING_CONFIRMATION "
+            + "then 100 else 75 end) desc, j.createdAt asc, j.id asc")
     List<Long> findRunnableJobIds(@Param("now") java.time.LocalDateTime now);
+
+    @Query("select j from CrawlJob j where (j.status = com.aiphoto.entity.CrawlJob.Status.QUEUED "
+            + "or (j.status = com.aiphoto.entity.CrawlJob.Status.RUNNING "
+            + "and (j.leaseUntil is null or j.leaseUntil < :now))) "
+            + "and j.phase in (com.aiphoto.entity.CrawlJob.Phase.DISCOVERY, "
+            + "com.aiphoto.entity.CrawlJob.Phase.DOWNLOAD, com.aiphoto.entity.CrawlJob.Phase.REVIEW) "
+            + "and coalesce(j.priority, case when j.phase = com.aiphoto.entity.CrawlJob.Phase.DISCOVERY "
+            + "or j.phase = com.aiphoto.entity.CrawlJob.Phase.AWAITING_CONFIRMATION "
+            + "then 100 else 75 end) > :priority")
+    List<CrawlJob> findHigherPriorityRunnableJobs(
+            @Param("priority") int priority, @Param("now") java.time.LocalDateTime now);
 
     @Modifying
     @Transactional

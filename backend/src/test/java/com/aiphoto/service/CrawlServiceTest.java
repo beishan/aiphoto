@@ -90,6 +90,33 @@ class CrawlServiceTest {
         return job;
     }
 
+    @Test void queuedScansAppearBeforeQueuedDownloadsWhileRunningTasksStayFirst() {
+        CrawlJob download = job(1L, CrawlJob.Status.QUEUED);
+        download.setPhase(CrawlJob.Phase.DOWNLOAD);
+        CrawlJob scan = job(2L, CrawlJob.Status.QUEUED);
+        CrawlJob running = job(3L, CrawlJob.Status.RUNNING);
+        running.setPriority(0);
+        when(jobRepository.findByOwnerIdOrderByCreatedAtDesc(9L))
+                .thenReturn(List.of(download, scan, running));
+        assertThat(crawlService.listJobs(9L)).containsExactly(running, scan, download);
+    }
+
+    @Test void priorityUpdatesAreScopedToTheJobOwner() {
+        CrawlJob job = job(1L, CrawlJob.Status.QUEUED);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));
+        when(jobRepository.save(job)).thenReturn(job);
+        assertThat(crawlService.updateJobPriority(1L, 9L, 25).getPriority()).isEqualTo(25);
+        assertThatThrownBy(() -> crawlService.updateJobPriority(1L, 10L, 100))
+                .hasMessageContaining("不存在");
+        verify(jobRepository).save(job);
+    }
+
+    @Test void invalidPriorityDoesNotReachTheRepository() {
+        assertThatThrownBy(() -> crawlService.updateJobPriority(1L, 9L, 101))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(jobRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test void emptyCompletedDownloadCanBeRetriedForDiagnosis() {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);
