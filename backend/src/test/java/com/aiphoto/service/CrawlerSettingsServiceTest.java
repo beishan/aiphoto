@@ -109,6 +109,29 @@ class CrawlerSettingsServiceTest {
     }
 
     @Test
+    void committingSettingsInvalidatesSnapshotsReadBeforeTheCommit() {
+        CrawlerSetting saved = new CrawlerSetting();
+        CrawlerSetting old = new CrawlerSetting();
+        when(settingRepository.findById(1L)).thenReturn(Optional.of(saved));
+        when(proxyRepository.findAllByOrderByPriorityAscIdAsc()).thenReturn(List.of());
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.updateSettings(new CrawlerSettingsService.SettingsRequest(
+                    true, 10, 30, 1, 1000L, 2, 1000L));
+            when(settingRepository.findById(1L)).thenReturn(Optional.of(old));
+            assertThat(service.networkSnapshot().imageDownloadTimeoutSeconds()).isEqualTo(60);
+
+            when(settingRepository.findById(1L)).thenReturn(Optional.of(saved));
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+
+            assertThat(service.networkSnapshot().imageDownloadTimeoutSeconds()).isEqualTo(1);
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
     void controllerUrlRejectsCredentialsAndPaths() {
         assertThatThrownBy(() -> CrawlerSettingsService.validateControllerUrl("http://user:secret@localhost:9090"))
                 .isInstanceOf(IllegalArgumentException.class);

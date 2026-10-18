@@ -38,6 +38,7 @@ public class SafeHttpFetcher {
     private static final int MAX_REDIRECTS = 5;
     private static final String PAGE_ACCEPT = "text/html,image/*;q=0.9,*/*;q=0.1";
     private static final String IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/*;q=0.9,*/*;q=0.1";
+    private static final ThreadLocal<ImageDownloadDeadline> IMAGE_DEADLINE = new ThreadLocal<>();
     private static final ScheduledExecutorService BODY_TIMEOUTS = Executors.newSingleThreadScheduledExecutor(task -> {
         Thread thread = new Thread(task, "crawler-response-timeout");
         thread.setDaemon(true);
@@ -67,7 +68,20 @@ public class SafeHttpFetcher {
     public FetchedResource fetchImage(
             String url, String blockedHosts, long maxBytes, long siteMinRequestIntervalMillis)
             throws Exception {
-        return fetchWithAccept(url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, IMAGE_ACCEPT);
+        ImageDownloadDeadline deadline = new ImageDownloadDeadline(
+                () -> crawlerSettingsService.networkSnapshot().imageDownloadTimeoutSeconds());
+        IMAGE_DEADLINE.set(deadline);
+        try {
+            FetchedResource resource = fetchWithAccept(
+                    url, blockedHosts, maxBytes, siteMinRequestIntervalMillis, IMAGE_ACCEPT);
+            deadline.check();
+            return resource;
+        } catch (Exception exception) {
+            throw imageFailure(exception);
+        } finally {
+            deadline.close();
+            IMAGE_DEADLINE.remove();
+        }
     }
 
     private FetchedResource fetchWithAccept(
@@ -86,19 +100,20 @@ public class SafeHttpFetcher {
                     session.success();
                     return result;
                 } catch (IOException exception) {
+                    checkImageDeadline();
                     if (exception instanceof HttpStatusException status && !status.nodeFailure()) throw exception;
                     session.failure(exception);
                     if (!(exception instanceof CrawlerExecutorService.ControlException)) session.waitIfUnavailable();
                     if (exception instanceof CrawlerExecutorService.ControlException || attempt + 1 == attempts) throw exception;
                 } finally {
-                    for (HttpClient client : managedClients.get()) client.close();
+                    for (HttpClient client : managedClients.get()) client.shutdownNow();
                     managedClients.remove();
                 }
             }
             throw new IOException("Mihomo 节点请求失败");
         } catch (Exception exception) {
-            failure = exception;
-            throw exception;
+            failure = imageFailure(exception);
+            throw failure;
         } finally {
             session.finish(failure);
         }
@@ -129,6 +144,7 @@ public class SafeHttpFetcher {
         for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
             validate(uri, hosts);
             awaitRateLimit(uri.getHost(), requestIntervalMillis);
+            checkImageDeadline();
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("User-Agent", "aiphoto-crawler/1.0")
@@ -152,6 +168,11 @@ public class SafeHttpFetcher {
             }
             String contentType = response.headers().firstValue("content-type")
                     .orElse("application/octet-stream").split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
+            ImageDownloadDeadline imageDeadline = IMAGE_DEADLINE.get();
+            if (imageDeadline != null) {
+                imageDeadline.check();
+                imageDeadline.close();
+            }
             return new FetchedResource(uri, contentType, response.body());
         }
         throw new IllegalStateException("重定向次数过多");
@@ -176,6 +197,7 @@ public class SafeHttpFetcher {
                 Thread.currentThread().interrupt();
                 throw exception;
             } catch (IOException exception) {
+                checkImageDeadline();
                 lastFailure = exception;
                 if (attempt >= retries) throw exception;
                 awaitRetry(attempt, settings.retryBaseDelayMillis(), null);
@@ -241,6 +263,7 @@ public class SafeHttpFetcher {
                 Thread.currentThread().interrupt();
                 throw exception;
             } catch (IOException exception) {
+                checkImageDeadline();
                 lastFailure = exception;
                 if (session != null && !session.managedMihomo()) session.proxyFailed(proxy.id(), "代理连接失败");
             }
@@ -375,6 +398,11 @@ public class SafeHttpFetcher {
 
     static HttpResponse<byte[]> sendWithBodyTimeout(
             HttpClient client, HttpRequest request, long maxBytes, int timeoutSeconds) throws Exception {
+        ImageDownloadDeadline imageDeadline = IMAGE_DEADLINE.get();
+        if (imageDeadline != null) {
+            imageDeadline.start();
+            imageDeadline.check();
+        }
         AtomicBoolean timedOut = new AtomicBoolean();
         long deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         try {
@@ -387,6 +415,23 @@ public class SafeHttpFetcher {
             }
             throw exception;
         }
+    }
+
+    private static void checkImageDeadline() throws java.net.http.HttpTimeoutException {
+        ImageDownloadDeadline deadline = IMAGE_DEADLINE.get();
+        if (deadline != null) deadline.check();
+    }
+
+    private static Exception imageFailure(Exception exception) {
+        ImageDownloadDeadline deadline = IMAGE_DEADLINE.get();
+        if (deadline != null) {
+            try { deadline.check(); }
+            catch (java.net.http.HttpTimeoutException timeout) {
+                deadline.clearTimeoutInterrupt();
+                return timeout;
+            }
+        }
+        return exception;
     }
 
     static HttpResponse.BodyHandler<byte[]> limitedBodyHandler(long maxBytes, int timeoutSeconds) {

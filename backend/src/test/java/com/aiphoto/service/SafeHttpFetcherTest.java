@@ -16,6 +16,101 @@ import org.junit.jupiter.api.Test;
 class SafeHttpFetcherTest {
 
     @Test
+    @SuppressWarnings("unchecked")
+    void imageRetriesShareOneDeadlineAndDoNotLeaveTheWorkerInterrupted() throws Exception {
+        var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
+        var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
+        var fetcher = new SafeHttpFetcher(settings, executors);
+        var client = org.mockito.Mockito.mock(HttpClient.class);
+        var session = org.mockito.Mockito.mock(CrawlerExecutorService.Session.class);
+        org.mockito.Mockito.when(settings.networkSnapshot()).thenReturn(imageNetwork(1, 5));
+        org.mockito.Mockito.when(executors.current()).thenReturn(session);
+        org.mockito.Mockito.when(session.network()).thenReturn(imageNetwork(1, 5));
+        org.mockito.Mockito.when(session.autoFailover()).thenReturn(true);
+        org.mockito.Mockito.when(session.nodeCount()).thenReturn(4);
+        var clients = (java.util.Map<String, HttpClient>)
+                org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
+        clients.put("direct:5", client);
+        org.mockito.Mockito.when(client.send(org.mockito.ArgumentMatchers.any(HttpRequest.class),
+                org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any()))
+                .thenAnswer(invocation -> {
+                    Thread.sleep(700);
+                    throw new java.io.IOException("temporary failure");
+                });
+
+        long started = System.nanoTime();
+        assertThatThrownBy(() -> fetcher.fetchImage("https://8.8.8.8/image.jpg", "", 100, 0))
+                .isInstanceOf(java.net.http.HttpTimeoutException.class)
+                .hasMessageContaining("总时限 1 秒");
+        assertThat(Duration.ofNanos(System.nanoTime() - started).toMillis()).isLessThan(2500);
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
+        org.mockito.Mockito.verify(session, org.mockito.Mockito.never()).waitIfUnavailable();
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.atMost(2)).send(
+                org.mockito.ArgumentMatchers.any(HttpRequest.class),
+                org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void shorteningTheSettingInterruptsAnImageAlreadyDownloading() throws Exception {
+        var settings = org.mockito.Mockito.mock(CrawlerSettingsService.class);
+        var executors = org.mockito.Mockito.mock(CrawlerExecutorService.class);
+        var fetcher = new SafeHttpFetcher(settings, executors);
+        var timeout = new java.util.concurrent.atomic.AtomicInteger(30);
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            exchange.sendResponseHeaders(200, 0);
+            try (var body = exchange.getResponseBody()) {
+                body.write(new byte[] {1});
+                body.flush();
+                started.countDown();
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        server.start();
+        var client = HttpClient.newBuilder().proxy(java.net.ProxySelector.of(server.getAddress())).build();
+        org.mockito.Mockito.when(settings.networkSnapshot())
+                .thenAnswer(invocation -> imageNetwork(timeout.get(), 5));
+        var clients = (java.util.Map<String, HttpClient>)
+                org.springframework.test.util.ReflectionTestUtils.getField(fetcher, "clients");
+        clients.put("direct:5", client);
+        try (var workers = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var result = workers.submit(() -> {
+                try {
+                    fetcher.fetchImage("http://8.8.8.8/image.jpg", "", 100, 0);
+                    return (Exception) null;
+                } catch (Exception exception) {
+                    assertThat(Thread.currentThread().isInterrupted()).isFalse();
+                    return exception;
+                }
+            });
+            try {
+                assertThat(started.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                timeout.set(1);
+                assertThat(result.get(3, java.util.concurrent.TimeUnit.SECONDS))
+                        .isInstanceOf(java.net.http.HttpTimeoutException.class)
+                        .hasMessageContaining("总时限 1 秒");
+            } finally {
+                result.cancel(true);
+                release.countDown();
+            }
+        } finally {
+            release.countDown();
+            server.stop(0);
+            client.shutdownNow();
+        }
+    }
+
+    private CrawlerSettingsService.NetworkSnapshot imageNetwork(int timeout, int retries) {
+        return new CrawlerSettingsService.NetworkSnapshot(true, 5, 30, timeout,
+                0, retries, 0, java.util.List.of());
+    }
+
+    @Test
     void requestTimeoutAlsoStopsAResponseThatStallsDuringImageBodyDownload() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/slow-image", exchange -> {
