@@ -40,6 +40,7 @@ public class CrawlController {
     private final CrawlImageSkipService imageSkipService;
     private final UserRepository userRepository;
     private final com.aiphoto.service.CrawlerSettingsService crawlerSettingsService;
+    private final com.aiphoto.repository.CrawlScanResultRepository scanResultRepository;
 
     @GetMapping("/inspection-proxies")
     public List<com.aiphoto.service.CrawlerSettingsService.InspectionProxyView> inspectionProxies() {
@@ -129,6 +130,21 @@ public class CrawlController {
     }
 
     public record JobPriorityRequest(Integer priority) {}
+
+    @GetMapping("/jobs/{jobId}/scan-results")
+    public ScanResults scanResults(@PathVariable Long jobId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size, Authentication authentication) {
+        crawlService.getJob(jobId, userId(authentication));
+        var results = scanResultRepository.findByJobIdOrderByIdAsc(jobId,
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
+        return new ScanResults(results.getContent(), results.getTotalElements(),
+                scanResultRepository.countByJobIdAndResult(jobId, "NEW"),
+                scanResultRepository.countByJobIdAndResult(jobId, "DUPLICATE"));
+    }
+
+    public record ScanResults(List<com.aiphoto.entity.CrawlScanResult> content,
+            long totalElements, long newCount, long duplicateCount) {}
 
     @GetMapping("/jobs/{jobId}/pages")
     public CrawlService.PageResult listPages(

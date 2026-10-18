@@ -13,12 +13,14 @@ public class CrawlDiscoveryHistoryService {
 
     private final CrawlPageRepository pageRepository;
     private final CrawlSeenPageRepository seenPageRepository;
+    private final com.aiphoto.repository.CrawlScanResultRepository resultRepository;
 
     @Transactional
     public boolean addIfNew(
             Long jobId, Long siteId, String url, String normalizedUrl, String urlHash, String name) {
         String pageName = normalizeName(name);
         if (pageRepository.findByJobIdAndUrlHash(jobId, urlHash).isPresent()) {
+            recordResult(jobId, url, urlHash, pageName, "NEW");
             fillMissingNames(siteId, normalizedUrl, urlHash, pageName);
             return false;
         }
@@ -28,6 +30,7 @@ public class CrawlDiscoveryHistoryService {
                 throw new IllegalStateException("详情页 URL 哈希冲突");
             }
             fillMissingNames(siteId, normalizedUrl, urlHash, pageName);
+            recordResult(jobId, url, urlHash, pageName, "DUPLICATE");
             return false;
         }
         CrawlPage page = new CrawlPage();
@@ -37,8 +40,21 @@ public class CrawlDiscoveryHistoryService {
         page.setUrlHash(urlHash);
         page.setName(pageName);
         pageRepository.save(page);
+        recordResult(jobId, url, urlHash, pageName, "NEW");
 
         return true;
+    }
+
+    private void recordResult(Long jobId, String url, String hash, String name, String classification) {
+        var existing = resultRepository.findByJobIdAndUrlHash(jobId, hash);
+        var result = existing.orElseGet(com.aiphoto.entity.CrawlScanResult::new);
+        if (existing.isPresent()) result.setOccurrences(result.getOccurrences() + 1);
+        else {
+            result.setJobId(jobId); result.setUrl(url); result.setUrlHash(hash);
+            result.setResult(classification);
+        }
+        if (result.getName() == null) result.setName(name);
+        resultRepository.save(result);
     }
 
     private void fillMissingNames(Long siteId, String normalizedUrl, String urlHash, String name) {

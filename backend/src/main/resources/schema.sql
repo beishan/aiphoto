@@ -704,3 +704,20 @@ ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS blocked_hosts VARCHAR(1000) NOT
 ALTER TABLE crawl_sites ALTER COLUMN allowed_hosts SET DEFAULT '';
 
 ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS name VARCHAR(1000);
+
+CREATE TABLE IF NOT EXISTS crawl_scan_results (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    url VARCHAR(4096) NOT NULL,
+    url_hash VARCHAR(64) NOT NULL,
+    name VARCHAR(1000),
+    result VARCHAR(20) NOT NULL,
+    occurrences INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (job_id, url_hash)
+);
+INSERT INTO crawl_scan_results (job_id, url, url_hash, name, result, created_at)
+SELECT p.job_id, p.url, p.url_hash, p.name, 'NEW', p.created_at
+FROM crawl_pages p JOIN crawl_jobs j ON j.id = p.job_id
+WHERE j.source_page_id IS NULL AND j.phase IN ('DISCOVERY', 'AWAITING_CONFIRMATION')
+ON CONFLICT (job_id, url_hash) DO NOTHING;

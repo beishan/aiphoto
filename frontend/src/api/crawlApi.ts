@@ -29,6 +29,10 @@ export interface CrawlImportItem {
 export interface InspectionProxy { id: number; name: string; enabled: boolean; proxyType: 'HTTP' | 'MIHOMO' }
 export interface CrawlImageProgress { total: number; processed: number; downloaded: number; runningAsset: CrawlAsset | null; currentProxyName: string | null }
 export interface CrawlSiteInfo { title: string; description: string; finalUrl: string }
+export interface CrawlScanResults {
+  content: { id: number; url: string; name: string | null; result: 'NEW' | 'DUPLICATE'; occurrences: number }[]
+  totalElements: number; newCount: number; duplicateCount: number
+}
 export interface CrawlReviewPageGroup { id: number; name: string | null; url: string; assetCount: number }
 export interface CrawlScanPage {
   id?: number; siteId: number; name: string; url: string; autoScanEnabled: boolean;
@@ -48,6 +52,7 @@ export interface CrawlSiteQueue {
 }
 
 export const crawlApi = {
+  scanResults: (id: number, page = 0) => http.get<CrawlScanResults>(`/crawl/jobs/${id}/scan-results`, { params: { page, size: 50 } }),
   scanPages: () => http.get<CrawlScanPage[]>('/crawl/scan-pages'),
   saveScanPage: (page: CrawlScanPage) => page.id
     ? http.put<CrawlScanPage>(`/crawl/scan-pages/${page.id}`, page)

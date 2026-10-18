@@ -11,7 +11,7 @@ import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import '@/assets/crawler-actions.css'
 import '@/assets/crawler-macos.css'
-import type { InspectionProxy, CrawlImageProgress, CrawlSiteInfo } from '@/api/crawlApi'
+import type { InspectionProxy, CrawlImageProgress, CrawlSiteInfo, CrawlScanResults } from '@/api/crawlApi'
 import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
@@ -77,6 +77,12 @@ const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
 const taskDetailTab = ref('images')
+const scanResultPage = ref(0)
+const scanResults = ref<CrawlScanResults>({ content: [], totalElements: 0, newCount: 0, duplicateCount: 0 })
+async function changeScanResultPage(page: number) {
+  scanResultPage.value = page - 1
+  await loadJobDetail()
+}
 const taskAssetViewCacheKey = (() => {
   try {
     const user = JSON.parse(sessionStorage.getItem('user') || 'null') as { id?: number | string; username?: string } | null
@@ -386,13 +392,16 @@ async function loadJobDetail() {
   const jobId = activeJobId.value
   const request = ++detailRequest
   const showTaskAssets = taskDrawerVisible.value || activeTab.value !== 'review'
-  const [jobResult, pageResult, assetResult, progressResult] = await Promise.all([
+  const [jobResult, pageResult, assetResult, progressResult, scanResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
     showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
     taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
+    taskDrawerVisible.value && activeJob.value && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(activeJob.value.phase)
+      ? crawlApi.scanResults(jobId, scanResultPage.value) : Promise.resolve(null),
   ])
   if (request !== detailRequest || jobId !== activeJobId.value) return
+  if (scanResult) scanResults.value = scanResult.data
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
   if (index >= 0) jobs.value[index] = jobResult.data
   pages.value = pageResult.data.content
@@ -992,7 +1001,7 @@ function imageTypeLabel(asset: CrawlAsset | null) {
   return labels[type] || type.toUpperCase() || '图片'
 }
 
-watch(activeJobId, () => { imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(activeJobId, () => { scanResultPage.value = 0; scanResults.value = { content: [], totalElements: 0, newCount: 0, duplicateCount: 0 }; imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(taskAssetView, value => {
   if (taskAssetViewCacheKey) {
     try { localStorage.setItem(taskAssetViewCacheKey, value) } catch { /* View preference remains active for this page. */ }
@@ -1018,7 +1027,7 @@ watch(taskDrawerVisible, () => {
 })
 watch([taskDrawerVisible, activeJobId], () => {
   if (taskDrawerVisible.value) {
-    taskDetailTab.value = activeJob.value && ['DOWNLOAD', 'REVIEW'].includes(activeJob.value.phase) ? 'images' : 'pages'
+    taskDetailTab.value = activeJob.value && ['DOWNLOAD', 'REVIEW'].includes(activeJob.value.phase) ? 'images' : 'scan-results'
   }
 })
 watch([assetStatus, reviewSourcePageId], () => { assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
@@ -1397,6 +1406,16 @@ onUnmounted(() => {
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>
           <el-tabs v-model="taskDetailTab" class="task-detail-tabs">
+          <el-tab-pane v-if="['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(activeJob.phase)" label="扫描结果" name="scan-results">
+            <p>共发现 {{ scanResults.totalElements }} 个 URL · 新增 {{ scanResults.newCount }} · 历史重复 {{ scanResults.duplicateCount }}</p>
+            <el-alert type="info" :closable="false" title="新增 URL 会进入待采集页；历史重复 URL 不会重复添加。同一 URL 在本次扫描中多次出现会合并，并累计出现次数。历史任务仅能展示已保存的新增记录。" />
+            <el-table :data="scanResults.content" empty-text="暂无扫描结果" style="flex: 1; min-height: 0" height="100%">
+              <el-table-column label="标题 / URL" min-width="360"><template #default="{ row }"><div>{{ row.name || '未获取标题' }}</div><small class="source-page-url">{{ row.url }}</small></template></el-table-column>
+              <el-table-column label="扫描结果" width="130"><template #default="{ row }"><el-tag :type="row.result === 'NEW' ? 'success' : 'info'">{{ row.result === 'NEW' ? '新增' : '历史重复' }}</el-tag></template></el-table-column>
+              <el-table-column label="本次出现次数" prop="occurrences" width="130" />
+            </el-table>
+            <el-pagination class="pagination" layout="prev, pager, next, total" :current-page="scanResultPage + 1" :page-size="50" :total="scanResults.totalElements" @current-change="changeScanResultPage" />
+          </el-tab-pane>
           <el-tab-pane label="图片采集列表" name="images" class="image-assets-pane">
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
