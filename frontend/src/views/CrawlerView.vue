@@ -1322,7 +1322,6 @@ onUnmounted(() => {
       </div>
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
     </el-dialog>
-  </main>
     <el-drawer v-model="taskDrawerVisible" title="任务进度与详情" size="min(1000px, 96vw)" append-to-body destroy-on-close class="crawler-controls task-detail-drawer">
       <el-card class="task-detail surface-card" shadow="never">
         <template v-if="activeJob" #header>
@@ -1428,6 +1427,7 @@ onUnmounted(() => {
         <el-table-column label="过滤原因" min-width="300"><template #default="{ row }"><span class="filtered-image-reason">{{ row.reason }}</span></template></el-table-column>
       </el-table>
     </el-dialog>
+  </main>
 </template>
 
 <style scoped>
