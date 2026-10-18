@@ -1,4 +1,5 @@
 import http from './http'
+import { normalizePage, type SpringPage } from './pageResponse'
 import type { CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, PageResponse } from '@/types'
 
 export interface CrawlImportBatch {
@@ -98,9 +99,11 @@ export const crawlApi = {
   pause: (id: number) => http.post<CrawlJob>(`/crawl/jobs/${id}/pause`),
   resume: (id: number) => http.post(`/crawl/jobs/${id}/resume`),
   cancel: (id: number) => http.post<CrawlJob>(`/crawl/jobs/${id}/cancel`),
-  assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, pageId?: number) => http.get<PageResponse<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, pageId } }),
+  assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, pageId?: number) => http.get<SpringPage<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, pageId } })
+    .then(response => ({ ...response, data: normalizePage(response.data) })),
   reviewPages: () => http.get<CrawlReviewPageGroup[]>('/crawl/review/pages'),
-  reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null) => http.get<PageResponse<CrawlAsset>>('/crawl/review/assets', { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined } }),
+  reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null) => http.get<SpringPage<CrawlAsset>>('/crawl/review/assets', { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined } })
+    .then(response => ({ ...response, data: normalizePage(response.data) })),
   skipAssets: (jobId: number, ids: number[], reason: string) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/skip`, { ids, reason }),
   imageSkips: (page = 0, size = 50, query = '') => http.get<PageResponse<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } }),
   deleteImageSkip: (id: number) => http.delete<{ success: number }>(`/crawl/image-skips/${id}`),

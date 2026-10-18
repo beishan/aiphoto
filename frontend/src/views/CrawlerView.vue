@@ -259,6 +259,12 @@ async function loadReviewData() {
       reviewSourcePageId.value = null
       return
     }
+    const lastPage = Math.max(0, assetsResult.data.totalPages - 1)
+    if (assetPage.value > lastPage) {
+      assetPage.value = lastPage
+      await loadReviewData()
+      return
+    }
     assets.value = assetsResult.data.content
     assetTotal.value = assetsResult.data.totalElements
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => assets.value.some(asset => asset.id === id)))
@@ -1230,7 +1236,7 @@ onUnmounted(() => {
             <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
           </el-card>
         </div>
-        <el-pagination v-if="assetTotal > assetPageSize" class="pagination" layout="prev, pager, next, total" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
+        <el-pagination class="pagination" layout="total, prev, pager, next, jumper" :current-page="assetPage + 1" :page-size="assetPageSize" :total="assetTotal" @current-change="changeAssetPage" />
         <el-collapse v-if="deletedAssets.length" class="deleted-collapse surface-card"><el-collapse-item :title="`已删除（${deletedAssets.length}）`" name="deleted"><el-table :data="deletedAssets" size="small"><el-table-column label="文件" prop="originalFilename" min-width="240" /><el-table-column label="大小" width="120"><template #default="{ row }">{{ formatBytes(row.fileSize) }}</template></el-table-column><el-table-column label="" width="90"><template #default="{ row }"><el-button link type="primary" @click="restoreDeleted(row)">恢复</el-button></template></el-table-column></el-table></el-collapse-item></el-collapse>
       </template>
     </section>

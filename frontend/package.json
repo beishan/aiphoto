@@ -1,11 +1,12 @@
 {
   "name": "aiphoto-frontend",
-  "version": "0.18.44",
+  "version": "0.18.45",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "test:crawler-route": "node --test scripts/crawler-route.test.mjs",
+    "test:crawler-pagination": "node --test scripts/crawler-pagination.test.mjs",
     "build": "vue-tsc && vite build",
     "preview": "vite preview"
   },
