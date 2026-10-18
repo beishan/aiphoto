@@ -1184,7 +1184,7 @@ onUnmounted(() => {
       <template v-else>
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
-            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /><el-option label="失败" value="FAILED" /></el-select></el-form-item>
+            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /></el-select></el-form-item>
             <el-form-item label="智能筛选"><el-space wrap><el-checkbox v-model="exactDuplicateOnly" border>精确重复</el-checkbox><el-checkbox v-model="similarOnly" border>相似图片</el-checkbox></el-space></el-form-item>
             <el-form-item label="相似度阈值" class="similarity-field"><el-slider v-model="similarityThreshold" :min="0" :max="16" show-input /><el-button :icon="MagicStick" :loading="busy === 'similarity'" @click="analyzeSimilarity">分析</el-button></el-form-item>
           </el-form>

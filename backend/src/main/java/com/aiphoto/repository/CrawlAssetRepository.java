@@ -27,7 +27,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             @Param("status") CrawlAsset.Status status, Pageable pageable);
     @Query(value = "SELECT a.* FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
             + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
-            + "AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+            + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
             + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
             + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
             + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
@@ -36,7 +36,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "ORDER BY a.id DESC",
             countQuery = "SELECT COUNT(*) FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
                     + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
-                    + "AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+                    + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
                     + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
                     + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
                     + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
@@ -52,7 +52,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "FROM crawl_jobs j JOIN crawl_pages p ON p.id = j.source_page_id "
             + "JOIN crawl_assets a ON a.job_id = j.id "
             + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND j.source_page_id IS NOT NULL "
-            + "AND a.status <> 'DELETED' GROUP BY p.id, p.name, p.url "
+            + "AND a.status NOT IN ('DELETED', 'FAILED') GROUP BY p.id, p.name, p.url "
             + "ORDER BY MAX(j.created_at) DESC, p.id DESC",
             nativeQuery = true)
     List<ReviewPageGroup> findReviewPageGroups(@Param("ownerId") Long ownerId);
