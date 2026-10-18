@@ -1230,6 +1230,7 @@ onUnmounted(() => {
             <div class="asset-preview">
               <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
               <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div>
+              <el-button class="task-image-preview-button" circle size="small" :icon="View" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
               <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
               <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
             </div>

@@ -1067,6 +1067,10 @@
   gap: 5px;
 }
 
+.review-workspace .asset-badges {
+  top: 49px;
+}
+
 .asset-copy {
   display: grid;
   gap: 6px;
