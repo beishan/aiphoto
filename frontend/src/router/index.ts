@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { clearSession, isSessionTokenValid } from '@/utils/authSession'
 import { connectWebSocket } from '@/stores/websocket'
 
 const routes: RouteRecordRaw[] = [
@@ -122,7 +123,8 @@ let wsInitialized = false
 
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
-  if (to.meta.requiresAuth !== false && !token) {
+  if (to.meta.requiresAuth !== false && !isSessionTokenValid(token)) {
+    clearSession()
     next('/login')
   } else {
     if (token && !wsInitialized) {
