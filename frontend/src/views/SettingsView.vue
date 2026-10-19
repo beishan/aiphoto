@@ -12,6 +12,7 @@ import type { User, Tag, ScanFolder } from '@/types'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
+import CrawlerDisplaySettingsPanel from '@/components/CrawlerDisplaySettingsPanel.vue'
 import CrawlerSettingsPanel from '@/components/CrawlerSettingsPanel.vue'
 
 const settingStore = useSettingStore()
@@ -33,6 +34,7 @@ const navItems = [
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
   { key: 'proxy', label: '系统代理配置', icon: '🔗' },
+  { key: 'crawler-display', label: '爬虫图片显示', icon: '🖼️' },
   { key: 'crawler', label: '爬虫设置', icon: '🕸️' },
   { key: 'tags', label: '标签管理', icon: '🏷️' },
   { key: 'photos', label: '照片与视频', icon: '🖼️' },
@@ -50,7 +52,7 @@ const isCurrentUserAdmin = sessionUser?.role === 'ADMIN'
 
 const navGroups = computed(() => [
   { label: '个人', keys: ['profile'] },
-  { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon'] : ['general'] },
+  { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon', 'crawler-display'] : ['general', 'crawler-display'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
   { label: '管理', keys: isCurrentUserAdmin ? ['users', 'proxy', 'storage'] : ['storage'] },
@@ -703,6 +705,10 @@ async function loadSystemInfo() {
         <!-- ====== 个人设置 ====== -->
         <div v-if="activeSection === 'profile'" class="content-panel">
           <PersonalSettingsPanel />
+        </div>
+
+        <div v-if="activeSection === 'crawler-display'" class="content-panel">
+          <CrawlerDisplaySettingsPanel />
         </div>
 
         <!-- ====== 主题风格 ====== -->

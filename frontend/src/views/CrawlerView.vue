@@ -6,6 +6,7 @@ import {
   ArrowLeft, ArrowRight, CircleCheck, Close, Collection, Connection, Delete, Download, EditPen,
   FolderOpened, List, Loading, MagicStick, Picture, Plus, PriceTag, Refresh, Search, Setting, VideoPlay, View, Warning,
 } from '@element-plus/icons-vue'
+import { useCrawlerImageVisibility } from '@/composables/useCrawlerImageVisibility'
 import { crawlApi } from '@/api/crawlApi'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
@@ -16,6 +17,8 @@ import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
 import type { Album, CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
+
+const { showCrawlerImages } = useCrawlerImageVisibility()
 
 const inspectionProxies = ref<InspectionProxy[]>([])
 const inspectionBusy = ref<'edit' | 'create' | ''>('')
@@ -452,12 +455,26 @@ async function loadJobDetail() {
   await loadPreviews()
 }
 
+watch(showCrawlerImages, visible => {
+  if (!visible) {
+    closePreviewViewer()
+    for (const key of Object.keys(previewImages)) {
+      URL.revokeObjectURL(previewImages[Number(key)])
+      delete previewImages[Number(key)]
+    }
+  } else {
+    void loadPreviews()
+    if (pageAssetsDialogVisible.value) void loadPageAssets()
+  }
+})
+
 async function loadPreviews() {
+  if (!showCrawlerImages.value) return
   const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id])
   await Promise.all(wanted.map(async asset => {
     try {
       const { data } = await crawlApi.thumbnail(asset.id)
-      previewImages[asset.id] = URL.createObjectURL(data)
+      if (showCrawlerImages.value) previewImages[asset.id] = URL.createObjectURL(data)
     } catch { /* failed assets intentionally have no preview */ }
   }))
 }
@@ -469,6 +486,7 @@ function revokePreviewViewerObjectUrl() {
 }
 
 async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
+  if (!showCrawlerImages.value) return
   previewViewerIndex.value = index
   previewViewerAsset.value = asset
   previewViewerRequest += 1
@@ -478,7 +496,7 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
   try {
     const { data } = await crawlApi.content(asset.id)
     const objectUrl = URL.createObjectURL(data)
-    if (request !== previewViewerRequest || !previewViewerVisible.value) {
+    if (!showCrawlerImages.value || request !== previewViewerRequest || !previewViewerVisible.value) {
       URL.revokeObjectURL(objectUrl)
       return
     }
@@ -495,7 +513,7 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
 
 function openAssetPreview(asset: CrawlAsset) {
   const indexInPage = assets.value.findIndex(item => item.id === asset.id)
-  if (indexInPage < 0 || !previewImages[asset.id]) return
+  if (!showCrawlerImages.value || indexInPage < 0 || !previewImages[asset.id]) return
   Object.keys(previewViewerPages).forEach(key => delete previewViewerPages[Number(key)])
   previewViewerPages[assetPage.value] = assets.value.slice()
   previewViewerVisible.value = true
@@ -848,10 +866,11 @@ async function loadPageAssets() {
     activeJobId.value, pageAssetsPage.value, 48, '', false, false, selectedSourcePage.value.id)
   pageAssets.value = data.content
   pageAssetsTotal.value = data.totalElements
+  if (!showCrawlerImages.value) return
   await Promise.all(pageAssets.value.filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).map(async asset => {
     try {
       const { data: image } = await crawlApi.thumbnail(asset.id)
-      previewImages[asset.id] = URL.createObjectURL(image)
+      if (showCrawlerImages.value) previewImages[asset.id] = URL.createObjectURL(image)
     } catch { /* no local image */ }
   }))
 }
@@ -1249,13 +1268,13 @@ onUnmounted(() => {
         <div class="asset-grid">
           <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && toggleAsset(asset.id)">
             <div class="asset-preview">
-              <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
-              <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div>
-              <el-button class="task-image-preview-button" circle size="small" :icon="View" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
+              <el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
+              <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
+              <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
               <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
               <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
             </div>
-            <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
+            <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><small>{{ assetStatusLabel(asset) }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
           </el-card>
         </div>
         <el-pagination class="pagination" layout="total, sizes, prev, pager, next, jumper" :page-sizes="reviewPageSizes" :current-page="assetPage + 1" :page-size="reviewPageSize" @size-change="changeReviewPageSize" :total="assetTotal" @current-change="changeAssetPage" />
@@ -1401,8 +1420,8 @@ onUnmounted(() => {
       <el-alert v-if="!pageAssets.length" type="info" :closable="false" :title="selectedSourcePage?.errorMessage || '这个链接暂无图片记录；请查看任务执行状态及页面失败原因。'" />
       <div v-else class="asset-grid page-result-grid">
         <el-card v-for="asset in pageAssets" :key="asset.id" class="asset-card surface-card" shadow="never">
-          <div class="asset-preview"><el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" /><div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ asset.status }}</span></div></div>
-          <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.status }} · {{ formatBytes(asset.fileSize) }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
+          <div class="asset-preview"><el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" /><div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div></div>
+          <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ assetStatusLabel(asset) }} · {{ formatBytes(asset.fileSize) }}</small><small :title="asset.imageUrl">{{ asset.imageUrl }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
         </el-card>
       </div>
       <el-pagination v-if="pageAssetsTotal > 48" class="pagination" layout="prev, pager, next, total" :current-page="pageAssetsPage + 1" :page-size="48" :total="pageAssetsTotal" @current-change="changePageAssetsPage" />
@@ -1447,9 +1466,9 @@ onUnmounted(() => {
           <el-tab-pane label="图片采集列表" name="images" class="image-assets-pane">
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
-          <div v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" class="image-list-toolbar"><p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；下载完成后显示缩略图。</p><el-radio-group v-model="taskAssetView" size="small" aria-label="图片列表视图"><el-radio-button value="table">表格</el-radio-button><el-radio-button value="cards">卡片</el-radio-button></el-radio-group></div>
+          <div v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" class="image-list-toolbar"><p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；{{ showCrawlerImages ? '下载完成后显示缩略图。' : '图片显示已关闭，仍可查看下载状态和失败原因。' }}</p><el-radio-group v-model="taskAssetView" size="small" aria-label="图片列表视图"><el-radio-button value="table">表格</el-radio-button><el-radio-button value="cards">卡片</el-radio-button></el-radio-group></div>
           <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'table'" :data="taskImageAssets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
-            <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
+            <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="showCrawlerImages && previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="150"><template #default="{ row }">{{ assetStatusLabel(row) }}</template></el-table-column>
             <el-table-column label="采集耗时" width="135"><template #default="{ row }"><span class="download-timer" :class="{ 'is-running': imageIsDownloading(row) }" role="timer" aria-live="off" title="本次采集耗时，包含等待、重试和图片处理；重试任务后重新计时"><i v-if="imageIsDownloading(row)" class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(row) }}</span></template></el-table-column>
@@ -1459,12 +1478,12 @@ onUnmounted(() => {
           <div v-else-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'cards'" class="task-image-cards" :aria-label="`图片列表，共 ${assetTotal} 张`">
             <article v-for="asset in taskImageAssets" :key="asset.id" class="task-image-card">
               <div class="task-image-card-preview">
-                <el-image v-if="previewImages[asset.id]" :src="previewImages[asset.id]" fit="contain" />
+                <el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="contain" />
                 <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
                 <span class="task-image-info-tag task-image-type-tag">{{ imageTypeLabel(asset) }}</span>
                 <span class="task-image-info-tag task-image-dimensions-tag">{{ asset.width && asset.height ? `${asset.width} × ${asset.height}` : '未知尺寸' }} · {{ asset.fileSize ? formatBytes(asset.fileSize) : '未知大小' }}</span>
                 <span v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-info-tag task-image-proxy-tag">代理：{{ imageProgress.currentProxyName }}</span>
-                <el-button class="task-image-preview-button" circle size="small" :icon="View" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
+                <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
                 <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="download-timer is-running" role="timer" aria-live="off"><i class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(asset) }}</span><span class="task-image-progress-track"><i /></span></div>
               </div>
               <div class="task-image-timing-row" title="本次采集耗时，包含等待、重试和图片处理；重试任务后重新计时"><span>采集耗时</span><span class="download-timer" :class="{ 'is-running': imageIsDownloading(asset) }">{{ imageElapsedLabel(asset) }}</span></div>
@@ -1494,7 +1513,7 @@ onUnmounted(() => {
     </el-drawer>
     <Teleport to="body">
       <Transition name="collection-preview">
-        <div v-if="previewViewerVisible" class="collection-preview-overlay" @click.self="closePreviewViewer">
+        <div v-if="showCrawlerImages && previewViewerVisible" class="collection-preview-overlay" @click.self="closePreviewViewer">
           <section class="collection-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
             <header class="collection-preview-header">
               <strong :title="previewViewerAsset?.originalFilename || ''">{{ previewViewerAsset?.originalFilename || '图片预览' }}</strong>
