@@ -46,12 +46,57 @@ class CrawlWorkerExecutorTest {
         });
 
         org.springframework.test.util.ReflectionTestUtils.invokeMethod(
-                worker, "downloadAsset", 1L, 9L, rule, asset);
+                worker, "downloadAsset", 1L, 9L, rule, asset, new CrawlImageHostGuard());
 
         assertThat(asset.getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.FAILED);
         assertThat(asset.getDownloadDurationMillis()).isNotNull().isGreaterThanOrEqualTo(0L);
         assertThat(asset.getDownloadElapsedMillis()).isEqualTo(asset.getDownloadDurationMillis());
         verify(assets, times(2)).save(asset);
+    }
+
+    @Test
+    void repeatedHostTimeoutsFastFailOnlyThatHostAndRemainRetryable() throws Exception {
+        CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L); job.setRuleSnapshot("snapshot");
+        CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
+        var records = new java.util.ArrayList<com.aiphoto.entity.CrawlAsset>();
+        for (int i = 0; i < 6; i++) {
+            var asset = new com.aiphoto.entity.CrawlAsset();
+            asset.setId((long) i + 1);
+            asset.setImageUrl((i < 5 ? "https://bad.example/" : "https://healthy.example/") + i + ".webp");
+            records.add(asset);
+        }
+        when(executors.acquire(1L)).thenReturn(session);
+        when(executors.current()).thenReturn(session);
+        when(queue.newWorkerId()).thenReturn("worker");
+        when(queue.claim(1L, "worker")).thenReturn(true);
+        when(queue.renew(1L, "worker")).thenReturn(true);
+        when(jobs.findById(1L)).thenReturn(Optional.of(job));
+        when(mapper.readValue("snapshot", CrawlRule.class)).thenReturn(rule);
+        when(assets.findByJobIdAndStatusOrderByIdDesc(1L, com.aiphoto.entity.CrawlAsset.Status.PENDING))
+                .thenReturn(records);
+        when(assets.countByJobIdAndStatus(eq(1L), any())).thenAnswer(invocation ->
+                records.stream().filter(asset -> asset.getStatus() == invocation.getArgument(1)).count());
+        when(fetcher.fetchImage(anyString(), any(), anyLong(), anyLong())).thenAnswer(invocation -> {
+            String url = invocation.getArgument(0);
+            if (url.contains("bad.example")) throw new java.net.http.HttpTimeoutException("图片超时");
+            return new SafeHttpFetcher.FetchedResource(java.net.URI.create(url), "image/webp", new byte[]{0});
+        });
+
+        worker.download(1L);
+
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.PARTIAL);
+        assertThat(job.getFailCount()).isEqualTo(5);
+        assertThat(records.subList(0, 5)).allSatisfy(asset ->
+                assertThat(asset.getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.FAILED));
+        assertThat(records.subList(3, 5)).allSatisfy(asset -> {
+            assertThat(asset.getErrorMessage()).contains("连续 3").contains("重试");
+            assertThat(asset.getDownloadStartedAtMillis()).isNull();
+            assertThat(asset.getDownloadDurationMillis()).isNull();
+        });
+        assertThat(records.getLast().getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.DOWNLOADED);
+        verify(fetcher, times(3)).fetchImage(contains("bad.example"), any(), anyLong(), anyLong());
+        verify(fetcher).fetchImage(contains("healthy.example"), any(), anyLong(), anyLong());
+        verify(session).close();
     }
 
     @org.junit.jupiter.params.ParameterizedTest

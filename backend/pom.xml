@@ -13,7 +13,7 @@
 
     <groupId>com.aiphoto</groupId>
     <artifactId>aiphoto-backend</artifactId>
-    <version>0.19.3</version>
+    <version>0.19.4</version>
     <name>aiphoto Backend</name>
     <description>aiphoto AI Photo Album Backend</description>
 
@@ -47,6 +47,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Per-task image host circuit breaker -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+            <version>2.3.0</version>
         </dependency>
 
         <!-- PostgreSQL -->

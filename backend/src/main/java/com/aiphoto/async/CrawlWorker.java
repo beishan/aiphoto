@@ -276,6 +276,8 @@ public class CrawlWorker {
                         totalFailures);
                 job.setPagesProcessed(processed);
             }
+            // A retry or another task gets fresh host health; unrelated image hosts stay independent.
+            var imageHosts = new com.aiphoto.service.CrawlImageHostGuard();
             // Publish all discovered URLs before starting any image download.
             for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderByIdDesc(
                     jobId, CrawlAsset.Status.PENDING)) {
@@ -287,7 +289,7 @@ public class CrawlWorker {
                     assetRepository.save(asset);
                     continue;
                 }
-                downloadAsset(jobId, job.getOwnerId(), rule, asset);
+                downloadAsset(jobId, job.getOwnerId(), rule, asset, imageHosts);
             }
             if (stopped(jobId)) return;
             job = jobRepository.findById(jobId).orElseThrow();
@@ -348,7 +350,8 @@ public class CrawlWorker {
     }
 
     private void downloadAsset(
-            Long jobId, Long ownerId, CrawlRule rule, CrawlAsset asset) throws Exception {
+            Long jobId, Long ownerId, CrawlRule rule, CrawlAsset asset,
+            com.aiphoto.service.CrawlImageHostGuard imageHosts) throws Exception {
         String imageUrl = asset.getImageUrl();
         var skip = imageSkipRepository.findByOwnerIdAndUrlHash(ownerId, asset.getUrlHash()).orElse(null);
         if (skip != null && asset.getNormalizedUrl().equals(skip.getNormalizedUrl())) {
@@ -368,9 +371,9 @@ public class CrawlWorker {
         asset.setErrorMessage(null);
         assetRepository.save(asset);
         try {
-            SafeHttpFetcher.FetchedResource resource = fetcher.fetchImage(
+            SafeHttpFetcher.FetchedResource resource = imageHosts.execute(imageUrl, () -> fetcher.fetchImage(
                     imageUrl, rule.getBlockedHosts(), rule.getMaxFileBytes(),
-                    pageHostInterval(imageUrl, rule));
+                    pageHostInterval(imageUrl, rule)));
             if (!resource.contentType().startsWith("image/")) {
                 throw new IllegalArgumentException("图床返回的不是图片（" + resource.contentType()
                         + "），请检查原图属性及图床访问规则");
@@ -399,12 +402,20 @@ public class CrawlWorker {
             asset.setStatus(CrawlAsset.Status.DOWNLOADED);
         } catch (com.aiphoto.service.CrawlerExecutorService.ControlException | InterruptedException exception) {
             throw exception;
+        } catch (com.aiphoto.service.CrawlImageHostGuard.HostCoolingException exception) {
+            // No request was made; do not invent a near-zero download duration in statistics.
+            asset.setDownloadStartedAtMillis(null);
+            asset.setDownloadDurationMillis(null);
+            asset.setStatus(CrawlAsset.Status.FAILED);
+            asset.setErrorMessage(shortMessage(exception));
         } catch (Exception exception) {
             asset.setStatus(CrawlAsset.Status.FAILED);
             asset.setErrorMessage(shortMessage(exception));
         } finally {
-            asset.setDownloadDurationMillis(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-                    System.nanoTime() - downloadStartedNanos));
+            if (asset.getDownloadStartedAtMillis() != null) {
+                asset.setDownloadDurationMillis(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - downloadStartedNanos));
+            }
             assetRepository.save(asset);
         }
         jobRepository.updateImageProgress(jobId,
