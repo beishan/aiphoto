@@ -673,12 +673,14 @@ CREATE TABLE IF NOT EXISTS crawl_scan_pages (
     url VARCHAR(2048) NOT NULL,
     auto_scan_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     auto_collect_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_collect_priority INTEGER NOT NULL DEFAULT 75 CHECK (auto_collect_priority BETWEEN 0 AND 100),
     scan_interval_minutes INTEGER NOT NULL DEFAULT 360 CHECK (scan_interval_minutes BETWEEN 5 AND 10080),
     max_pages INTEGER NOT NULL DEFAULT 100 CHECK (max_pages BETWEEN 1 AND 1000),
     last_scan_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE crawl_scan_pages ADD COLUMN IF NOT EXISTS auto_collect_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE crawl_scan_pages ADD COLUMN IF NOT EXISTS auto_collect_priority INTEGER NOT NULL DEFAULT 75 CHECK (auto_collect_priority BETWEEN 0 AND 100);
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS scan_page_id BIGINT REFERENCES crawl_scan_pages(id) ON DELETE SET NULL;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS source_page_id BIGINT;
 ALTER TABLE crawl_pages ADD COLUMN IF NOT EXISTS collection_job_id BIGINT REFERENCES crawl_jobs(id) ON DELETE SET NULL;

@@ -59,6 +59,14 @@ public class CrawlWorkflowService {
         page.setUrl(SafeHttpFetcher.normalize(url));
         page.setAutoScanEnabled(Boolean.TRUE.equals(input.getAutoScanEnabled()));
         page.setAutoCollectEnabled(Boolean.TRUE.equals(input.getAutoCollectEnabled()));
+        int autoCollectPriority = input.getAutoCollectPriority() == null
+                ? page.getAutoCollectPriority() == null
+                    ? CrawlJob.DOWNLOAD_PRIORITY : page.getAutoCollectPriority()
+                : input.getAutoCollectPriority();
+        if (autoCollectPriority < 0 || autoCollectPriority > 100) {
+            throw new IllegalArgumentException("任务优先级必须在 0 至 100 之间");
+        }
+        page.setAutoCollectPriority(autoCollectPriority);
         page.setScanIntervalMinutes(interval);
         page.setMaxPages(maxPages);
         return scanRepository.save(page);
@@ -120,7 +128,9 @@ public class CrawlWorkflowService {
         for (CrawlPage page : pageRepository.findByJobIdAndStatusAndCollectionJobIdIsNullOrderById(
                 scanJobId, CrawlPage.Status.PENDING)) {
             try {
-                collect(page.getId(), ownerId);
+                CrawlJob collection = collect(page.getId(), ownerId);
+                collection.setPriority(scanPage.getAutoCollectPriority());
+                jobRepository.save(collection);
                 created++;
             } catch (RuntimeException exception) {
                 log.warn("Could not auto-create collection task for discovered page {}: {}",

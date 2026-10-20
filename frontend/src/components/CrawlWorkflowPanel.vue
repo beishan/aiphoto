@@ -35,7 +35,11 @@ const canManage = computed(() => {
   try { return JSON.parse(sessionStorage.getItem('user') || '{}')?.role === 'ADMIN' }
   catch { return false }
 })
-const defaultScan = (): CrawlScanPage => ({ siteId: props.scopedSiteId || props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, autoCollectEnabled: false, scanIntervalMinutes: 360, maxPages: 100 })
+const autoCollectPriorityOptions = [
+  { label: '最高', value: 100 }, { label: '高', value: 75 },
+  { label: '普通', value: 50 }, { label: '低', value: 25 }, { label: '最低', value: 0 },
+]
+const defaultScan = (): CrawlScanPage => ({ siteId: props.scopedSiteId || props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, autoCollectEnabled: false, autoCollectPriority: 75, scanIntervalMinutes: 360, maxPages: 100 })
 const form = reactive<CrawlScanPage>(defaultScan())
 const visibleScans = computed(() => scans.value.filter(s => {
   const selectedSiteId = props.scopedSiteId ?? siteId.value
@@ -273,6 +277,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
         <el-form-item label="列表页上限"><el-input-number v-model="form.maxPages" :min="1" :max="1000" /></el-form-item>
         <el-form-item label="自动扫描"><el-switch v-model="form.autoScanEnabled" active-text="按周期扫描" inactive-text="仅手动扫描" /></el-form-item>
         <el-form-item label="自动采集"><el-switch v-model="form.autoCollectEnabled" active-text="扫描后自动创建采集任务" inactive-text="手动发起采集" /></el-form-item>
+        <el-form-item v-if="form.autoCollectEnabled" label="自动采集任务优先级"><el-select v-model="form.autoCollectPriority" aria-label="自动采集任务优先级"><el-option v-for="option in autoCollectPriorityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></el-form-item>
         <el-form-item label="扫描周期（分钟）"><el-input-number v-model="form.scanIntervalMinutes" :min="5" :max="10080" /></el-form-item>
         <el-alert type="info" :closable="false" show-icon title="使用网站当前生效的解析规则；开启自动采集后，扫描结束会为本次新发现的图片页自动创建采集任务。" />
       </el-form><template #footer><el-button @click="scanDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveScan">保存扫描页</el-button></template>

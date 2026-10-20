@@ -37,6 +37,7 @@ export interface CrawlScanResults {
 export interface CrawlReviewPageGroup { id: number; name: string | null; url: string; assetCount: number }
 export interface CrawlScanPage {
   id?: number; siteId: number; name: string; url: string; autoScanEnabled: boolean; autoCollectEnabled: boolean;
+  autoCollectPriority: number;
   scanIntervalMinutes: number; maxPages: number; lastScanAt?: string
 }
 export interface DiscoveredPage {

@@ -20,6 +20,7 @@ public class CrawlScanPage {
     private String url;
     private Boolean autoScanEnabled = false;
     private Boolean autoCollectEnabled = false;
+    private Integer autoCollectPriority = CrawlJob.DOWNLOAD_PRIORITY;
     private Integer scanIntervalMinutes = 360;
     private Integer maxPages = 100;
     private LocalDateTime lastScanAt;
