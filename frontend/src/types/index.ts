@@ -192,6 +192,8 @@ export interface CrawlJob {
   pagesFound: number
   pagesProcessed: number
   imagesDownloaded: number
+  imagesTotal?: number | null
+  imagesProcessed?: number | null
   failCount: number
   attemptCount: number
   errorMessage: string | null

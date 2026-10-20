@@ -94,6 +94,24 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "WHERE a.jobId = :jobId")
     int clearSimilarityGroups(@Param("jobId") Long jobId);
 
+    String JOB_IMAGE_PROGRESS_SQL = """
+            SELECT a.job_id AS "jobId", COUNT(*) AS total,
+                SUM(CASE WHEN a.status IN
+                    ('DOWNLOADED', 'FAILED', 'SKIPPED', 'DELETED', 'DUPLICATE', 'IMPORTED')
+                    THEN 1 ELSE 0 END) AS processed
+            FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id
+            WHERE j.owner_id = :ownerId GROUP BY a.job_id
+            """;
+
+    @Query(value = JOB_IMAGE_PROGRESS_SQL, nativeQuery = true)
+    List<JobImageProgress> summarizeProgressByOwnerId(@Param("ownerId") Long ownerId);
+
+    interface JobImageProgress {
+        Long getJobId();
+        Long getTotal();
+        Long getProcessed();
+    }
+
     interface ReviewPageGroup {
         Long getId();
         String getName();

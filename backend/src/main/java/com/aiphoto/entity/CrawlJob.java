@@ -46,6 +46,10 @@ public class CrawlJob {
     private Integer pagesFound = 0;
     private Integer pagesProcessed = 0;
     private Integer imagesDownloaded = 0;
+    @Transient
+    private Long imagesTotal;
+    @Transient
+    private Long imagesProcessed;
     private Integer failCount = 0;
     @Column(columnDefinition = "TEXT")
     private String errorMessage;

@@ -293,13 +293,27 @@ public class CrawlService {
     }
 
     public List<CrawlJob> listJobs(Long ownerId) {
-        return sortJobs(jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId));
+        return jobsWithImageProgress(jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId), ownerId);
     }
 
     public List<CrawlJob> listJobs(Long ownerId, String pageName) {
         String query = pageName == null ? "" : pageName.trim();
         if (query.isEmpty()) return listJobs(ownerId);
-        return sortJobs(jobRepository.searchByOwnerIdAndPageName(ownerId, query));
+        return jobsWithImageProgress(jobRepository.searchByOwnerIdAndPageName(ownerId, query), ownerId);
+    }
+
+    private List<CrawlJob> jobsWithImageProgress(List<CrawlJob> jobs, Long ownerId) {
+        if (!jobs.isEmpty()) {
+            Map<Long, CrawlAssetRepository.JobImageProgress> progress = assetRepository
+                    .summarizeProgressByOwnerId(ownerId).stream()
+                    .collect(Collectors.toMap(CrawlAssetRepository.JobImageProgress::getJobId, Function.identity()));
+            for (CrawlJob job : jobs) {
+                var counts = progress.get(job.getId());
+                job.setImagesTotal(counts == null ? 0L : counts.getTotal());
+                job.setImagesProcessed(counts == null ? 0L : counts.getProcessed());
+            }
+        }
+        return sortJobs(jobs);
     }
 
     private List<CrawlJob> sortJobs(List<CrawlJob> jobs) {

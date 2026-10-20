@@ -101,6 +101,37 @@ class CrawlServiceTest {
         assertThat(crawlService.listJobs(9L)).containsExactly(running, scan, download);
     }
 
+    @Test void taskListsIncludeImageCountsWithOneOwnerScopedAggregate() {
+        CrawlJob downloading = job(1L, CrawlJob.Status.RUNNING);
+        downloading.setPhase(CrawlJob.Phase.DOWNLOAD);
+        downloading.setPagesFound(1);
+        downloading.setPagesProcessed(1);
+        CrawlJob discovering = job(2L, CrawlJob.Status.QUEUED);
+        var counts = org.mockito.Mockito.mock(CrawlAssetRepository.JobImageProgress.class);
+        when(counts.getJobId()).thenReturn(1L);
+        when(counts.getTotal()).thenReturn(100L);
+        when(counts.getProcessed()).thenReturn(27L);
+        when(assetRepository.summarizeProgressByOwnerId(9L)).thenReturn(List.of(counts));
+        when(jobRepository.findByOwnerIdOrderByCreatedAtDesc(9L))
+                .thenReturn(List.of(downloading, discovering));
+        var result = crawlService.listJobs(9L);
+        assertThat(result.getFirst().getImagesTotal()).isEqualTo(100L);
+        assertThat(result.getFirst().getImagesProcessed()).isEqualTo(27L);
+        assertThat(result.getLast().getImagesTotal()).isZero();
+        verify(assetRepository).summarizeProgressByOwnerId(9L);
+    }
+
+    @Test void pageNameSearchAlsoIncludesImageProgress() {
+        CrawlJob job = job(1L, CrawlJob.Status.RUNNING);
+        var counts = org.mockito.Mockito.mock(CrawlAssetRepository.JobImageProgress.class);
+        when(counts.getJobId()).thenReturn(1L);
+        when(counts.getTotal()).thenReturn(10L);
+        when(counts.getProcessed()).thenReturn(4L);
+        when(assetRepository.summarizeProgressByOwnerId(9L)).thenReturn(List.of(counts));
+        when(jobRepository.searchByOwnerIdAndPageName(9L, "宝宝")).thenReturn(List.of(job));
+        assertThat(crawlService.listJobs(9L, " 宝宝 ").getFirst().getImagesProcessed()).isEqualTo(4L);
+    }
+
     @Test void priorityUpdatesAreScopedToTheJobOwner() {
         CrawlJob job = job(1L, CrawlJob.Status.QUEUED);
         when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(job));

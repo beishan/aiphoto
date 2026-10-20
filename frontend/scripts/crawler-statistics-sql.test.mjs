@@ -98,3 +98,19 @@ test('range is half open and empty ranges return no rows', async () => {
   assert.equal(sum(rows, 'IMAGE'), 0)
   assert.deepEqual(await query('minute', '2026-01-01T00:00:00', '2026-01-01T01:00:00'), [])
 })
+
+test('task progress aggregate includes all finished image states and excludes pending/running, scoped by owner', async () => {
+  const repository = readFileSync(new URL('../../backend/src/main/java/com/aiphoto/repository/CrawlAssetRepository.java', import.meta.url), 'utf8')
+  const progressSql = repository.match(/String JOB_IMAGE_PROGRESS_SQL = """([\s\S]*?)""";/)[1].replace(':ownerId', '$1')
+  const rows = (await db.query(progressSql, [9])).rows
+  const finished = rows.find(row => Number(row.jobId) === 1)
+  const running = rows.find(row => Number(row.jobId) === 4)
+  assert.equal(Number(finished.total), 6)
+  assert.equal(Number(finished.processed), 6)
+  assert.equal(Number(running.total), 2)
+  assert.equal(Number(running.processed), 0)
+  assert.ok(rows.every(row => Number(row.jobId) !== 2))
+  const other = (await db.query(progressSql, [10])).rows
+  assert.equal(other.length, 1)
+  assert.equal(Number(other[0].jobId), 2)
+})

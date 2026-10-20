@@ -8,6 +8,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useCrawlerImageVisibility } from '@/composables/useCrawlerImageVisibility'
 import { crawlApi } from '@/api/crawlApi'
+import { crawlJobProgress } from '@/utils/crawlProgress'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import '@/assets/crawler-actions.css'
@@ -438,18 +439,10 @@ function openWorkflowJob(job: CrawlJob) {
   void loadJobDetail()
 }
 
-function jobProgress(job: CrawlJob) {
-  if (job.status === 'COMPLETED') return 100
-  if (job.phase === 'DISCOVERY') return job.listProcessed ? Math.min(95, job.listProcessed) : 0
-  if (job.phase === 'AWAITING_CONFIRMATION') return 45
-  if (!job.pagesFound) return job.phase === 'REVIEW' ? 100 : 0
-  return Math.min(100, Math.round(job.pagesProcessed / job.pagesFound * 100))
-}
+const jobProgress = crawlJobProgress
 
 function detailProgress(job: CrawlJob) {
-  if (!['DOWNLOAD', 'REVIEW'].includes(job.phase) || job.status === 'COMPLETED'
-      || imageProgress.value.total === 0) return jobProgress(job)
-  return Math.min(100, Math.round(imageProgress.value.processed / imageProgress.value.total * 100))
+  return crawlJobProgress(job, imageProgress.value)
 }
 
 function assetStatusLabel(asset: CrawlAsset) {
