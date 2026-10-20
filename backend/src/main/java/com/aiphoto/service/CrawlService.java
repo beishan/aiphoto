@@ -282,6 +282,7 @@ public class CrawlService {
         job.setOwnerId(ownerId);
         job.setSiteId(site.getId());
         job.setRuleId(ruleId);
+        job.setPriority(crawlerSettingsService.getScanTaskDefaultPriority());
         job.setName(site.getName() + " · " + rule.getName());
         try {
             job.setRuleSnapshot(objectMapper.writeValueAsString(rule));
@@ -309,13 +310,26 @@ public class CrawlService {
                 .orElseThrow(() -> new IllegalArgumentException("采集任务不存在"));
     }
 
+    public int getCollectionTaskDefaultPriority() {
+        return crawlerSettingsService.getCollectionTaskDefaultPriority();
+    }
+
     @Transactional
     public CrawlJob updateJobPriority(Long jobId, Long ownerId, Integer priority) {
         if (priority != null && (priority < 0 || priority > 100)) {
             throw new IllegalArgumentException("优先级必须在 0 至 100 之间");
         }
         CrawlJob job = getJob(jobId, ownerId);
-        job.setPriority(priority);
+        if (priority == null) {
+            job.setPriority(job.getPhase() == CrawlJob.Phase.DISCOVERY
+                    || job.getPhase() == CrawlJob.Phase.AWAITING_CONFIRMATION
+                    ? crawlerSettingsService.getScanTaskDefaultPriority()
+                    : crawlerSettingsService.getCollectionTaskDefaultPriority());
+            job.setPriorityCustomized(false);
+        } else {
+            job.setPriority(priority);
+            job.setPriorityCustomized(true);
+        }
         return jobRepository.save(job);
     }
 
@@ -345,6 +359,9 @@ public class CrawlService {
                 || job.getStatus() == CrawlJob.Status.RUNNING
                 || pageRepository.countByJobIdAndIncludedTrue(jobId) == 0) {
             throw new IllegalStateException("当前任务不能开始下载");
+        }
+        if (!Boolean.TRUE.equals(job.getPriorityCustomized())) {
+            job.setPriority(crawlerSettingsService.getCollectionTaskDefaultPriority());
         }
         job.setPhase(CrawlJob.Phase.DOWNLOAD);
         job.setStatus(CrawlJob.Status.QUEUED);

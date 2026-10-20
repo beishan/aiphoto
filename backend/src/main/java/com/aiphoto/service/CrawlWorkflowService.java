@@ -130,6 +130,7 @@ public class CrawlWorkflowService {
             try {
                 CrawlJob collection = collect(page.getId(), ownerId);
                 collection.setPriority(scanPage.getAutoCollectPriority());
+                collection.setPriorityCustomized(true);
                 jobRepository.save(collection);
                 created++;
             } catch (RuntimeException exception) {
@@ -157,6 +158,8 @@ public class CrawlWorkflowService {
         CrawlJob job = crawlService.createJob(active.getId(), ownerId);
         job.setSourcePageId(page.getId());
         job.setPhase(CrawlJob.Phase.DOWNLOAD);
+        job.setPriority(crawlService.getCollectionTaskDefaultPriority());
+        job.setPriorityCustomized(false);
         job.setPagesFound(1);
         String name = "采集 · " + (page.getName() == null || page.getName().isBlank() ? page.getUrl() : page.getName());
         job.setName(name.substring(0, name.offsetByCodePoints(0, Math.min(name.codePointCount(0, name.length()), 200))));

@@ -34,6 +34,8 @@ public class CrawlJob {
     @Column(nullable = false, length = 20)
     private Status status = Status.QUEUED;
     private Integer priority;
+    @Column(nullable = false)
+    private Boolean priorityCustomized = false;
 
     public Integer getPriority() {
         if (priority != null) return priority;

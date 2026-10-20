@@ -271,11 +271,15 @@ CREATE TABLE IF NOT EXISTS crawler_settings (
     last_scheduled_scan_date DATE,
     max_retries INTEGER NOT NULL DEFAULT 2,
     retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000,
+    scan_task_default_priority INTEGER NOT NULL DEFAULT 100 CHECK (scan_task_default_priority BETWEEN 0 AND 100),
+    collection_task_default_priority INTEGER NOT NULL DEFAULT 75 CHECK (collection_task_default_priority BETWEEN 0 AND 100),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 2;
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS retry_base_delay_millis BIGINT NOT NULL DEFAULT 1000;
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS image_download_timeout_seconds INTEGER NOT NULL DEFAULT 60;
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS scan_task_default_priority INTEGER NOT NULL DEFAULT 100 CHECK (scan_task_default_priority BETWEEN 0 AND 100);
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS collection_task_default_priority INTEGER NOT NULL DEFAULT 75 CHECK (collection_task_default_priority BETWEEN 0 AND 100);
 INSERT INTO crawler_settings (
     id, direct_fallback, connect_timeout_seconds,
     request_timeout_seconds, min_request_interval_millis
@@ -397,6 +401,7 @@ ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_owner VARCHAR(100);
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS priority INTEGER;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS priority_customized BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS site_id BIGINT REFERENCES crawl_sites(id) ON DELETE RESTRICT;
 UPDATE crawl_jobs j SET site_id = r.site_id
 FROM crawl_rules r WHERE j.site_id IS NULL AND j.rule_id = r.id;

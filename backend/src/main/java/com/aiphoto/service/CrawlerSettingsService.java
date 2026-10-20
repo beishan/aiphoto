@@ -32,6 +32,8 @@ public class CrawlerSettingsService {
                 setting.getMinRequestIntervalMillis(),
                 setting.getMaxRetries(),
                 setting.getRetryBaseDelayMillis(),
+                setting.getScanTaskDefaultPriority(),
+                setting.getCollectionTaskDefaultPriority(),
                 proxyRepository.findAllByOrderByPriorityAscIdAsc().stream()
                         .map(this::toView).toList());
     }
@@ -54,6 +56,12 @@ public class CrawlerSettingsService {
         }
         setting.setRetryBaseDelayMillis(Math.max(
                 0, Math.min(request.retryBaseDelayMillis(), 60_000L)));
+        if (request.scanTaskDefaultPriority() != null) {
+            setting.setScanTaskDefaultPriority(clamp(request.scanTaskDefaultPriority(), 0, 100));
+        }
+        if (request.collectionTaskDefaultPriority() != null) {
+            setting.setCollectionTaskDefaultPriority(clamp(request.collectionTaskDefaultPriority(), 0, 100));
+        }
         settingRepository.save(setting);
         invalidate();
         return getSettings();
@@ -221,6 +229,14 @@ public class CrawlerSettingsService {
         return settingRepository.findById(1L).orElseGet(CrawlerSetting::new);
     }
 
+    public int getScanTaskDefaultPriority() {
+        return currentSetting().getScanTaskDefaultPriority();
+    }
+
+    public int getCollectionTaskDefaultPriority() {
+        return currentSetting().getCollectionTaskDefaultPriority();
+    }
+
     private ProxyView toView(CrawlerProxy proxy) {
         return new ProxyView(
                 proxy.getId(), proxy.getName(), proxy.getHost(), proxy.getPort(),
@@ -289,7 +305,16 @@ public class CrawlerSettingsService {
             boolean directFallback, Integer connectTimeoutSeconds,
             Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
             Long minRequestIntervalMillis,
-            Integer maxRetries, Long retryBaseDelayMillis) {}
+            Integer maxRetries, Long retryBaseDelayMillis,
+            Integer scanTaskDefaultPriority, Integer collectionTaskDefaultPriority) {
+        public SettingsRequest(boolean directFallback, Integer connectTimeoutSeconds,
+                Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
+                Long minRequestIntervalMillis, Integer maxRetries, Long retryBaseDelayMillis) {
+            this(directFallback, connectTimeoutSeconds, requestTimeoutSeconds,
+                    imageDownloadTimeoutSeconds, minRequestIntervalMillis,
+                    maxRetries, retryBaseDelayMillis, 100, 75);
+        }
+    }
     public record ProxyRequest(
             String name, String host, Integer port, String username, String password,
             boolean clearPassword, boolean enabled, String proxyType,
@@ -308,6 +333,7 @@ public class CrawlerSettingsService {
             Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
             Long minRequestIntervalMillis,
             Integer maxRetries, Long retryBaseDelayMillis,
+            Integer scanTaskDefaultPriority, Integer collectionTaskDefaultPriority,
             List<ProxyView> proxies) {}
     public record ProxyConfig(
             Long id, String host, Integer port, String username, String password) {}

@@ -31,6 +31,10 @@ public class CrawlerSetting {
     private Integer maxRetries = 2;
     @Column(nullable = false)
     private Long retryBaseDelayMillis = 1000L;
+    @Column(nullable = false)
+    private Integer scanTaskDefaultPriority = 100;
+    @Column(nullable = false)
+    private Integer collectionTaskDefaultPriority = 75;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 }

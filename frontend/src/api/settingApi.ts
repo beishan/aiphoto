@@ -138,6 +138,8 @@ export interface CrawlerSettings {
   minRequestIntervalMillis: number
   maxRetries: number
   retryBaseDelayMillis: number
+  scanTaskDefaultPriority: number
+  collectionTaskDefaultPriority: number
   proxies: CrawlerProxy[]
 }
 

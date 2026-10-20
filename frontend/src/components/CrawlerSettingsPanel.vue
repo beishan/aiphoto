@@ -27,7 +27,13 @@ const settings = reactive({
   minRequestIntervalMillis: 1000,
   maxRetries: 2,
   retryBaseDelayMillis: 1000,
+  scanTaskDefaultPriority: 100,
+  collectionTaskDefaultPriority: 75,
 })
+const taskPriorityOptions = [
+  { label: '最高', value: 100 }, { label: '高', value: 75 },
+  { label: '普通', value: 50 }, { label: '低', value: 25 }, { label: '最低', value: 0 },
+]
 const editor = reactive<CrawlerProxyRequest>({
   name: '', host: '', port: 7890, username: '', password: '',
   clearPassword: false, enabled: true, proxyType: 'HTTP', controllerUrl: '', secret: '', clearSecret: false,
@@ -222,8 +228,8 @@ onMounted(load)
 <template>
   <div v-loading="loading" class="crawler-settings">
     <div class="section-heading">
-      <div><h2>{{ props.proxiesOnly ? "系统代理配置" : "爬虫设置" }}</h2><p>{{ props.proxiesOnly ? "管理普通 HTTP 代理与 Mihomo 控制连接，供爬虫执行器使用。" : "控制采集请求策略与执行器。" }}</p></div>
-      <el-button v-if="!props.proxiesOnly" type="primary" :loading="saving" @click="saveSettings">保存网络设置</el-button>
+      <div><h2>{{ props.proxiesOnly ? "系统代理配置" : "爬虫设置" }}</h2><p>{{ props.proxiesOnly ? "管理普通 HTTP 代理与 Mihomo 控制连接，供爬虫执行器使用。" : "控制采集请求策略、任务优先级与执行器。" }}</p></div>
+      <el-button v-if="!props.proxiesOnly" type="primary" :loading="saving" @click="saveSettings">保存爬虫设置</el-button>
     </div>
 
     <section v-if="!props.proxiesOnly" class="settings-card">
@@ -238,6 +244,14 @@ onMounted(load)
       </div>
       <div class="fallback-row"><div><strong>代理失败后允许直连</strong><small>按优先级尝试全部启用代理后，再使用 NAS 的直接网络连接。</small></div><el-switch v-model="settings.directFallback" /></div>
       <el-alert v-if="!settings.directFallback && !proxies.some(proxy => proxy.enabled && proxy.proxyType === 'HTTP')" type="warning" :closable="false" title="当前没有启用代理且禁止直连，所有采集请求都会失败。" />
+    </section>
+
+    <section v-if="!props.proxiesOnly" class="settings-card">
+      <h3>任务默认优先级</h3>
+      <div class="setting-grid">
+        <label><span>扫描任务</span><el-select v-model="settings.scanTaskDefaultPriority" aria-label="扫描任务默认优先级"><el-option v-for="option in taskPriorityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small>新建扫描任务及恢复默认时使用</small></label>
+        <label><span>采集任务</span><el-select v-model="settings.collectionTaskDefaultPriority" aria-label="采集任务默认优先级"><el-option v-for="option in taskPriorityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small>新建单页采集任务及恢复默认时使用</small></label>
+      </div>
     </section>
 
     <CrawlerExecutorsSettingsPanel v-if="!props.proxiesOnly" :proxies="proxies" />
