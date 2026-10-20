@@ -730,3 +730,5 @@ SELECT p.job_id, p.url, p.url_hash, p.name, 'NEW', p.created_at
 FROM crawl_pages p JOIN crawl_jobs j ON j.id = p.job_id
 WHERE j.source_page_id IS NULL AND j.phase IN ('DISCOVERY', 'AWAITING_CONFIRMATION')
 ON CONFLICT (job_id, url_hash) DO NOTHING;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS crawler_show_images BOOLEAN NOT NULL DEFAULT TRUE;

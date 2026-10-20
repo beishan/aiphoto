@@ -17,6 +17,8 @@ public class UserDTO {
     private String photoPreferences;
     private String notes;
     private String theme;
+
+    private Boolean crawlerShowImages = true;
     private DockConfigDTO dockConfig;
     private Boolean enabled;
     private LocalDateTime createdAt;

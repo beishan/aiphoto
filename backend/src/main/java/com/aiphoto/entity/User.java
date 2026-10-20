@@ -47,6 +47,8 @@ public class User {
     @Column(length = 20)
     private String theme;
 
+    private Boolean crawlerShowImages = true;
+
     private Double dockOpacity;
 
     private Integer dockBlurStrength;

@@ -50,6 +50,7 @@ async function handleSubmit() {
         } catch { /* 本地 Dock 配置仍然有效，稍后可再次同步 */ }
       }
       sessionStorage.setItem('user', JSON.stringify(data.user))
+      window.dispatchEvent(new Event('user-profile-updated'))
       dockIconStore.restoreCached()
       message.success('登录成功')
       router.push('/')

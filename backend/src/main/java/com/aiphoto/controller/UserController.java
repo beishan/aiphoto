@@ -59,6 +59,14 @@ public class UserController {
         return ResponseEntity.ok(userService.deleteAvatar(authentication.getName()));
     }
 
+    @PutMapping("/me/crawler-display")
+    public ResponseEntity<UserDTO> updateCurrentCrawlerDisplay(
+            Authentication authentication,
+            @RequestBody Map<String, Boolean> request) {
+        return ResponseEntity.ok(userService.updateCurrentCrawlerDisplay(
+                authentication.getName(), request.get("showImages")));
+    }
+
     @PutMapping("/me/theme")
     public ResponseEntity<UserDTO> updateCurrentTheme(
             Authentication authentication,

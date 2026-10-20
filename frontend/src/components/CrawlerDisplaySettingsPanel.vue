@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useCrawlerImageVisibility } from '@/composables/useCrawlerImageVisibility'
 
 const { showCrawlerImages, setShowCrawlerImages } = useCrawlerImageVisibility()
-function updateVisibility(value: string | number | boolean) {
+const saving = ref(false)
+async function updateVisibility(value: string | number | boolean) {
+  saving.value = true
   try {
-    setShowCrawlerImages(value === true)
+    await setShowCrawlerImages(value === true)
     ElMessage.success('爬虫图片显示设置已保存')
   } catch (error: any) {
     ElMessage.error(error.message || '设置保存失败')
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -20,9 +25,9 @@ function updateVisibility(value: string | number | boolean) {
       <div>
         <strong>显示爬虫页面图片</strong>
         <p>关闭后，所有爬虫页面均不加载缩略图和大图；文件名、尺寸、下载成功或失败状态及失败原因仍可查看。</p>
-        <p>仅对当前账户生效，自动保存在当前浏览器中，不影响后台采集和下载。</p>
+        <p>仅对当前账户生效，保存到登录账户并随账户恢复，不影响后台采集和下载。</p>
       </div>
-      <el-switch :model-value="showCrawlerImages" active-text="显示" inactive-text="不显示" @change="updateVisibility" />
+      <el-switch :loading="saving" :model-value="showCrawlerImages" active-text="显示" inactive-text="不显示" @change="updateVisibility" />
     </div>
   </section>
 </template>

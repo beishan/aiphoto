@@ -153,6 +153,16 @@ public class UserService implements UserDetailsService {
     }
 
     @Transactional
+    public UserDTO updateCurrentCrawlerDisplay(String username, Boolean showImages) {
+        if (showImages == null) {
+            throw new IllegalArgumentException("请指定是否显示爬虫图片");
+        }
+        User user = findByUsername(username);
+        user.setCrawlerShowImages(showImages);
+        return toDTO(userRepository.save(user));
+    }
+
+    @Transactional
     public UserDTO updateCurrentTheme(String username, String theme) {
         if (!Set.of("dark", "light", "macos26").contains(theme)) {
             throw new IllegalArgumentException("不支持的主题风格");
@@ -346,6 +356,7 @@ public class UserService implements UserDetailsService {
         dto.setPhotoPreferences(user.getPhotoPreferences());
         dto.setNotes(user.getProfileNotes());
         dto.setTheme(user.getTheme());
+        dto.setCrawlerShowImages(!Boolean.FALSE.equals(user.getCrawlerShowImages()));
         if (user.getDockOpacity() != null) {
             DockConfigDTO dockConfig = new DockConfigDTO();
             dockConfig.setOpacity(user.getDockOpacity());

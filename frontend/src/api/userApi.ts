@@ -31,6 +31,10 @@ export const userApi = {
     return http.delete<User>('/users/me/avatar')
   },
 
+  updateCrawlerDisplay(showImages: boolean) {
+    return http.put<User>('/users/me/crawler-display', { showImages })
+  },
+
   updateTheme(theme: 'dark' | 'light' | 'macos26') {
     return http.put<User>('/users/me/theme', { theme })
   },

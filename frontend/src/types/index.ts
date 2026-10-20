@@ -88,6 +88,7 @@ export interface User {
   nickname: string | null
   mood: string | null
   birthDate: string | null
+  crawlerShowImages: boolean
   photoPreferences: string | null
   notes: string | null
   theme: 'dark' | 'light' | 'macos26' | null
