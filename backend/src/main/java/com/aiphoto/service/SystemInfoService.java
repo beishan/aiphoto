@@ -36,6 +36,9 @@ public class SystemInfoService {
     @Value("${app.storage.thumbs-dir:./data/thumbs}")
     private String thumbsDir;
 
+    @Value("${app.storage.crawl-dir:./data/crawl}")
+    private String crawlDir;
+
     @Value("${app.ai-model-root:/models}")
     private String modelRoot;
 
@@ -45,7 +48,7 @@ public class SystemInfoService {
     @Value("${spring.datasource.url}")
     private String dbUrl;
 
-    @Value("${app.version:0.18.57}")
+    @Value("${app.version:0.18.58}")
     private String appVersion;
 
     /**
@@ -56,14 +59,17 @@ public class SystemInfoService {
         
         info.put("photosDir", photosDir);
         info.put("thumbsDir", thumbsDir);
+        info.put("crawlDir", crawlDir);
         info.put("modelDir", modelRoot);
         
         info.put("photosSize", getDirectorySize(photosDir));
         info.put("thumbsSize", getDirectorySize(thumbsDir));
+        info.put("crawlSize", getDirectorySize(crawlDir));
         info.put("modelsSize", getDirectorySize(modelRoot));
         
         info.put("photosCount", photoRepository.count());
-        info.put("totalStorageSize", (long) info.get("photosSize") + (long) info.get("thumbsSize") + (long) info.get("modelsSize"));
+        info.put("totalStorageSize", (long) info.get("photosSize") + (long) info.get("thumbsSize")
+                + (long) info.get("crawlSize") + (long) info.get("modelsSize"));
         
         // Disk free space
         try {

@@ -509,6 +509,12 @@ function formatSize(size: number | null): string {
   return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
+function formatFolderSize(size: unknown): string {
+  const bytes = Number(size) || 0
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+}
+
 function formatDownloadSpeed(task: DownloadTask): string {
   if (task.status !== 'DOWNLOADING') return ''
   // This is a rough estimate based on progress
@@ -679,6 +685,17 @@ async function loadSystemInfo() {
     systemInfo.value = data
   } catch { /* ignore */ }
 }
+
+async function refreshSystemInfo() {
+  await Promise.all([loadSystemInfo(), loadStorageInfo()])
+}
+
+const systemStorageFolders = computed(() => [
+  { name: '照片原图', path: storageInfo.value.photosDir, size: storageInfo.value.photosSize },
+  { name: '缩略图', path: storageInfo.value.thumbsDir, size: storageInfo.value.thumbsSize },
+  { name: '采集暂存', path: storageInfo.value.crawlDir, size: storageInfo.value.crawlSize },
+  { name: 'AI 模型', path: storageInfo.value.modelDir, size: storageInfo.value.modelsSize },
+])
 </script>
 
 <template>
@@ -1122,7 +1139,7 @@ async function loadSystemInfo() {
         <!-- ====== 系统信息 ====== -->
         <div v-if="activeSection === 'system'" class="content-panel">
           <div class="panel-header-row">
-            <el-button @click="loadSystemInfo()">刷新</el-button>
+            <el-button @click="refreshSystemInfo()">刷新</el-button>
           </div>
           <!-- App info -->
           <div class="panel-card">
@@ -1145,6 +1162,19 @@ async function loadSystemInfo() {
               <span>已用: {{ formatSize(systemInfo.jvmUsedMemory as number || 0) }}</span>
               <span>已分配: {{ formatSize(systemInfo.jvmTotalMemory as number || 0) }}</span>
               <span>最大: {{ formatSize(systemInfo.jvmMaxMemory as number || 0) }}</span>
+            </div>
+          </div>
+          <!-- Application directory usage -->
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 12px;">
+              <span class="label-text">应用文件夹占用</span>
+              <small class="folder-usage-total">合计 {{ formatFolderSize(storageInfo.totalStorageSize as number || 0) }}</small>
+            </div>
+            <div class="app-folder-usage-list">
+              <div v-for="folder in systemStorageFolders" :key="folder.name" class="app-folder-usage-item">
+                <div><strong>{{ folder.name }}</strong><code>{{ folder.path || '目录未配置' }}</code></div>
+                <span>{{ formatFolderSize(folder.size) }}</span>
+              </div>
             </div>
           </div>
           <!-- Database -->
@@ -2135,6 +2165,52 @@ async function loadSystemInfo() {
   font-size: 13px;
   color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+.folder-usage-total {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.app-folder-usage-list {
+  display: grid;
+  gap: 10px;
+}
+
+.app-folder-usage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.app-folder-usage-item > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-folder-usage-item strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.app-folder-usage-item code {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-folder-usage-item > span {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Dialogs */
