@@ -128,17 +128,36 @@ public class CrawlWorkflowService {
         for (CrawlPage page : pageRepository.findByJobIdAndStatusAndCollectionJobIdIsNullOrderById(
                 scanJobId, CrawlPage.Status.PENDING)) {
             try {
-                CrawlJob collection = collect(page.getId(), ownerId);
-                collection.setPriority(scanPage.getAutoCollectPriority());
-                collection.setPriorityCustomized(true);
-                jobRepository.save(collection);
-                created++;
+                if (autoCollectPage(page, scanPage, ownerId)) created++;
             } catch (RuntimeException exception) {
                 log.warn("Could not auto-create collection task for discovered page {}: {}",
                         page.getId(), exception.getMessage());
             }
         }
         return created;
+    }
+
+    @Transactional
+    public boolean autoCollectDiscoveredPage(Long scanJobId, String urlHash, Long ownerId) {
+        CrawlJob source = crawlService.getJob(scanJobId, ownerId);
+        if (source.getScanPageId() == null || source.getPhase() != CrawlJob.Phase.DISCOVERY
+                || !List.of(CrawlJob.Status.RUNNING, CrawlJob.Status.COMPLETED, CrawlJob.Status.PARTIAL)
+                        .contains(source.getStatus())) {
+            return false;
+        }
+        CrawlScanPage scanPage = ownedScan(source.getScanPageId(), ownerId);
+        if (!Boolean.TRUE.equals(scanPage.getAutoCollectEnabled())) return false;
+        CrawlPage page = pageRepository.findByJobIdAndUrlHash(scanJobId, urlHash).orElse(null);
+        return page != null && autoCollectPage(page, scanPage, ownerId);
+    }
+
+    private boolean autoCollectPage(CrawlPage page, CrawlScanPage scanPage, Long ownerId) {
+        if (page.getStatus() != CrawlPage.Status.PENDING || page.getCollectionJobId() != null) return false;
+        CrawlJob collection = collect(page.getId(), ownerId);
+        collection.setPriority(scanPage.getAutoCollectPriority());
+        collection.setPriorityCustomized(true);
+        jobRepository.save(collection);
+        return true;
     }
 
     @Transactional

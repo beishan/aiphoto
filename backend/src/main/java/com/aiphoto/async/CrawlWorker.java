@@ -112,9 +112,19 @@ public class CrawlWorker {
                             continue;
                         }
                         String detailHash = SafeHttpFetcher.urlHash(detailUrl);
-                        discoveryHistoryService.addIfNew(
+                        boolean added = discoveryHistoryService.addIfNew(
                                 jobId, rule.getSiteId(), href, detailUrl, detailHash,
                                 link.text().isBlank() ? link.attr("title") : link.text());
+                        if (added && job.getScanPageId() != null) {
+                            try {
+                                if (workflowService.autoCollectDiscoveredPage(jobId, detailHash, job.getOwnerId())) {
+                                    log.info("Scan job {} automatically queued discovered page {}", jobId, detailUrl);
+                                }
+                            } catch (Exception exception) {
+                                log.warn("Could not automatically collect discovered page {} from scan job {}: {}",
+                                        detailUrl, jobId, shortMessage(exception));
+                            }
+                        }
                         if (pageRepository.countByJobId(jobId) >= rule.getMaxDetailPages()) break;
                     }
                     if (rule.getNextSelector() != null && !rule.getNextSelector().isBlank()) {
