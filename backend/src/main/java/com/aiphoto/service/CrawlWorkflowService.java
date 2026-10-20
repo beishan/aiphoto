@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CrawlWorkflowService {
     private final CrawlScanPageRepository scanRepository;
     private final CrawlPageRepository pageRepository;
@@ -56,6 +58,7 @@ public class CrawlWorkflowService {
         page.setName(name);
         page.setUrl(SafeHttpFetcher.normalize(url));
         page.setAutoScanEnabled(Boolean.TRUE.equals(input.getAutoScanEnabled()));
+        page.setAutoCollectEnabled(Boolean.TRUE.equals(input.getAutoCollectEnabled()));
         page.setScanIntervalMinutes(interval);
         page.setMaxPages(maxPages);
         return scanRepository.save(page);
@@ -101,6 +104,30 @@ public class CrawlWorkflowService {
         page.setLastScanAt(now);
         scanRepository.save(page);
         return jobRepository.save(job);
+    }
+
+    @Transactional
+    public int autoCollectDiscoveredPages(Long scanJobId, Long ownerId) {
+        CrawlJob source = crawlService.getJob(scanJobId, ownerId);
+        if (source.getScanPageId() == null || source.getPhase() != CrawlJob.Phase.DISCOVERY
+                || !List.of(CrawlJob.Status.COMPLETED, CrawlJob.Status.PARTIAL).contains(source.getStatus())) {
+            return 0;
+        }
+        CrawlScanPage scanPage = ownedScan(source.getScanPageId(), ownerId);
+        if (!Boolean.TRUE.equals(scanPage.getAutoCollectEnabled())) return 0;
+
+        int created = 0;
+        for (CrawlPage page : pageRepository.findByJobIdAndStatusAndCollectionJobIdIsNullOrderById(
+                scanJobId, CrawlPage.Status.PENDING)) {
+            try {
+                collect(page.getId(), ownerId);
+                created++;
+            } catch (RuntimeException exception) {
+                log.warn("Could not auto-create collection task for discovered page {}: {}",
+                        page.getId(), exception.getMessage());
+            }
+        }
+        return created;
     }
 
     @Transactional

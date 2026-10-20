@@ -14,6 +14,7 @@ import com.aiphoto.repository.CrawlImageSkipRepository;
 import com.aiphoto.service.CrawlStagingStorageService;
 import com.aiphoto.service.CrawlDiscoveryHistoryService;
 import com.aiphoto.service.CrawlJobQueueService;
+import com.aiphoto.service.CrawlWorkflowService;
 import com.aiphoto.service.CrawlRuleMatcher;
 import com.aiphoto.service.SafeHttpFetcher;
 import com.aiphoto.service.PerceptualHashService;
@@ -59,6 +60,7 @@ public class CrawlWorker {
     private final CrawlDiscoveryHistoryService discoveryHistoryService;
     private final CrawlImageSkipRepository imageSkipRepository;
     private final CrawlAssetSourceRepository assetSourceRepository;
+    private final CrawlWorkflowService workflowService;
 
     @Async("crawlerTaskExecutor")
     public void discover(Long jobId) {
@@ -144,6 +146,15 @@ public class CrawlWorker {
             job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
+            if (job.getScanPageId() != null) {
+                try {
+                    int created = workflowService.autoCollectDiscoveredPages(jobId, job.getOwnerId());
+                    if (created > 0) log.info("Scan job {} automatically created {} collection tasks", jobId, created);
+                } catch (Exception exception) {
+                    log.warn("Could not automatically collect pages discovered by scan job {}: {}",
+                            jobId, shortMessage(exception));
+                }
+            }
         } catch (Exception exception) {
             failJob(job, workerId, exception);
         }

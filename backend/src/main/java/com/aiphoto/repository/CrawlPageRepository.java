@@ -40,6 +40,8 @@ public interface CrawlPageRepository extends JpaRepository<CrawlPage, Long> {
     List<CrawlPage> findByJobIdAndStatusOrderById(Long jobId, CrawlPage.Status status);
     List<CrawlPage> findByJobIdAndStatusAndIncludedTrueOrderById(
             Long jobId, CrawlPage.Status status);
+    List<CrawlPage> findByJobIdAndStatusAndCollectionJobIdIsNullOrderById(
+            Long jobId, CrawlPage.Status status);
     List<CrawlPage> findByIdInAndJobId(List<Long> ids, Long jobId);
     Page<CrawlPage> findByJobIdOrderById(Long jobId, Pageable pageable);
     @org.springframework.data.jpa.repository.Query("select p from CrawlPage p where p.jobId = :jobId "

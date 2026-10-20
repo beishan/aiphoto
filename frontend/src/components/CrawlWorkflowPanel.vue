@@ -35,7 +35,7 @@ const canManage = computed(() => {
   try { return JSON.parse(sessionStorage.getItem('user') || '{}')?.role === 'ADMIN' }
   catch { return false }
 })
-const defaultScan = (): CrawlScanPage => ({ siteId: props.scopedSiteId || props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, scanIntervalMinutes: 360, maxPages: 100 })
+const defaultScan = (): CrawlScanPage => ({ siteId: props.scopedSiteId || props.sites[0]?.id || 0, name: '', url: '', autoScanEnabled: false, autoCollectEnabled: false, scanIntervalMinutes: 360, maxPages: 100 })
 const form = reactive<CrawlScanPage>(defaultScan())
 const visibleScans = computed(() => scans.value.filter(s => {
   const selectedSiteId = props.scopedSiteId ?? siteId.value
@@ -160,6 +160,14 @@ async function toggleAuto(scan: CrawlScanPage, value: boolean) {
   try { await crawlApi.saveScanPage({ ...scan, autoScanEnabled: value }); await load() }
   catch (error) { fail(error) } finally { action.value = '' }
 }
+async function toggleAutoCollect(scan: CrawlScanPage, value: boolean) {
+  action.value = `auto-collect-${scan.id}`
+  try {
+    await crawlApi.saveScanPage({ ...scan, autoCollectEnabled: value })
+    await load()
+    ElMessage.success(value ? '扫描完成后将自动创建采集任务' : '已关闭扫描后自动采集')
+  } catch (error) { fail(error) } finally { action.value = '' }
+}
 async function removeScan(scan: CrawlScanPage) {
   try { await ElMessageBox.confirm(`删除扫描页“${scan.name}”？已有扫描结果和任务会保留。`, '删除扫描页', { type: 'warning' }) }
   catch { return }
@@ -232,6 +240,7 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
       <el-table-column label="操作" width="90" fixed="left"><template #default="{ row }"><el-button type="primary" plain size="small" :loading="action === `scan-${row.id}`" @click="scan(row)">扫描</el-button></template></el-table-column>
       <el-table-column label="扫描页" min-width="230"><template #default="{ row }"><strong>{{ row.name }}</strong><small>{{ siteName(row.siteId) }}</small><a :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a></template></el-table-column>
       <el-table-column label="自动扫描" width="110"><template #default="{ row }"><el-switch :model-value="row.autoScanEnabled" :loading="action === `auto-${row.id}`" :aria-label="`${row.name}自动扫描`" @change="toggleAuto(row, Boolean($event))" /></template></el-table-column>
+      <el-table-column label="自动采集" width="110"><template #default="{ row }"><el-switch :model-value="row.autoCollectEnabled" :loading="action === `auto-collect-${row.id}`" :aria-label="`${row.name}自动采集`" @change="toggleAutoCollect(row, Boolean($event))" /></template></el-table-column>
       <el-table-column label="扫描周期" width="115"><template #default="{ row }">每 {{ row.scanIntervalMinutes }} 分钟</template></el-table-column>
       <el-table-column label="页数上限" prop="maxPages" width="100" />
       <el-table-column label="最近扫描" min-width="165"><template #default="{ row }">{{ time(row.lastScanAt) }}</template></el-table-column>
@@ -263,8 +272,9 @@ onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
         <el-form-item label="扫描入口 URL"><el-input v-model="form.url" maxlength="2048" placeholder="https://example.com/latest/" /></el-form-item>
         <el-form-item label="列表页上限"><el-input-number v-model="form.maxPages" :min="1" :max="1000" /></el-form-item>
         <el-form-item label="自动扫描"><el-switch v-model="form.autoScanEnabled" active-text="按周期扫描" inactive-text="仅手动扫描" /></el-form-item>
+        <el-form-item label="自动采集"><el-switch v-model="form.autoCollectEnabled" active-text="扫描后自动创建采集任务" inactive-text="手动发起采集" /></el-form-item>
         <el-form-item label="扫描周期（分钟）"><el-input-number v-model="form.scanIntervalMinutes" :min="5" :max="10080" /></el-form-item>
-        <el-alert type="info" :closable="false" show-icon title="使用网站当前生效的解析规则，仅发现新的图片页面 URL。采集需在“采集页面”中单独发起。" />
+        <el-alert type="info" :closable="false" show-icon title="使用网站当前生效的解析规则；开启自动采集后，扫描结束会为本次新发现的图片页自动创建采集任务。" />
       </el-form><template #footer><el-button @click="scanDialog = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveScan">保存扫描页</el-button></template>
     </el-dialog>
     <el-dialog v-model="queueDialog" :title="`${queue?.name || ''} · 队列执行器`" width="min(620px, 94vw)" append-to-body class="crawler-controls">

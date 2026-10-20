@@ -19,6 +19,7 @@ public class CrawlScanPage {
     @Column(nullable = false, length = 2048)
     private String url;
     private Boolean autoScanEnabled = false;
+    private Boolean autoCollectEnabled = false;
     private Integer scanIntervalMinutes = 360;
     private Integer maxPages = 100;
     private LocalDateTime lastScanAt;
