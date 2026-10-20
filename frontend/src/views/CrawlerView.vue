@@ -1051,24 +1051,26 @@ async function analyzeSimilarity() {
 async function importSelected(assetIds?: number[]) {
   const groups = selectedAssetGroups(assetIds ? new Set(assetIds) : selectedAssets.value)
   if (!groups.length) return
-  const previews = await Promise.all(groups.map(async group => ({
-    ...group, preview: (await crawlApi.importPreview(group.jobId, group.ids)).data,
-  })))
-  const preview = previews.reduce((total, item) => ({
-    importable: total.importable + item.preview.importable,
-    duplicates: total.duplicates + item.preview.duplicates,
-    alreadyImported: total.alreadyImported + item.preview.alreadyImported,
-    blocked: total.blocked + item.preview.blocked,
-  }), { importable: 0, duplicates: 0, alreadyImported: 0, blocked: 0 })
-  const summary = `预计新增 ${preview.importable} 张，图库重复 ${preview.duplicates} 张，已入库 ${preview.alreadyImported} 张，当前不可入库 ${preview.blocked} 张。继续后将逐项处理并启动新增图片的 AI 索引。`
-  try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info', modalClass: assetIds ? 'collection-preview-message-box' : '' }) }
-  catch { return }
+  if (!assetIds) {
+    const previews = await Promise.all(groups.map(async group => ({
+      ...group, preview: (await crawlApi.importPreview(group.jobId, group.ids)).data,
+    })))
+    const preview = previews.reduce((total, item) => ({
+      importable: total.importable + item.preview.importable,
+      duplicates: total.duplicates + item.preview.duplicates,
+      alreadyImported: total.alreadyImported + item.preview.alreadyImported,
+      blocked: total.blocked + item.preview.blocked,
+    }), { importable: 0, duplicates: 0, alreadyImported: 0, blocked: 0 })
+    const summary = `预计新增 ${preview.importable} 张，图库重复 ${preview.duplicates} 张，已入库 ${preview.alreadyImported} 张，当前不可入库 ${preview.blocked} 张。继续后将逐项处理并启动新增图片的 AI 索引。`
+    try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info' }) }
+    catch { return }
+  }
   busy.value = 'import'
   const batchIds: number[] = []
   const batchAssets = new Map<number, number[]>()
   const acceptedAssetIds = new Set<number>()
   try {
-    for (const group of previews) {
+    for (const group of groups) {
       const signature = JSON.stringify({
         jobId: group.jobId,
         ids: [...group.ids].sort((a, b) => a - b),
