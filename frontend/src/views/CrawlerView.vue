@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave } from 'vue-router'
 import {
@@ -17,6 +17,9 @@ import type { CrawlImportBatch, CrawlImportItem } from '@/api/crawlApi'
 import { albumApi } from '@/api/albumApi'
 import { tagApi } from '@/api/tagApi'
 import type { Album, CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule, CrawlSite, Tag } from '@/types'
+
+const CrawlStatisticsPanel = defineAsyncComponent(() => import('@/components/CrawlStatisticsPanel.vue'))
+const statisticsPanel = ref<{ refresh: () => Promise<void> } | null>(null)
 
 const { showCrawlerImages } = useCrawlerImageVisibility()
 
@@ -202,7 +205,7 @@ let detailRequest = 0
 let reviewRequest = 0
 let polling = false
 
-type TabKey = 'overview' | 'sites' | 'pages' | 'collected-pages' | 'tasks' | 'review' | 'skips'
+type TabKey = 'statistics' | 'overview' | 'sites' | 'pages' | 'collected-pages' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
 
 const siteForm = reactive<CrawlSite>({
@@ -239,6 +242,7 @@ const totalDownloaded = computed(() => jobs.value.reduce((total, job) => total +
 const recentJobs = computed(() => jobs.value.slice(0, 6))
 const tabOptions = computed(() => [
   { label: '采集概览', value: 'overview' },
+  { label: '采集统计', value: 'statistics' },
   { label: sites.value.length ? `采集网站  ${sites.value.length}` : '采集网站', value: 'sites' },
   { label: '待采集页', value: 'pages' },
   { label: '采集页', value: 'collected-pages' },
@@ -411,7 +415,8 @@ async function loadImageSkips() {
 
 async function refresh() {
   await Promise.all([loadSites(), loadJobs(), loadImageSkips()])
-  if (activeTab.value === 'review') await loadReviewData()
+  if (activeTab.value === 'statistics') await statisticsPanel.value?.refresh()
+  else if (activeTab.value === 'review') await loadReviewData()
   else if (activeJobId.value) await loadJobDetail()
 }
 
@@ -1300,6 +1305,8 @@ onUnmounted(() => {
         <el-empty v-else description="暂无采集任务"><el-button type="primary" link @click="activeTab = 'sites'">前往配置网站</el-button></el-empty>
       </el-card>
     </section>
+
+    <CrawlStatisticsPanel v-else-if="activeTab === 'statistics'" ref="statisticsPanel" />
 
     <section v-else-if="activeTab === 'sites'" class="site-catalog surface-card" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>按网站管理采集入口、访问配置与解析规则。</p></div><el-button type="primary" :icon="Plus" round @click="openNewSiteDialog">新增网站</el-button></div>

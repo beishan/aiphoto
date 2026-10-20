@@ -42,6 +42,22 @@ public class CrawlController {
     private final com.aiphoto.service.CrawlerSettingsService crawlerSettingsService;
     private final com.aiphoto.repository.CrawlScanResultRepository scanResultRepository;
 
+    private final com.aiphoto.service.CrawlStatisticsService statisticsService;
+
+    @GetMapping("/statistics")
+    public com.aiphoto.service.CrawlStatisticsService.Statistics statistics(
+            Authentication authentication,
+            @RequestParam(defaultValue = "DAY") String granularity,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+                    java.time.LocalDateTime start,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
+                    java.time.LocalDateTime end,
+            @RequestParam(required = false) String timezone) {
+        return statisticsService.statistics(userId(authentication), granularity, start, end, timezone);
+    }
+
     @GetMapping("/inspection-proxies")
     public List<com.aiphoto.service.CrawlerSettingsService.InspectionProxyView> inspectionProxies() {
         return crawlerSettingsService.inspectionProxies();
