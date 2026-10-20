@@ -100,8 +100,9 @@ public class CrawlController {
     }
 
     @GetMapping("/jobs")
-    public List<CrawlJob> listJobs(Authentication authentication) {
-        return crawlService.listJobs(userId(authentication));
+    public List<CrawlJob> listJobs(
+            @RequestParam(required = false) String pageName, Authentication authentication) {
+        return crawlService.listJobs(userId(authentication), pageName);
     }
 
     @PostMapping("/jobs")

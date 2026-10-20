@@ -293,7 +293,17 @@ public class CrawlService {
     }
 
     public List<CrawlJob> listJobs(Long ownerId) {
-        return jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+        return sortJobs(jobRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId));
+    }
+
+    public List<CrawlJob> listJobs(Long ownerId, String pageName) {
+        String query = pageName == null ? "" : pageName.trim();
+        if (query.isEmpty()) return listJobs(ownerId);
+        return sortJobs(jobRepository.searchByOwnerIdAndPageName(ownerId, query));
+    }
+
+    private List<CrawlJob> sortJobs(List<CrawlJob> jobs) {
+        return jobs.stream()
                 .sorted(java.util.Comparator.comparingInt(CrawlService::jobListPriority)
                         .thenComparingInt(job -> jobListPriority(job) < 2 ? -job.getPriority() : 0))
                 .toList();

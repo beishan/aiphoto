@@ -89,7 +89,7 @@ export const crawlApi = {
     params: { inspectionProxyMode: site.inspectionProxyMode, inspectionProxyId: site.inspectionProxyId ?? undefined },
     timeout: 120000,
   }),
-  jobs: () => http.get<CrawlJob[]>('/crawl/jobs'),
+  jobs: (pageName?: string) => http.get<CrawlJob[]>('/crawl/jobs', { params: pageName ? { pageName } : {} }),
   createJob: (ruleId: number) => http.post<{ jobId: number }>('/crawl/jobs', { ruleId }),
   job: (id: number) => http.get<CrawlJob>(`/crawl/jobs/${id}`),
   updateJobPriority: (id: number, priority: number | null) => http.patch<CrawlJob>(`/crawl/jobs/${id}/priority`, { priority }),

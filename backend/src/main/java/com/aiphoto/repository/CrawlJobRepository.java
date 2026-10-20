@@ -12,6 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
     List<CrawlJob> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
+    @Query("select distinct j from CrawlJob j where j.ownerId = :ownerId and exists "
+            + "(select p.id from CrawlPage p where p.jobId = j.id "
+            + "and lower(coalesce(p.name, '')) like lower(concat('%', :pageName, '%'))) ")
+    List<CrawlJob> searchByOwnerIdAndPageName(
+            @Param("ownerId") Long ownerId, @Param("pageName") String pageName);
     Optional<CrawlJob> findByIdAndOwnerId(Long id, Long ownerId);
     List<CrawlJob> findByStatusIn(List<CrawlJob.Status> statuses);
     boolean existsBySiteIdAndStatusIn(Long siteId, Collection<CrawlJob.Status> statuses);

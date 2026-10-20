@@ -147,9 +147,14 @@ let previewViewerObjectUrl = ''
 const taskKind = ref('')
 const taskSiteId = ref<number>()
 const taskStatus = ref<CrawlJob['status'] | ''>('')
+const taskPageName = ref('')
+const taskPageNameApplied = ref('')
+const taskPageNameResults = ref<CrawlJob[] | null>(null)
+const taskPageNameLoading = ref(false)
 const taskPage = ref(1)
 const taskPageSize = ref(20)
-const filteredJobs = computed(() => jobs.value.filter(job =>
+let taskPageNameRequest = 0
+const filteredJobs = computed(() => (taskPageNameResults.value ?? jobs.value).filter(job =>
   (!taskSiteId.value || job.siteId === taskSiteId.value)
   && (!taskStatus.value || job.status === taskStatus.value)
   && (!taskKind.value || (taskKind.value === 'scan' ? !job.sourcePageId && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(job.phase) : !!job.sourcePageId || ['DOWNLOAD', 'REVIEW'].includes(job.phase)))))
@@ -271,6 +276,45 @@ async function loadRules(preferredRuleId?: number) {
 async function loadJobs() {
   jobs.value = (await crawlApi.jobs()).data
   if (!activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
+  if (taskPageNameApplied.value) await loadTaskPageNameResults(taskPageNameApplied.value, false)
+}
+
+async function loadTaskPageNameResults(pageName: string, interactive = true) {
+  const request = ++taskPageNameRequest
+  if (interactive) taskPageNameLoading.value = true
+  try {
+    const { data } = await crawlApi.jobs(pageName)
+    if (request === taskPageNameRequest) taskPageNameResults.value = data
+  } catch (error: any) {
+    if (interactive && request === taskPageNameRequest) {
+      ElMessage.error(error?.response?.data?.message || '按页面名称搜索任务失败')
+    }
+  } finally {
+    if (request === taskPageNameRequest) taskPageNameLoading.value = false
+  }
+}
+
+async function searchTasksByPageName() {
+  const pageName = taskPageName.value.trim()
+  taskPageNameApplied.value = pageName
+  taskPage.value = 1
+  if (!pageName) {
+    taskPageNameRequest++
+    taskPageNameResults.value = null
+    taskPageNameLoading.value = false
+    return
+  }
+  taskPageNameResults.value = []
+  await loadTaskPageNameResults(pageName)
+}
+
+function clearTaskPageNameSearch() {
+  taskPageName.value = ''
+  taskPageNameApplied.value = ''
+  taskPageNameRequest++
+  taskPageNameResults.value = null
+  taskPageNameLoading.value = false
+  taskPage.value = 1
 }
 
 async function updateJobPriority(job: CrawlJob, priority: number | null) {
@@ -1241,8 +1285,8 @@ onUnmounted(() => {
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
-      <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-select v-model="taskStatus" placeholder="任务状态"><el-option label="全部状态" value="" /><el-option label="等待中" value="QUEUED" /><el-option label="运行中" value="RUNNING" /><el-option label="已暂停" value="PAUSED" /><el-option label="已完成" value="COMPLETED" /><el-option label="部分成功" value="PARTIAL" /><el-option label="失败" value="FAILED" /><el-option label="已取消" value="CANCELLED" /></el-select></el-space>
-      <el-table :data="paginatedJobs" :empty-text="filteredJobs.length ? '当前筛选条件下没有任务' : '暂无任务，先从扫描页发起扫描'" @row-click="openWorkflowJob">
+      <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-select v-model="taskStatus" placeholder="任务状态"><el-option label="全部状态" value="" /><el-option label="等待中" value="QUEUED" /><el-option label="运行中" value="RUNNING" /><el-option label="已暂停" value="PAUSED" /><el-option label="已完成" value="COMPLETED" /><el-option label="部分成功" value="PARTIAL" /><el-option label="失败" value="FAILED" /><el-option label="已取消" value="CANCELLED" /></el-select><el-input v-model="taskPageName" class="task-page-search" clearable placeholder="搜索页面名称" :prefix-icon="Search" @keyup.enter="searchTasksByPageName" @clear="clearTaskPageNameSearch"><template #append><el-button :loading="taskPageNameLoading" @click="searchTasksByPageName">搜索</el-button></template></el-input></el-space>
+      <el-table :data="paginatedJobs" :empty-text="taskPageNameApplied ? '没有匹配该页面名称的任务' : filteredJobs.length ? '当前筛选条件下没有任务' : '暂无任务，先从扫描页发起扫描'" @row-click="openWorkflowJob">
         <el-table-column label="任务" min-width="270"><template #default="{ row }"><div class="task-title-cell"><el-tag v-if="sites.find(site => site.id === row.siteId)?.name" class="task-site-tag" size="small" effect="plain" :title="sites.find(site => site.id === row.siteId)?.name">{{ sites.find(site => site.id === row.siteId)?.name }}</el-tag><el-button class="task-title-button" link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button></div></template></el-table-column>
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
         <el-table-column label="优先级" width="125"><template #default="{ row }"><div @click.stop><el-select :model-value="row.priority" size="small" :disabled="prioritySaving.has(row.id)" aria-label="任务优先级" @change="updateJobPriority(row, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></div></template></el-table-column>
@@ -1598,7 +1642,7 @@ onUnmounted(() => {
 <style scoped>
 .source-page-url{display:block;color:var(--text-secondary);font-size:12px}
 
-.task-list-panel{padding:24px;min-width:0}.task-list-filters{margin:0 0 20px}.task-list-filters .el-select{width:180px}.workspace-switcher{overflow-x:auto}.workspace-switcher :deep(.el-segmented){min-width:920px}
+.task-list-panel{padding:24px;min-width:0}.task-list-filters{margin:0 0 20px}.task-list-filters .el-select{width:180px}.task-list-filters .task-page-search{width:280px}.workspace-switcher{overflow-x:auto}.workspace-switcher :deep(.el-segmented){min-width:920px}
 
 .crawler-page{display:grid;gap:18px;padding:28px 30px 112px;color:var(--text-primary)}
 .crawler-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:5px 2px 8px}.crawler-hero h1{margin:2px 0 0;font-family:'Iowan Old Style','Songti SC',serif;font-size:34px;letter-spacing:-.025em}.crawler-hero .subtitle{margin:7px 0 0;color:var(--text-secondary);font-size:13px}.eyebrow{margin:0;color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.17em}.crawler-tabs{position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding:4px;border:1px solid var(--separator);border-radius:15px;background:var(--bg-secondary);isolation:isolate}.crawler-tab-indicator{position:absolute;top:4px;bottom:4px;left:4px;z-index:-1;width:calc((100% - 8px)/4)!important;border:1px solid var(--separator);border-radius:11px;background:var(--bg-card);box-shadow:0 5px 15px rgba(0,0,0,.09);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.crawler-segment{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 12px;border:0;background:transparent;color:var(--text-secondary);cursor:pointer}.crawler-segment.active{color:var(--accent);font-weight:700}.crawler-segment b{min-width:21px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb,var(--accent) 13%,transparent);font-size:10px}.crawler-segment:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:11px}
