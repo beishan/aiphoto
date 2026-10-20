@@ -125,7 +125,7 @@
       append-to-body
       destroy-on-close
       class="node-group-editor-dialog"
-      top="3vh"
+      top="1vh"
     >
       <div class="group-editor" v-loading="saving">
         <el-form label-position="top" class="group-editor-form">
@@ -591,12 +591,15 @@ onMounted(load)
 </script>
 
 <style scoped>
-:global(.node-group-editor-dialog){display:flex;flex-direction:column;height:min(1040px,94vh);height:min(1040px,94dvh);max-height:94vh;max-height:94dvh;margin-bottom:0;padding:0}
+:global(.node-group-editor-dialog){display:flex;flex-direction:column;height:98vh;height:98dvh;max-height:98vh;max-height:98dvh;margin-bottom:0;padding:0}
 :global(.node-group-editor-dialog .el-dialog__header),:global(.node-group-editor-dialog .el-dialog__footer){flex:0 0 auto}
-:global(.node-group-editor-dialog .el-dialog__header){padding-right:60px}
-:global(.node-group-editor-dialog .el-dialog__body){flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.group-editor{display:flex;flex-direction:column;height:100%;min-height:0}
+:global(.node-group-editor-dialog .el-dialog__header){padding:12px 60px 12px 20px}
+:global(.node-group-editor-dialog .el-dialog__footer){padding:12px 20px}
+:global(.node-group-editor-dialog .el-dialog__body){display:flex;flex:1;min-height:0;padding:12px 20px;overflow-y:auto;overscroll-behavior:contain}
+.group-editor{display:flex;flex:1;flex-direction:column;min-width:0;min-height:0}
 .group-editor-form,.transfer-heading{flex-shrink:0}
+.group-editor-form :deep(.el-form-item){margin-bottom:10px}
+.group-editor-form :deep(.el-form-item__label){margin-bottom:4px}
 .group-editor-form :deep(.el-form-item__content){min-width:0}
 .group-editor-form :deep(.el-input),.group-editor-form :deep(.el-select){width:100%}
 
@@ -824,7 +827,7 @@ onMounted(load)
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0 16px;
 }
 
@@ -898,12 +901,14 @@ onMounted(load)
 .transfer-node-info {
   flex: 1;
   min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 6px;
 }
 
 .transfer-node-info strong {
+  grid-column: 1 / -1;
   max-width: 100%;
   overflow: hidden;
   color: var(--el-text-color-primary);
@@ -920,7 +925,8 @@ onMounted(load)
 }
 
 .transfer-node-info :deep(.latency-tag) {
-  margin-top: 3px;
+  margin-top: 0;
+  justify-self: end;
 }
 
 .node-order {
@@ -965,7 +971,9 @@ onMounted(load)
 
 @media (max-width: 720px) {
   :global(.node-group-editor-dialog) { height: auto; }
+  :global(.node-group-editor-dialog .el-dialog__body) { display: block; }
   .group-editor { height: auto; }
+  .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .node-transfer {
     grid-template-columns: minmax(0, 1fr);
   }
