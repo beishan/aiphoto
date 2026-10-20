@@ -712,6 +712,8 @@
   backdrop-filter: blur(12px);
 }
 
+:global(.el-overlay.collection-preview-message-box) { z-index: 5001 !important; }
+
 .collection-preview-dialog {
   display: grid;
   width: min(96vw, 1800px);

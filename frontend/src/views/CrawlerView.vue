@@ -947,7 +947,7 @@ async function skipSelectedNextTime(assetIds?: number[]) {
     const { value } = await ElMessageBox.prompt(
       '这些图片当前仍保留，但以后再次遇到相同图片 URL 时将直接记录为跳过。',
       '以后不再采集',
-      { inputValue: '重复图片', confirmButtonText: '加入跳过清单', cancelButtonText: '取消' },
+      { inputValue: '重复图片', confirmButtonText: '加入跳过清单', cancelButtonText: '取消', modalClass: assetIds ? 'collection-preview-message-box' : '' },
     )
     reason = value
   } catch { return }
@@ -1061,7 +1061,7 @@ async function importSelected(assetIds?: number[]) {
     blocked: total.blocked + item.preview.blocked,
   }), { importable: 0, duplicates: 0, alreadyImported: 0, blocked: 0 })
   const summary = `预计新增 ${preview.importable} 张，图库重复 ${preview.duplicates} 张，已入库 ${preview.alreadyImported} 张，当前不可入库 ${preview.blocked} 张。继续后将逐项处理并启动新增图片的 AI 索引。`
-  try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info' }) }
+  try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info', modalClass: assetIds ? 'collection-preview-message-box' : '' }) }
   catch { return }
   busy.value = 'import'
   const batchIds: number[] = []
