@@ -212,14 +212,14 @@ const activeTab = ref<TabKey>('overview')
 const siteForm = reactive<CrawlSite>({
   discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
   name: '', startUrl: '', blockedHosts: '', maxListPages: 100, maxDetailPages: 1000,
-  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000, imageHostTimeoutThreshold: 3,
   scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
 const createSiteForm = reactive<CrawlSite>({
   discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
   name: '', startUrl: '', blockedHosts: '', maxListPages: 100, maxDetailPages: 1000,
-  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000,
+  maxImages: 5000, maxFileBytes: 20 * 1024 * 1024, minRequestIntervalMillis: 1000, imageHostTimeoutThreshold: 3,
   scheduleEnabled: false, dailyScanTime: '03:00',
 })
 
@@ -754,7 +754,7 @@ function resetCreateSiteForm() {
     discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
     id: undefined, name: '', startUrl: '', blockedHosts: '', maxListPages: 100,
     maxDetailPages: 1000, maxImages: 5000, maxFileBytes: 20 * 1024 * 1024,
-    minRequestIntervalMillis: 1000,
+    minRequestIntervalMillis: 1000, imageHostTimeoutThreshold: 3,
     scheduleEnabled: false, dailyScanTime: '03:00', lastScheduledScanDate: null,
   })
 }
@@ -1467,6 +1467,8 @@ onUnmounted(() => {
                 <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="siteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
                 <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="siteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
                 <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="siteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="同图床连续超时次数"><el-input-number v-model="siteForm.imageHostTimeoutThreshold" :min="1" :max="20" :precision="0" controls-position="right" /></el-form-item></el-col>
+                <el-col :span="24"><p class="muted">默认 3 次；同一任务内同图床连续达到该次数超时后，后续图片快速失败并可重试。新启动或重试的任务按此设置执行。</p></el-col>
               </el-row>
             </el-form>
             <el-empty v-else description="从左侧选择网站，或新建一个采集来源" :image-size="80"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
@@ -1548,6 +1550,8 @@ onUnmounted(() => {
           <el-col :xs="24" :sm="8"><el-form-item label="图片页"><el-input-number v-model="createSiteForm.maxDetailPages" :min="1" :max="20000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="图片数量"><el-input-number v-model="createSiteForm.maxImages" :min="1" :max="50000" controls-position="right" /></el-form-item></el-col>
           <el-col :xs="24" :sm="8"><el-form-item label="同域请求间隔（毫秒）"><el-input-number v-model="createSiteForm.minRequestIntervalMillis" :min="0" :max="60000" :step="1000" controls-position="right" /></el-form-item></el-col>
+                <el-col :xs="24" :sm="8"><el-form-item label="同图床连续超时次数"><el-input-number v-model="createSiteForm.imageHostTimeoutThreshold" :min="1" :max="20" :precision="0" controls-position="right" /></el-form-item></el-col>
+                <el-col :span="24"><p class="muted">默认 3 次；同一任务内同图床连续达到该次数超时后，后续图片快速失败并可重试。新启动或重试的任务按此设置执行。</p></el-col>
         </el-row>
         <el-alert type="info" show-icon :closable="false" title="默认允许访问公网域名；黑名单包含其子域名，页面、图片及重定向均会校验。" />
       </el-form>

@@ -732,3 +732,6 @@ WHERE j.source_page_id IS NULL AND j.phase IN ('DISCOVERY', 'AWAITING_CONFIRMATI
 ON CONFLICT (job_id, url_hash) DO NOTHING;
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS crawler_show_images BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Per-site image host timeout protection (existing sites retain the previous threshold).
+ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS image_host_timeout_threshold INTEGER NOT NULL DEFAULT 3;

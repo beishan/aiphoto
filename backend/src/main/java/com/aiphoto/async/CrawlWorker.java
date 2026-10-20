@@ -50,6 +50,7 @@ public class CrawlWorker {
     private final com.aiphoto.service.CrawlerExecutorService executorService;
     private final CrawlJobRepository jobRepository;
     private final CrawlRuleRepository ruleRepository;
+    private final com.aiphoto.repository.CrawlSiteRepository siteRepository;
     private final CrawlPageRepository pageRepository;
     private final CrawlAssetRepository assetRepository;
     private final SafeHttpFetcher fetcher;
@@ -277,7 +278,12 @@ public class CrawlWorker {
                 job.setPagesProcessed(processed);
             }
             // A retry or another task gets fresh host health; unrelated image hosts stay independent.
-            var imageHosts = new com.aiphoto.service.CrawlImageHostGuard();
+            int timeoutThreshold = job.getSiteId() == null
+                    ? com.aiphoto.service.CrawlImageHostGuard.DEFAULT_TIMEOUT_THRESHOLD
+                    : siteRepository.findByIdAndOwnerId(job.getSiteId(), job.getOwnerId())
+                            .map(com.aiphoto.entity.CrawlSite::getImageHostTimeoutThreshold)
+                            .orElse(com.aiphoto.service.CrawlImageHostGuard.DEFAULT_TIMEOUT_THRESHOLD);
+            var imageHosts = new com.aiphoto.service.CrawlImageHostGuard(timeoutThreshold);
             // Publish all discovered URLs before starting any image download.
             for (CrawlAsset asset : assetRepository.findByJobIdAndStatusOrderByIdDesc(
                     jobId, CrawlAsset.Status.PENDING)) {

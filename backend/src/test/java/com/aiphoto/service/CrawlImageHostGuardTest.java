@@ -15,6 +15,21 @@ import org.springframework.test.util.ReflectionTestUtils;
 class CrawlImageHostGuardTest {
     private static final String HOST = "https://www.qpic.ws/images/2025/03/27/";
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2, 5, 20})
+    void customThresholdControlsHowManyImagesAreTried(int threshold) throws Exception {
+        var guard = new CrawlImageHostGuard(threshold);
+        for (int i = 0; i < threshold; i++) timeout(guard, HOST + i + ".jpg");
+        assertThatThrownBy(() -> guard.execute(HOST + "next.jpg", () -> "unexpected"))
+                .isInstanceOf(CrawlImageHostGuard.HostCoolingException.class)
+                .hasMessageContaining("连续 " + threshold);
+    }
+
+    @Test void invalidThresholdIsRejected() {
+        assertThatThrownBy(() -> new CrawlImageHostGuard(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new CrawlImageHostGuard(21)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test void threeDifferentImageTimeoutsStopSubsequentRequestsToTheSameHost() throws Exception {
         var guard = new CrawlImageHostGuard();
         timeout(guard, HOST + "a.jpg");

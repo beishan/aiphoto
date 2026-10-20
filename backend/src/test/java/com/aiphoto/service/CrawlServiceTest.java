@@ -344,6 +344,35 @@ class CrawlServiceTest {
         assertThat(crawlService.saveSite(site, 9L).getDiscoveryUrls()).isNull();
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 7, 20})
+    void siteTimeoutThresholdIsSavedWithTheOwnedSite(int threshold) {
+        CrawlSite site = inspectionSite();
+        site.setImageHostTimeoutThreshold(threshold);
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+        assertThat(crawlService.saveSite(site, 9L).getImageHostTimeoutThreshold()).isEqualTo(threshold);
+    }
+
+    @Test void omittedSiteTimeoutThresholdKeepsThePreviousDefault() {
+        CrawlSite site = inspectionSite();
+        site.setImageHostTimeoutThreshold(null);
+        when(crawlerSettingsService.validateInspectionProxy("SELECTED", 7L)).thenReturn("SELECTED");
+        when(siteRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
+        when(siteRepository.save(site)).thenReturn(site);
+        assertThat(crawlService.saveSite(site, 9L).getImageHostTimeoutThreshold()).isEqualTo(3);
+    }
+
+    @Test void invalidSiteTimeoutThresholdCannotBePersisted() {
+        CrawlSite site = new CrawlSite();
+        for (int threshold : new int[]{0, -1, 21}) {
+            site.setImageHostTimeoutThreshold(threshold);
+            assertThatThrownBy(() -> crawlService.saveSite(site, 9L)).hasMessageContaining("1 至 20");
+        }
+        verify(siteRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test void emptyBlacklistStaysEmptyAndAllowsExternalDiscoveryPages() {
         CrawlSite site = inspectionSite(); site.setBlockedHosts("");
         site.setDiscoveryUrls("https://other.example/list");

@@ -34,6 +34,8 @@ public class CrawlSite {
     private Integer maxImages = 5000;
     private Long maxFileBytes = 20L * 1024 * 1024;
     private Long minRequestIntervalMillis = 1000L;
+    @Column(nullable = false)
+    private Integer imageHostTimeoutThreshold = 3;
     @Column(nullable = false, length = 16)
     private String inspectionProxyMode = "DEFAULT";
     private Long inspectionProxyId;

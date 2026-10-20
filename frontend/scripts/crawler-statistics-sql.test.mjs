@@ -114,3 +114,14 @@ test('task progress aggregate includes all finished image states and excludes pe
   assert.equal(other.length, 1)
   assert.equal(Number(other[0].jobId), 2)
 })
+
+test('site timeout threshold migration supplies defaults and preserves independent saved values on restart', async () => {
+  const schema = readFileSync(new URL('../../backend/src/main/resources/schema.sql', import.meta.url), 'utf8')
+  const migration = schema.match(/ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS image_host_timeout_threshold[^;]+;/)[0]
+  await db.exec(migration)
+  assert.equal((await db.query('SELECT image_host_timeout_threshold FROM crawl_sites WHERE id = 1')).rows[0].image_host_timeout_threshold, 3)
+  await db.exec('UPDATE crawl_sites SET image_host_timeout_threshold = 7 WHERE id = 1')
+  await db.exec(migration)
+  const rows = (await db.query('SELECT image_host_timeout_threshold FROM crawl_sites ORDER BY id')).rows
+  assert.deepEqual(rows.map(row => row.image_host_timeout_threshold), [7, 3])
+})

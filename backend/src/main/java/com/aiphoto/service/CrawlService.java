@@ -50,6 +50,11 @@ public class CrawlService {
 
     @Transactional
     public CrawlSite saveSite(CrawlSite input, Long ownerId) {
+        int timeoutThreshold = input.getImageHostTimeoutThreshold() == null
+                ? 3 : input.getImageHostTimeoutThreshold();
+        if (timeoutThreshold < 1 || timeoutThreshold > 20) {
+            throw new IllegalArgumentException("同图床连续超时次数必须在 1 至 20 之间");
+        }
         CrawlSite site = input.getId() == null ? new CrawlSite()
                 : getSite(input.getId(), ownerId);
         String startUrl = requireText(input.getStartUrl(), "起始 URL");
@@ -71,6 +76,7 @@ public class CrawlService {
         site.setMaxListPages(clamp(input.getMaxListPages(), 1, 1000, 100));
         site.setMaxDetailPages(clamp(input.getMaxDetailPages(), 1, 20000, 1000));
         site.setMaxImages(clamp(input.getMaxImages(), 1, 50000, 5000));
+        site.setImageHostTimeoutThreshold(timeoutThreshold);
         site.setMaxFileBytes(input.getMaxFileBytes() == null
                 ? 20L * 1024 * 1024 : Math.max(1024, Math.min(input.getMaxFileBytes(), 100L * 1024 * 1024)));
         site.setMinRequestIntervalMillis(input.getMinRequestIntervalMillis() == null

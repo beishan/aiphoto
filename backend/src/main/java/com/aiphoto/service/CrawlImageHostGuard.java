@@ -15,11 +15,22 @@ import java.util.concurrent.Callable;
 
 /** Lives for one download run: neither another task nor a manual retry inherits host failures. */
 public final class CrawlImageHostGuard {
-    public static final int CONSECUTIVE_TIMEOUTS = 3;
-    private static final CircuitBreakerConfig CONFIG = CircuitBreakerConfig.custom()
+    public static final int DEFAULT_TIMEOUT_THRESHOLD = 3;
+    private final int timeoutThreshold;
+    private final CircuitBreakerConfig config;
+    private final Map<String, CircuitBreaker> hosts = new HashMap<>();
+
+    public CrawlImageHostGuard() { this(DEFAULT_TIMEOUT_THRESHOLD); }
+
+    public CrawlImageHostGuard(int timeoutThreshold) {
+        if (timeoutThreshold < 1 || timeoutThreshold > 20) {
+            throw new IllegalArgumentException("同图床连续超时次数必须在 1 至 20 之间");
+        }
+        this.timeoutThreshold = timeoutThreshold;
+        config = CircuitBreakerConfig.custom()
             .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
-            .slidingWindowSize(CONSECUTIVE_TIMEOUTS)
-            .minimumNumberOfCalls(CONSECUTIVE_TIMEOUTS)
+            .slidingWindowSize(timeoutThreshold)
+            .minimumNumberOfCalls(timeoutThreshold)
             .failureRateThreshold(100)
             .slowCallDurationThreshold(Duration.ofDays(1))
             .waitDurationInOpenState(Duration.ofMinutes(2))
@@ -27,15 +38,15 @@ public final class CrawlImageHostGuard {
             .ignoreExceptions(InterruptedException.class, CrawlerExecutorService.ControlException.class)
             .recordException(CrawlImageHostGuard::isTimeout)
             .build();
-    private final Map<String, CircuitBreaker> hosts = new HashMap<>();
+    }
 
     public <T> T execute(String imageUrl, Callable<T> download) throws Exception {
         String origin = origin(imageUrl);
-        CircuitBreaker breaker = hosts.computeIfAbsent(origin, key -> CircuitBreaker.of(key, CONFIG));
+        CircuitBreaker breaker = hosts.computeIfAbsent(origin, key -> CircuitBreaker.of(key, config));
         try {
             return breaker.executeCallable(download);
         } catch (CallNotPermittedException cooling) {
-            throw new HostCoolingException(origin);
+            throw new HostCoolingException(origin, timeoutThreshold);
         }
     }
 
@@ -59,8 +70,8 @@ public final class CrawlImageHostGuard {
     }
 
     public static final class HostCoolingException extends IOException {
-        private HostCoolingException(String origin) {
-            super("图床 " + origin + " 在本任务内连续 " + CONSECUTIVE_TIMEOUTS
+        private HostCoolingException(String origin, int timeoutThreshold) {
+            super("图床 " + origin + " 在本任务内连续 " + timeoutThreshold
                     + " 张图片超时，冷却期间本图床图片快速失败，避免重复等待；稍后可重试任务");
         }
     }

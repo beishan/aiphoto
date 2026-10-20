@@ -20,6 +20,7 @@ class CrawlWorkerExecutorTest {
     @Mock CrawlerExecutorService.Session session;
     @Mock CrawlJobRepository jobs;
     @Mock CrawlRuleRepository rules;
+    @Mock CrawlSiteRepository sites;
     @Mock CrawlPageRepository pages;
     @Mock CrawlAssetRepository assets;
     @Mock SafeHttpFetcher fetcher;
@@ -54,9 +55,14 @@ class CrawlWorkerExecutorTest {
         verify(assets, times(2)).save(asset);
     }
 
-    @Test
-    void repeatedHostTimeoutsFastFailOnlyThatHostAndRemainRetryable() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2, 3, 5})
+    void repeatedHostTimeoutsFastFailOnlyThatHostAndRemainRetryable(int threshold) throws Exception {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L); job.setRuleSnapshot("snapshot");
+        job.setSiteId(2L);
+        var site = new com.aiphoto.entity.CrawlSite();
+        site.setImageHostTimeoutThreshold(threshold);
+        when(sites.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(site));
         CrawlRule rule = new CrawlRule(); rule.setStartUrl("https://example.com/");
         var records = new java.util.ArrayList<com.aiphoto.entity.CrawlAsset>();
         for (int i = 0; i < 6; i++) {
@@ -88,13 +94,13 @@ class CrawlWorkerExecutorTest {
         assertThat(job.getFailCount()).isEqualTo(5);
         assertThat(records.subList(0, 5)).allSatisfy(asset ->
                 assertThat(asset.getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.FAILED));
-        assertThat(records.subList(3, 5)).allSatisfy(asset -> {
-            assertThat(asset.getErrorMessage()).contains("连续 3").contains("重试");
+        assertThat(records.subList(threshold, 5)).allSatisfy(asset -> {
+            assertThat(asset.getErrorMessage()).contains("连续 " + threshold).contains("重试");
             assertThat(asset.getDownloadStartedAtMillis()).isNull();
             assertThat(asset.getDownloadDurationMillis()).isNull();
         });
         assertThat(records.getLast().getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.DOWNLOADED);
-        verify(fetcher, times(3)).fetchImage(contains("bad.example"), any(), anyLong(), anyLong());
+        verify(fetcher, times(threshold)).fetchImage(contains("bad.example"), any(), anyLong(), anyLong());
         verify(fetcher).fetchImage(contains("healthy.example"), any(), anyLong(), anyLong());
         verify(session).close();
     }

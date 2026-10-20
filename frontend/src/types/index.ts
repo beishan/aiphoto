@@ -156,6 +156,7 @@ export interface CrawlSite {
   maxImages: number
   maxFileBytes: number
   minRequestIntervalMillis: number
+  imageHostTimeoutThreshold: number
   scheduleEnabled: boolean
   dailyScanTime: string
   lastScheduledScanDate?: string | null
