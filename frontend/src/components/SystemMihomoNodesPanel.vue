@@ -125,7 +125,7 @@
       append-to-body
       destroy-on-close
       class="node-group-editor-dialog"
-      top="6vh"
+      top="3vh"
     >
       <div class="group-editor" v-loading="saving">
         <el-form label-position="top" class="group-editor-form">
@@ -591,10 +591,12 @@ onMounted(load)
 </script>
 
 <style scoped>
-:global(.node-group-editor-dialog){display:flex;flex-direction:column;max-height:88vh;margin-bottom:0;padding:0}
+:global(.node-group-editor-dialog){display:flex;flex-direction:column;height:min(1040px,94vh);height:min(1040px,94dvh);max-height:94vh;max-height:94dvh;margin-bottom:0;padding:0}
 :global(.node-group-editor-dialog .el-dialog__header),:global(.node-group-editor-dialog .el-dialog__footer){flex:0 0 auto}
 :global(.node-group-editor-dialog .el-dialog__header){padding-right:60px}
-:global(.node-group-editor-dialog .el-dialog__body){min-height:0;overflow-y:auto;overscroll-behavior:contain}
+:global(.node-group-editor-dialog .el-dialog__body){flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.group-editor{display:flex;flex-direction:column;height:100%;min-height:0}
+.group-editor-form,.transfer-heading{flex-shrink:0}
 .group-editor-form :deep(.el-form-item__content){min-width:0}
 .group-editor-form :deep(.el-input),.group-editor-form :deep(.el-select){width:100%}
 
@@ -832,6 +834,8 @@ onMounted(load)
 
 .node-transfer {
   display: grid;
+  flex: 1;
+  min-height: 180px;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: stretch;
   gap: 12px;
@@ -840,7 +844,8 @@ onMounted(load)
 .transfer-pane {
   display: grid;
   min-width: 0;
-  grid-template-rows: auto 1fr;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 9px;
   padding: 12px;
   border: 1px solid var(--el-border-color);
@@ -870,8 +875,7 @@ onMounted(load)
 
 .transfer-list {
   min-width: 0;
-  max-height: min(42vh, 360px);
-  min-height: 180px;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   padding: 3px;
@@ -960,12 +964,16 @@ onMounted(load)
 }
 
 @media (max-width: 720px) {
+  :global(.node-group-editor-dialog) { height: auto; }
+  .group-editor { height: auto; }
   .node-transfer {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .transfer-list {
-    max-height: 260px;
+    min-height: 180px;
+    max-height: min(36vh, 420px);
+    max-height: min(36dvh, 420px);
   }
 
   .transfer-controls {
