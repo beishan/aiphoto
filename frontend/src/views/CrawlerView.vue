@@ -132,10 +132,12 @@ let previewViewerRequest = 0
 let previewViewerObjectUrl = ''
 const taskKind = ref('')
 const taskSiteId = ref<number>()
+const taskStatus = ref<CrawlJob['status'] | ''>('')
 const taskPage = ref(1)
 const taskPageSize = ref(20)
 const filteredJobs = computed(() => jobs.value.filter(job =>
   (!taskSiteId.value || job.siteId === taskSiteId.value)
+  && (!taskStatus.value || job.status === taskStatus.value)
   && (!taskKind.value || (taskKind.value === 'scan' ? !job.sourcePageId && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(job.phase) : !!job.sourcePageId || ['DOWNLOAD', 'REVIEW'].includes(job.phase)))))
 const paginatedJobs = computed(() => {
   const start = (taskPage.value - 1) * taskPageSize.value
@@ -1053,7 +1055,7 @@ watch(taskAssetView, value => {
     try { localStorage.setItem(taskAssetViewCacheKey, value) } catch { /* View preference remains active for this page. */ }
   }
 })
-watch([taskKind, taskSiteId], () => { taskPage.value = 1 })
+watch([taskKind, taskSiteId, taskStatus], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review') {
     detailRequest++
@@ -1199,8 +1201,8 @@ onUnmounted(() => {
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
-      <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select></el-space>
-      <el-table :data="paginatedJobs" empty-text="暂无任务，先从扫描页发起扫描" @row-click="openWorkflowJob">
+      <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-select v-model="taskStatus" placeholder="任务状态"><el-option label="全部状态" value="" /><el-option label="等待中" value="QUEUED" /><el-option label="运行中" value="RUNNING" /><el-option label="已暂停" value="PAUSED" /><el-option label="已完成" value="COMPLETED" /><el-option label="部分成功" value="PARTIAL" /><el-option label="失败" value="FAILED" /><el-option label="已取消" value="CANCELLED" /></el-select></el-space>
+      <el-table :data="paginatedJobs" :empty-text="filteredJobs.length ? '当前筛选条件下没有任务' : '暂无任务，先从扫描页发起扫描'" @row-click="openWorkflowJob">
         <el-table-column label="任务" min-width="270"><template #default="{ row }"><div class="task-title-cell"><el-tag v-if="sites.find(site => site.id === row.siteId)?.name" class="task-site-tag" size="small" effect="plain" :title="sites.find(site => site.id === row.siteId)?.name">{{ sites.find(site => site.id === row.siteId)?.name }}</el-tag><el-button class="task-title-button" link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button></div></template></el-table-column>
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
         <el-table-column label="优先级" width="125"><template #default="{ row }"><div @click.stop><el-select :model-value="row.priority" size="small" :disabled="prioritySaving.has(row.id)" aria-label="任务优先级" @change="updateJobPriority(row, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></div></template></el-table-column>
