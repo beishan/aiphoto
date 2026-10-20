@@ -32,6 +32,34 @@ const priorityOptions = [
   { label: '最高', value: 100 }, { label: '高', value: 75 },
   { label: '普通', value: 50 }, { label: '低', value: 25 }, { label: '最低', value: 0 },
 ]
+const selectedTaskIds = ref<number[]>([])
+const batchTaskPriority = ref(75)
+const batchPrioritySaving = ref(false)
+const allPageTasksSelected = computed(() => paginatedJobs.value.length > 0
+  && paginatedJobs.value.every(job => selectedTaskIds.value.includes(job.id)))
+function selectTask(id: number, selected: boolean) {
+  selectedTaskIds.value = selected
+    ? [...new Set([...selectedTaskIds.value, id])]
+    : selectedTaskIds.value.filter(value => value !== id)
+}
+function selectPageTasks(selected: boolean) {
+  selectedTaskIds.value = selected ? paginatedJobs.value.map(job => job.id) : []
+}
+async function updateSelectedTaskPriorities() {
+  const ids = [...selectedTaskIds.value]
+  if (!ids.length || batchPrioritySaving.value || prioritySaving.value.size) return
+  batchPrioritySaving.value = true
+  try {
+    await crawlApi.updateJobPriorities(ids, batchTaskPriority.value === -1 ? null : batchTaskPriority.value)
+    selectedTaskIds.value = []
+    ElMessage.success(`已更新 ${ids.length} 个任务的优先级`)
+    await loadJobs()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '批量更新优先级失败，请刷新后重试')
+  } finally {
+    batchPrioritySaving.value = false
+  }
+}
 const prioritySaving = ref(new Set<number>())
 const pages = ref<CrawlPage[]>([])
 const assets = ref<CrawlAsset[]>([])
@@ -1146,6 +1174,9 @@ watch(taskAssetView, value => {
     try { localStorage.setItem(taskAssetViewCacheKey, value) } catch { /* View preference remains active for this page. */ }
   }
 })
+watch([taskPage, taskPageSize, taskKind, taskSiteId, taskStatus, taskPageNameApplied], () => {
+  selectedTaskIds.value = []
+})
 watch([taskKind, taskSiteId, taskStatus], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   if (tab === 'review') {
@@ -1293,10 +1324,23 @@ onUnmounted(() => {
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
       <el-space wrap class="task-list-filters"><el-select v-model="taskKind" placeholder="任务类型"><el-option label="全部任务" value="" /><el-option label="扫描任务" value="scan" /><el-option label="采集任务" value="collect" /></el-select><el-select v-model="taskSiteId" clearable placeholder="全部网站"><el-option v-for="site in sites" :key="site.id" :value="site.id!" :label="site.name" /></el-select><el-select v-model="taskStatus" placeholder="任务状态"><el-option label="全部状态" value="" /><el-option label="等待中" value="QUEUED" /><el-option label="运行中" value="RUNNING" /><el-option label="已暂停" value="PAUSED" /><el-option label="已完成" value="COMPLETED" /><el-option label="部分成功" value="PARTIAL" /><el-option label="失败" value="FAILED" /><el-option label="已取消" value="CANCELLED" /></el-select><el-input v-model="taskPageName" class="task-page-search" clearable placeholder="搜索页面名称" :prefix-icon="Search" @keyup.enter="searchTasksByPageName" @clear="clearTaskPageNameSearch"><template #append><el-button :loading="taskPageNameLoading" @click="searchTasksByPageName">搜索</el-button></template></el-input><el-button :icon="Refresh" @click="resetTaskFilters">重置</el-button></el-space>
+      <el-space wrap class="task-list-filters">
+        <span>已选 {{ selectedTaskIds.length }} 个任务</span>
+        <el-select v-model="batchTaskPriority" aria-label="批量任务优先级" style="width: 140px" :disabled="batchPrioritySaving">
+          <el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" />
+          <el-option label="恢复默认" :value="-1" />
+        </el-select>
+        <el-button type="primary" :disabled="!selectedTaskIds.length || prioritySaving.size > 0" :loading="batchPrioritySaving" @click="updateSelectedTaskPriorities">批量修改优先级</el-button>
+        <el-button :disabled="!selectedTaskIds.length || batchPrioritySaving" @click="selectedTaskIds = []">清空选择</el-button>
+      </el-space>
       <el-table :data="paginatedJobs" :empty-text="taskPageNameApplied ? '没有匹配该页面名称的任务' : filteredJobs.length ? '当前筛选条件下没有任务' : '暂无任务，先从扫描页发起扫描'" @row-click="openWorkflowJob">
+        <el-table-column width="48" align="center">
+          <template #header><el-checkbox :model-value="allPageTasksSelected" :indeterminate="selectedTaskIds.length > 0 && !allPageTasksSelected" :disabled="batchPrioritySaving" aria-label="全选当前页任务" @change="selectPageTasks(Boolean($event))" /></template>
+          <template #default="{ row }"><span @click.stop><el-checkbox :model-value="selectedTaskIds.includes(row.id)" :disabled="batchPrioritySaving || prioritySaving.has(row.id)" :aria-label="`选择任务 ${row.name}`" @change="selectTask(row.id, Boolean($event))" /></span></template>
+        </el-table-column>
         <el-table-column label="任务" min-width="270"><template #default="{ row }"><div class="task-title-cell"><el-tag v-if="sites.find(site => site.id === row.siteId)?.name" class="task-site-tag" size="small" effect="plain" :title="sites.find(site => site.id === row.siteId)?.name">{{ sites.find(site => site.id === row.siteId)?.name }}</el-tag><el-button class="task-title-button" link type="primary" @click.stop="openWorkflowJob(row)">{{ row.name }}</el-button></div></template></el-table-column>
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ row.sourcePageId || ['DOWNLOAD','REVIEW'].includes(row.phase) ? '采集任务' : '扫描任务' }}</template></el-table-column>
-        <el-table-column label="优先级" width="125"><template #default="{ row }"><div @click.stop><el-select :model-value="row.priority" size="small" :disabled="prioritySaving.has(row.id)" aria-label="任务优先级" @change="updateJobPriority(row, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></div></template></el-table-column>
+        <el-table-column label="优先级" width="125"><template #default="{ row }"><div @click.stop><el-select :model-value="row.priority" size="small" :disabled="batchPrioritySaving || prioritySaving.has(row.id)" aria-label="任务优先级" @change="updateJobPriority(row, $event)"><el-option v-for="option in priorityOptions" :key="option.value" :label="option.label" :value="option.value" /><el-option label="恢复默认" :value="-1" /></el-select></div></template></el-table-column>
         <el-table-column label="进度" min-width="170"><template #default="{ row }"><el-progress :percentage="jobProgress(row)" /></template></el-table-column>
         <el-table-column label="发现页面" prop="pagesFound" width="100" />
         <el-table-column label="已下载图片" prop="imagesDownloaded" width="110" />

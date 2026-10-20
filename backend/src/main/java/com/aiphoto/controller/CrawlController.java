@@ -132,6 +132,14 @@ public class CrawlController {
 
     public record JobPriorityRequest(Integer priority) {}
 
+    @PatchMapping("/jobs/priority")
+    public List<CrawlJob> updateJobPriorities(Authentication authentication,
+            @RequestBody BatchJobPriorityRequest request) {
+        return crawlService.updateJobPriorities(request.jobIds(), userId(authentication), request.priority());
+    }
+
+    public record BatchJobPriorityRequest(List<Long> jobIds, Integer priority) {}
+
     @GetMapping("/jobs/{jobId}/scan-results")
     public ScanResults scanResults(@PathVariable Long jobId,
             @RequestParam(defaultValue = "0") int page,

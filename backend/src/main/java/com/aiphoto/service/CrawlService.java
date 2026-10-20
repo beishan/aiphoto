@@ -343,6 +343,31 @@ public class CrawlService {
         return jobRepository.save(job);
     }
 
+    @Transactional
+    public List<CrawlJob> updateJobPriorities(List<Long> jobIds, Long ownerId, Integer priority) {
+        if (jobIds == null || jobIds.isEmpty() || jobIds.size() > 100
+                || jobIds.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("请选择 1 至 100 个任务");
+        }
+        if (priority != null && (priority < 0 || priority > 100)) {
+            throw new IllegalArgumentException("优先级必须在 0 至 100 之间");
+        }
+        List<CrawlJob> jobs = jobIds.stream().distinct()
+                .map(id -> getJob(id, ownerId)).toList();
+        for (CrawlJob job : jobs) {
+            if (priority == null) {
+                job.setPriority(job.getPhase() == CrawlJob.Phase.DISCOVERY
+                        || job.getPhase() == CrawlJob.Phase.AWAITING_CONFIRMATION
+                        ? crawlerSettingsService.getScanTaskDefaultPriority()
+                        : crawlerSettingsService.getCollectionTaskDefaultPriority());
+            } else {
+                job.setPriority(priority);
+            }
+            job.setPriorityCustomized(priority != null);
+        }
+        return jobRepository.saveAll(jobs);
+    }
+
     public ImageProgress imageProgress(Long jobId, Long ownerId) {
         getJob(jobId, ownerId);
         List<CrawlAsset.Status> completedStatuses = List.of(

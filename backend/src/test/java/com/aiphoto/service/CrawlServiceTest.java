@@ -117,6 +117,55 @@ class CrawlServiceTest {
         verify(jobRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
+    @Test void batchPrioritiesValidateEveryOwnerBeforeChangingAnyJob() {
+        CrawlJob first = job(1L, CrawlJob.Status.QUEUED);
+        int original = first.getPriority();
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(first));
+        when(jobRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> crawlService.updateJobPriorities(List.of(1L, 2L), 9L, 25))
+                .hasMessageContaining("不存在");
+        assertThat(first.getPriority()).isEqualTo(original);
+        verify(jobRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test void batchPrioritiesRestorePhaseDefaultsAndDeduplicateIds() {
+        CrawlJob scan = job(1L, CrawlJob.Status.QUEUED);
+        scan.setPhase(CrawlJob.Phase.DISCOVERY);
+        CrawlJob collect = job(2L, CrawlJob.Status.QUEUED);
+        collect.setPhase(CrawlJob.Phase.DOWNLOAD);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(scan));
+        when(jobRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(collect));
+        when(crawlerSettingsService.getScanTaskDefaultPriority()).thenReturn(100);
+        when(crawlerSettingsService.getCollectionTaskDefaultPriority()).thenReturn(75);
+        crawlService.updateJobPriorities(List.of(1L, 2L, 1L), 9L, null);
+        assertThat(scan.getPriority()).isEqualTo(100);
+        assertThat(collect.getPriority()).isEqualTo(75);
+        assertThat(scan.getPriorityCustomized()).isFalse();
+        assertThat(collect.getPriorityCustomized()).isFalse();
+        verify(jobRepository).saveAll(List.of(scan, collect));
+    }
+
+    @Test void batchPrioritiesApplyExplicitValueToEverySelectedJob() {
+        CrawlJob first = job(1L, CrawlJob.Status.QUEUED);
+        CrawlJob second = job(2L, CrawlJob.Status.PAUSED);
+        when(jobRepository.findByIdAndOwnerId(1L, 9L)).thenReturn(Optional.of(first));
+        when(jobRepository.findByIdAndOwnerId(2L, 9L)).thenReturn(Optional.of(second));
+        crawlService.updateJobPriorities(List.of(1L, 2L), 9L, 25);
+        assertThat(first.getPriority()).isEqualTo(25);
+        assertThat(second.getPriority()).isEqualTo(25);
+        assertThat(first.getPriorityCustomized()).isTrue();
+        assertThat(second.getPriorityCustomized()).isTrue();
+        verify(jobRepository).saveAll(List.of(first, second));
+    }
+
+    @Test void batchPrioritiesRejectEmptySelectionAndInvalidPriority() {
+        assertThatThrownBy(() -> crawlService.updateJobPriorities(List.of(), 9L, 25))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> crawlService.updateJobPriorities(List.of(1L), 9L, 101))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(jobRepository, never()).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test void emptyCompletedDownloadCanBeRetriedForDiagnosis() {
         CrawlJob job = new CrawlJob(); job.setId(1L); job.setOwnerId(9L);
         job.setPhase(CrawlJob.Phase.REVIEW); job.setStatus(CrawlJob.Status.COMPLETED);

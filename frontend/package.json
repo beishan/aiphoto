@@ -1,6 +1,6 @@
 {
   "name": "aiphoto-frontend",
-  "version": "0.18.61",
+  "version": "0.18.62",
   "private": true,
   "type": "module",
   "scripts": {
