@@ -716,7 +716,7 @@
   width: 96vw;
   height: 96vh;
   min-width: 0;
-  grid-template-rows: 54px minmax(0, 1fr) 46px;
+  grid-template-rows: 72px minmax(0, 1fr) 46px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, .13);
   border-radius: 20px;
@@ -737,7 +737,9 @@
 }
 
 .collection-preview-header { border-bottom: 1px solid rgba(255, 255, 255, .1); }
-.collection-preview-header strong { flex: 1; overflow: hidden; color: #fff; text-overflow: ellipsis; white-space: nowrap; }
+.collection-preview-heading { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.collection-preview-heading > span,.collection-preview-heading > small { overflow: hidden; color: rgba(255, 255, 255, .58); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.collection-preview-heading strong { overflow: hidden; color: #fff; text-overflow: ellipsis; white-space: nowrap; }
 .collection-preview-header > span { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 .collection-preview-close { border-color: rgba(255, 255, 255, .18) !important; background: rgba(255, 255, 255, .08) !important; color: #fff !important; }
 
@@ -775,7 +777,7 @@
 
 @media(max-width:640px) {
   .collection-preview-overlay { padding: 8px; }
-  .collection-preview-dialog { width: 100%; height: 100%; border-radius: 14px; grid-template-rows: 50px minmax(0, 1fr) 42px; }
+  .collection-preview-dialog { width: 100%; height: 100%; border-radius: 14px; grid-template-rows: 68px minmax(0, 1fr) 42px; }
   .collection-preview-stage { padding: 8px 0; }
   .collection-preview-image-wrap { padding: 0 42px; }
   .collection-preview-nav { width: 38px; height: 38px; }

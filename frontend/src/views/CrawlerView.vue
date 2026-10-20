@@ -132,6 +132,12 @@ function changeReviewPageSize(size: number) {
 }
 const previewViewerVisible = ref(false)
 const previewViewerAsset = ref<CrawlAsset | null>(null)
+const previewViewerSourcePageName = computed(() => {
+  const sourceUrl = previewViewerAsset.value?.sourcePageUrl
+  if (!sourceUrl) return '未知采集页'
+  const page = reviewSourcePages.value.find(item => item.url === sourceUrl)
+  return page?.name || page?.url || sourceUrl
+})
 const previewViewerIndex = ref(0)
 const previewViewerUrl = ref('')
 const previewViewerLoading = ref(false)
@@ -1554,7 +1560,11 @@ onUnmounted(() => {
         <div v-if="showCrawlerImages && previewViewerVisible" class="collection-preview-overlay" @click.self="closePreviewViewer">
           <section class="collection-preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览">
             <header class="collection-preview-header">
-              <strong :title="previewViewerAsset?.originalFilename || ''">{{ previewViewerAsset?.originalFilename || '图片预览' }}</strong>
+              <div class="collection-preview-heading">
+                <span>采集页</span>
+                <strong :title="previewViewerSourcePageName">{{ previewViewerSourcePageName }}</strong>
+                <small :title="previewViewerAsset?.originalFilename || ''">{{ previewViewerAsset?.originalFilename || '图片预览' }}</small>
+              </div>
               <span>{{ previewViewerIndex + 1 }} / {{ assetTotal }}</span>
               <el-button class="collection-preview-close" circle :icon="Close" aria-label="关闭预览" @click="closePreviewViewer" />
             </header>
