@@ -173,6 +173,7 @@ const previewViewerSourcePageName = computed(() => {
 const previewViewerIndex = ref(0)
 const previewViewerUrl = ref('')
 const previewViewerLoading = ref(false)
+const previewViewerAction = ref<'import' | 'skip' | ''>('')
 const previewViewerPages = reactive<Record<number, CrawlAsset[]>>({})
 let previewViewerRequest = 0
 let previewViewerObjectUrl = ''
@@ -613,6 +614,22 @@ function openAssetPreview(asset: CrawlAsset) {
   void loadPreviewViewerAsset(asset, assetPage.value * assetPageSize.value + indexInPage)
 }
 
+async function importPreviewAsset() {
+  const asset = previewViewerAsset.value
+  if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
+  previewViewerAction.value = 'import'
+  try { await importSelected([asset.id]) }
+  finally { previewViewerAction.value = '' }
+}
+
+async function skipPreviewAsset() {
+  const asset = previewViewerAsset.value
+  if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
+  previewViewerAction.value = 'skip'
+  try { await skipSelectedNextTime([asset.id]) }
+  finally { previewViewerAction.value = '' }
+}
+
 async function stepPreviewViewer(direction: -1 | 1) {
   if (!previewViewerVisible.value || previewViewerLoading.value) return
   const targetIndex = previewViewerIndex.value + direction
@@ -891,10 +908,10 @@ function toggleAsset(id: number) {
   selectedAssets.value = next
 }
 
-function selectedAssetGroups() {
+function selectedAssetGroups(assetIds: Set<number> = selectedAssets.value) {
   const groups = new Map<number, number[]>()
   for (const asset of assets.value) {
-    if (!selectedAssets.value.has(asset.id)) continue
+    if (!assetIds.has(asset.id)) continue
     const ids = groups.get(asset.jobId) || []
     ids.push(asset.id)
     groups.set(asset.jobId, ids)
@@ -921,8 +938,9 @@ async function deleteSelected() {
   await reloadVisibleAssets()
 }
 
-async function skipSelectedNextTime() {
-  const groups = selectedAssetGroups()
+async function skipSelectedNextTime(assetIds?: number[]) {
+  const ids = new Set(assetIds ?? selectedAssets.value)
+  const groups = selectedAssetGroups(ids)
   if (!groups.length) return
   let reason = '重复图片'
   try {
@@ -937,7 +955,7 @@ async function skipSelectedNextTime() {
     const results = await Promise.all(groups.map(group => crawlApi.skipAssets(group.jobId, group.ids, reason)))
     const skipped = results.reduce((total, result) => total + result.data.success, 0)
     ElMessage.success(`已加入跳过清单：${skipped} 张`)
-    selectedAssets.value = new Set()
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => !ids.has(id)))
     await loadImageSkips()
     await reloadVisibleAssets()
   } catch (error: any) {
@@ -1030,8 +1048,8 @@ async function analyzeSimilarity() {
   } finally { busy.value = '' }
 }
 
-async function importSelected() {
-  const groups = selectedAssetGroups()
+async function importSelected(assetIds?: number[]) {
+  const groups = selectedAssetGroups(assetIds ? new Set(assetIds) : selectedAssets.value)
   if (!groups.length) return
   const previews = await Promise.all(groups.map(async group => ({
     ...group, preview: (await crawlApi.importPreview(group.jobId, group.ids)).data,
@@ -1676,9 +1694,15 @@ onUnmounted(() => {
               <el-button class="collection-preview-nav collection-preview-next" circle :icon="ArrowRight" aria-label="下一张" :disabled="previewViewerIndex + 1 >= assetTotal || previewViewerLoading" @click="stepPreviewViewer(1)" />
             </div>
             <footer class="collection-preview-footer">
-              <span>{{ imageTypeLabel(previewViewerAsset) }}</span>
-              <span>{{ previewViewerAsset?.width && previewViewerAsset?.height ? `${previewViewerAsset.width} × ${previewViewerAsset.height}` : '未知尺寸' }}</span>
-              <span>{{ previewViewerAsset?.fileSize ? formatBytes(previewViewerAsset.fileSize) : '未知大小' }}</span>
+              <div class="collection-preview-meta">
+                <span>{{ imageTypeLabel(previewViewerAsset) }}</span>
+                <span>{{ previewViewerAsset?.width && previewViewerAsset?.height ? `${previewViewerAsset.width} × ${previewViewerAsset.height}` : '未知尺寸' }}</span>
+                <span>{{ previewViewerAsset?.fileSize ? formatBytes(previewViewerAsset.fileSize) : '未知大小' }}</span>
+              </div>
+              <div v-if="activeTab === 'review' && !taskDrawerVisible && previewViewerAsset?.status === 'DOWNLOADED'" class="collection-preview-actions">
+                <el-button size="small" :loading="previewViewerAction === 'skip'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="skipPreviewAsset">以后跳过</el-button>
+                <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">入库</el-button>
+              </div>
             </footer>
           </section>
         </div>
