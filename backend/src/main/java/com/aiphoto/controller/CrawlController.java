@@ -223,9 +223,10 @@ public class CrawlController {
             @RequestParam(defaultValue = "false") boolean exactDuplicates,
             @RequestParam(defaultValue = "false") boolean similarOnly,
             @RequestParam(required = false) Long sourcePageId,
+            @RequestParam(defaultValue = "NOT_IMPORTED") String importStatus,
             Authentication authentication) {
         return crawlService.listReviewAssets(userId(authentication), sourcePageId,
-                status == null ? null : status.name(), exactDuplicates, similarOnly,
+                status == null ? null : status.name(), importStatus, exactDuplicates, similarOnly,
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
     }
 

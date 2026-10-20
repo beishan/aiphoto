@@ -61,6 +61,7 @@ const imageProgress = ref<CrawlImageProgress>({ total: 0, processed: 0, download
 const downloadClock = ref(Date.now())
 const downloadTimingReceivedAt = ref(Date.now())
 const assetStatus = ref('')
+const reviewImportStatus = ref<'ALL' | 'IMPORTED' | 'NOT_IMPORTED'>('NOT_IMPORTED')
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
 const similarityThreshold = ref(8)
@@ -71,8 +72,10 @@ const includedPageTotal = ref(0)
 const pageQuery = ref('')
 const recentImportBatch = ref<CrawlImportBatch | null>(null)
 const recentImportItems = ref<CrawlImportItem[]>([])
+const recentImportProgressCount = ref(0)
 const importItemStatus = ref('')
 const pendingImport = ref<{ signature: string; key: string } | null>(null)
+const pendingImportAssetIds = ref(new Set<number>())
 const imageSkips = ref<CrawlImageSkip[]>([])
 const skipQuery = ref('')
 const skipPage = ref(0)
@@ -110,6 +113,11 @@ function readReviewPageSize() {
 }
 const reviewPageSize = ref(readReviewPageSize())
 const assetPageSize = computed(() => taskDrawerVisible.value || activeTab.value !== 'review' ? 60 : reviewPageSize.value)
+const recentImportProgress = computed(() => {
+  if (!recentImportBatch.value?.requested) return 0
+  if (['COMPLETED', 'PARTIAL', 'FAILED'].includes(recentImportBatch.value.status)) return 100
+  return Math.min(100, Math.round(recentImportProgressCount.value / recentImportBatch.value.requested * 100))
+})
 function changeReviewPageSize(size: number) {
   if (!reviewPageSizes.includes(size)) return
   reviewRequest++
@@ -277,7 +285,7 @@ async function loadReviewData() {
     const [pagesResult, assetsResult] = await Promise.all([
       crawlApi.reviewPages(),
       crawlApi.reviewAssets(assetPage.value, assetPageSize.value, assetStatus.value,
-        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value),
+        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value),
     ])
     if (request !== reviewRequest) return
     reviewSourcePages.value = pagesResult.data
@@ -533,7 +541,7 @@ async function stepPreviewViewer(direction: -1 | 1) {
       const { data } = taskDrawerVisible.value && activeJobId.value
         ? await crawlApi.assets(activeJobId.value, targetPage, assetPageSize.value)
         : await crawlApi.reviewAssets(targetPage, assetPageSize.value, assetStatus.value,
-          exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value)
+          exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
       pageAssets = data.content
       previewViewerPages[targetPage] = pageAssets
     } catch {
@@ -794,6 +802,7 @@ function changePageListPage(page: number) {
 }
 
 function toggleAsset(id: number) {
+  if (pendingImportAssetIds.value.has(id)) return
   const next = new Set(selectedAssets.value)
   next.has(id) ? next.delete(id) : next.add(id)
   selectedAssets.value = next
@@ -811,7 +820,7 @@ function selectedAssetGroups() {
 }
 
 function selectAllDownloadable() {
-  selectedAssets.value = new Set(reviewAssets.value.filter(asset => asset.status === 'DOWNLOADED').map(asset => asset.id))
+  selectedAssets.value = new Set(reviewAssets.value.filter(asset => asset.status === 'DOWNLOADED' && !pendingImportAssetIds.value.has(asset.id)).map(asset => asset.id))
 }
 
 function toggleAllDownloadable(selected: string | number | boolean) {
@@ -954,8 +963,10 @@ async function importSelected() {
   try { await ElMessageBox.confirm(summary, '入库预检', { type: preview.blocked ? 'warning' : 'info' }) }
   catch { return }
   busy.value = 'import'
+  const batchIds: number[] = []
+  const batchAssets = new Map<number, number[]>()
+  const acceptedAssetIds = new Set<number>()
   try {
-    const completed = { success: 0, skipped: 0, fail: 0 }
     for (const group of previews) {
       const signature = JSON.stringify({
         jobId: group.jobId,
@@ -966,21 +977,20 @@ async function importSelected() {
       if (pendingImport.value?.signature !== signature) pendingImport.value = { signature, key: newImportKey() }
       const { data } = await crawlApi.importAssets(
         group.jobId, group.ids, targetAlbumId.value, targetTagIds.value, pendingImport.value.key)
-      await loadImportBatch(data.batchId)
-      if (data.status === 'QUEUED' || data.status === 'RUNNING') ElMessage.info(`导入批次 #${data.batchId} 已进入后台队列`)
-      const batch = await waitForImportBatch(data.batchId)
-      await loadImportBatch(data.batchId, batch.fail ? 'FAILED' : '')
-      completed.success += batch.success
-      completed.skipped += batch.skipped
-      completed.fail += batch.fail
+      batchIds.push(data.batchId)
+      batchAssets.set(data.batchId, group.ids)
+      group.ids.forEach(id => acceptedAssetIds.add(id))
+      pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...group.ids])
+      recentImportProgressCount.value = 0
+      await loadImportBatch(data.batchId, '')
     }
     pendingImport.value = null
-    if (completed.fail) ElMessage.warning(`入库完成：成功 ${completed.success}，重复跳过 ${completed.skipped}，失败 ${completed.fail}`)
-    else ElMessage.success(`入库完成：成功 ${completed.success}，重复跳过 ${completed.skipped}`)
-    selectedAssets.value = new Set()
-    window.dispatchEvent(new Event('photos-changed'))
-    await loadReviewData()
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => !acceptedAssetIds.has(id)))
+    void monitorImportBatches(batchIds, batchAssets)
+    ElMessage.info('图片已提交后台入库，批次进度会显示在下方；完成后会自动刷新图库和待整理列表')
   } catch (error: any) {
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => !acceptedAssetIds.has(id)))
+    if (batchIds.length) void monitorImportBatches(batchIds, batchAssets)
     ElMessage.error(error?.response?.data?.message || error?.message || '入库请求失败，可直接重试，已完成项目不会重复入库')
   } finally { busy.value = '' }
 }
@@ -1000,14 +1010,38 @@ async function loadImportBatch(batchId: number, status = importItemStatus.value)
   return batchResult.data
 }
 
-async function waitForImportBatch(batchId: number) {
-  for (let attempt = 0; attempt < 1800; attempt++) {
-    const { data } = await crawlApi.importBatch(batchId)
-    recentImportBatch.value = data
-    if (!['QUEUED', 'RUNNING'].includes(data.status)) return data
-    await new Promise(resolve => setTimeout(resolve, 1000))
+async function monitorImportBatches(batchIds: number[], batchAssets: Map<number, number[]>) {
+  const pending = new Set(batchIds)
+  const totals = { success: 0, skipped: 0, fail: 0 }
+  while (pending.size) {
+    for (const batchId of pending) {
+      try {
+        const { data } = await crawlApi.importBatch(batchId)
+        if (recentImportBatch.value?.id === batchId || batchId === batchIds[batchIds.length - 1]) recentImportBatch.value = data
+        if (batchId === batchIds[batchIds.length - 1] && ['QUEUED', 'RUNNING'].includes(data.status)) {
+          const { data: itemPage } = await crawlApi.importItems(batchId, 0, 200)
+          recentImportProgressCount.value = itemPage.content.filter(item => ['SUCCESS', 'SKIPPED', 'FAILED'].includes(item.status)).length
+          if (!importItemStatus.value) recentImportItems.value = itemPage.content
+        }
+        if (!['COMPLETED', 'PARTIAL', 'FAILED'].includes(data.status)) continue
+        if (recentImportBatch.value?.id === batchId) {
+          try { await loadImportBatch(batchId, data.fail ? 'FAILED' : importItemStatus.value) }
+          catch { /* The batch is complete; a later refresh can load its item details. */ }
+        }
+        pending.delete(batchId)
+        totals.success += data.success
+        totals.skipped += data.skipped
+        totals.fail += data.fail
+        const completedIds = new Set(batchAssets.get(batchId) || [])
+        pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value].filter(id => !completedIds.has(id)))
+      } catch { /* Retry transient status polling failures. */ }
+    }
+    if (pending.size) await new Promise(resolve => setTimeout(resolve, 2000))
   }
-  throw new Error('导入仍在后台运行，请稍后重试查看结果')
+  window.dispatchEvent(new Event('photos-changed'))
+  if (totals.fail) ElMessage.warning(`入库批次已结束：成功 ${totals.success}，重复跳过 ${totals.skipped}，失败 ${totals.fail}`)
+  else ElMessage.success(`入库批次已结束：成功 ${totals.success}，重复跳过 ${totals.skipped}`)
+  if (activeTab.value === 'review' && !taskDrawerVisible.value) await loadReviewData()
 }
 
 function filterImportItems(status: string) {
@@ -1078,7 +1112,7 @@ watch([taskDrawerVisible, activeJobId], () => {
     taskDetailTab.value = activeJob.value && ['DOWNLOAD', 'REVIEW'].includes(activeJob.value.phase) ? 'images' : 'scan-results'
   }
 })
-watch([assetStatus, reviewSourcePageId], () => { assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
+watch([assetStatus, reviewImportStatus, reviewSourcePageId], () => { assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
 watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
 watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
 
@@ -1226,7 +1260,8 @@ onUnmounted(() => {
       <template v-else>
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
-            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /><el-option label="已入库" value="IMPORTED" /></el-select></el-form-item>
+            <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /></el-select></el-form-item>
+            <el-form-item label="入库状态"><el-select v-model="reviewImportStatus" :disabled="exactDuplicateOnly || similarOnly"><el-option label="未入库（默认）" value="NOT_IMPORTED" /><el-option label="已入库" value="IMPORTED" /><el-option label="全部" value="ALL" /></el-select></el-form-item>
             <el-form-item label="智能筛选"><el-space wrap><el-checkbox v-model="exactDuplicateOnly" border>精确重复</el-checkbox><el-checkbox v-model="similarOnly" border>相似图片</el-checkbox></el-space></el-form-item>
             <el-form-item label="相似度阈值" class="similarity-field"><el-slider v-model="similarityThreshold" :min="0" :max="16" show-input /><el-button :icon="MagicStick" :loading="busy === 'similarity'" @click="analyzeSimilarity">分析</el-button></el-form-item>
           </el-form>
@@ -1256,7 +1291,8 @@ onUnmounted(() => {
 
         <el-collapse v-if="recentImportBatch" class="history-collapse surface-card">
           <el-collapse-item name="import">
-            <template #title><div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="recentImportBatch.fail ? 'warning' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div></template>
+            <template #title><div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="['QUEUED','RUNNING'].includes(recentImportBatch.status) ? 'warning' : recentImportBatch.fail ? 'danger' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div></template>
+            <el-progress v-if="['QUEUED','RUNNING'].includes(recentImportBatch.status)" :percentage="recentImportProgress" :stroke-width="8" />
             <el-radio-group :model-value="importItemStatus" size="small" @change="filterImportItems(String($event))"><el-radio-button value="">全部</el-radio-button><el-radio-button value="SUCCESS">成功</el-radio-button><el-radio-button value="SKIPPED">跳过</el-radio-button><el-radio-button value="FAILED">失败</el-radio-button></el-radio-group>
             <el-table :data="recentImportItems" size="small" empty-text="当前筛选没有明细">
               <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCESS' ? 'success' : 'info'" effect="light">{{ row.status }}</el-tag></template></el-table-column>
@@ -1268,12 +1304,12 @@ onUnmounted(() => {
         </el-collapse>
 
         <div class="asset-grid">
-          <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && toggleAsset(asset.id)">
+          <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id), 'is-importing': pendingImportAssetIds.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && !pendingImportAssetIds.has(asset.id) && toggleAsset(asset.id)">
             <div class="asset-preview">
               <el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
               <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
               <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
-              <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
+              <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :disabled="pendingImportAssetIds.has(asset.id)" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
               <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
             </div>
             <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><small>{{ assetStatusLabel(asset) }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
@@ -1566,5 +1602,8 @@ onUnmounted(() => {
 @media(max-width:1050px){.metric-grid{grid-template-columns:repeat(2,1fr)}.pipeline-strip>i{display:none}.pipeline-strip{display:grid;grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){.crawler-page{padding:16px 14px 92px}.crawler-hero,.section-heading,.review-panel>header{display:grid}.crawler-hero h1{font-size:28px}.crawler-tabs{overflow-x:auto;grid-template-columns:repeat(4,minmax(130px,1fr))}.crawler-tab-indicator{display:none}.crawler-segment.active{border-radius:10px;background:var(--bg-card)}.metric-grid,.pipeline-strip,.site-layout,.rule-layout,.task-layout,.two,.page-toolbar,.organize-bar,.limits{grid-template-columns:1fr}.actions{justify-content:flex-start}.similarity-bar{grid-template-columns:1fr}.similarity-bar small{grid-column:1}.review-heading :deep(.el-select){width:100%}}
 @media(prefers-reduced-motion:reduce){.crawler-tab-indicator{transition:none}}
+</style>
+<style scoped>
+.asset-grid article.is-importing { cursor: progress; opacity: .62; }
 </style>
 <style scoped src="../assets/crawler-view.css"></style>

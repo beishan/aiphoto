@@ -890,7 +890,7 @@
 
 .review-filter-form {
   display: grid;
-  grid-template-columns: minmax(150px, .7fr) minmax(250px, 1fr) minmax(360px, 2fr);
+  grid-template-columns: minmax(135px, .7fr) minmax(150px, .7fr) minmax(230px, 1fr) minmax(340px, 2fr);
   gap: 16px;
 }
 

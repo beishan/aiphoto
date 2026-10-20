@@ -29,6 +29,8 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
             + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
             + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
+            + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
+            + "OR (:importStatus = 'NOT_IMPORTED' AND a.imported_photo_id IS NULL)) "
             + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
             + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
             + "(SELECT 1 FROM crawl_assets b WHERE b.job_id = a.job_id AND b.status <> 'DELETED' "
@@ -38,6 +40,8 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
                     + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
                     + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
                     + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
+                    + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
+                    + "OR (:importStatus = 'NOT_IMPORTED' AND a.imported_photo_id IS NULL)) "
                     + "AND (:similarOnly = FALSE OR (a.status = 'DOWNLOADED' AND a.similarity_group_id IS NOT NULL)) "
                     + "AND (:exactDuplicates = FALSE OR (a.file_hash_md5 IS NOT NULL AND EXISTS "
                     + "(SELECT 1 FROM crawl_assets b WHERE b.job_id = a.job_id AND b.status <> 'DELETED' "
@@ -45,7 +49,8 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             nativeQuery = true)
     Page<CrawlAsset> findReviewAssets(
             @Param("ownerId") Long ownerId, @Param("pageId") Long pageId,
-            @Param("status") String status, @Param("exactDuplicates") boolean exactDuplicates,
+            @Param("status") String status, @Param("importStatus") String importStatus,
+            @Param("exactDuplicates") boolean exactDuplicates,
             @Param("similarOnly") boolean similarOnly, Pageable pageable);
 
     @Query(value = "SELECT p.id AS id, p.name AS name, p.url AS url, COUNT(a.id) AS \"assetCount\" "

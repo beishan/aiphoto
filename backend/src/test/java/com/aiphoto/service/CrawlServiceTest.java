@@ -63,12 +63,12 @@ class CrawlServiceTest {
         CrawlAsset second = new CrawlAsset(); second.setId(2L); second.setJobId(11L);
         var pageable = PageRequest.of(0, 60);
         var assets = new PageImpl<>(List.of(first, second), pageable, 2);
-        when(assetRepository.findReviewAssets(9L, null, "ALL", false, false, pageable)).thenReturn(assets);
+        when(assetRepository.findReviewAssets(9L, null, "ALL", "ALL", false, false, pageable)).thenReturn(assets);
 
         var result = crawlService.listReviewAssets(9L, null, "", false, false, pageable);
 
         assertThat(result.getContent()).containsExactly(first, second);
-        verify(assetRepository).findReviewAssets(9L, null, "ALL", false, false, pageable);
+        verify(assetRepository).findReviewAssets(9L, null, "ALL", "ALL", false, false, pageable);
     }
 
     @Test void runningAndQueuedJobsAppearBeforeHistoryWithoutChangingHistoryOrder() {
