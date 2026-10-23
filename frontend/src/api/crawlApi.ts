@@ -110,6 +110,7 @@ export const crawlApi = {
   imageSkips: (page = 0, size = 50, query = '') => http.get<PageResponse<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } }),
   deleteImageSkip: (id: number) => http.delete<{ success: number }>(`/crawl/image-skips/${id}`),
   analyzeSimilarity: (jobId: number, threshold: number) => http.post<{ analyzed: number; groups: number; matched: number; threshold: number }>(`/crawl/jobs/${jobId}/similarity`, null, { params: { threshold } }),
+  deleteDownloadedFiles: (jobId: number) => http.post<{ success: number; failed: number }>(`/crawl/jobs/${jobId}/assets/delete-downloaded`),
   deleteAssets: (jobId: number, ids: number[]) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/delete`, ids),
   restoreAssets: (jobId: number, ids: number[]) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/restore`, ids),
   editAssets: (jobId: number, ids: number[], note: string) => http.patch<{ success: number }>(`/crawl/jobs/${jobId}/assets`, { ids, note }),

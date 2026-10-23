@@ -42,6 +42,7 @@ public class CrawlService {
     private final ObjectMapper objectMapper;
     private final CrawlStagingStorageService stagingStorage;
     private final PhotoRepository photoRepository;
+    private final com.aiphoto.repository.CrawlImportBatchRepository importBatchRepository;
     private final CrawlerSettingsService crawlerSettingsService;
 
     public List<CrawlSite> listSites(Long ownerId) {
@@ -655,6 +656,39 @@ public class CrawlService {
             changed++;
         }
         return changed;
+    }
+
+    @Transactional
+    public Map<String, Integer> deleteDownloadedFiles(Long jobId, Long ownerId) {
+        CrawlJob job = getJob(jobId, ownerId);
+        if (job.getStatus() == CrawlJob.Status.RUNNING || job.getStatus() == CrawlJob.Status.QUEUED) {
+            throw new IllegalStateException("请先暂停或取消任务，再删除已下载图片");
+        }
+        if (importBatchRepository.existsByJobIdAndStatusIn(jobId, List.of(
+                com.aiphoto.entity.CrawlImportBatch.Status.QUEUED,
+                com.aiphoto.entity.CrawlImportBatch.Status.RUNNING))) {
+            throw new IllegalStateException("请等待入库任务完成后再删除采集图片");
+        }
+        int success = 0;
+        int failed = 0;
+        for (CrawlAsset asset : assetRepository.findByJobIdOrderByIdDesc(jobId)) {
+            if (asset.getLocalPath() == null && asset.getThumbnailPath() == null) continue;
+            try {
+                stagingStorage.delete(asset.getLocalPath());
+                stagingStorage.delete(asset.getThumbnailPath());
+                asset.setLocalPath(null);
+                asset.setThumbnailPath(null);
+                if (asset.getStatus() != CrawlAsset.Status.IMPORTED) {
+                    asset.setStatus(CrawlAsset.Status.SKIPPED);
+                    asset.setErrorMessage("已永久删除采集图片文件");
+                }
+                success++;
+            } catch (Exception exception) {
+                failed++;
+            }
+        }
+        assetRepository.clearSimilarityGroups(jobId);
+        return Map.of("success", success, "failed", failed);
     }
 
     public PurgeResult purgeJob(Long jobId, Long ownerId) {

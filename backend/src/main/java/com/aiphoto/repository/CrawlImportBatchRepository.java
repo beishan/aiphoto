@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 public interface CrawlImportBatchRepository extends JpaRepository<CrawlImportBatch, Long> {
+    boolean existsByJobIdAndStatusIn(Long jobId, java.util.Collection<com.aiphoto.entity.CrawlImportBatch.Status> statuses);
     Optional<CrawlImportBatch> findByOwnerIdAndIdempotencyKey(Long ownerId, String idempotencyKey);
     Optional<CrawlImportBatch> findByIdAndOwnerId(Long id, Long ownerId);
 

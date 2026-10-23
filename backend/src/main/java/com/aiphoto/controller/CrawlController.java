@@ -299,6 +299,12 @@ public class CrawlController {
                 ids, jobId, userId(authentication), true));
     }
 
+    @PostMapping("/jobs/{jobId}/assets/delete-downloaded")
+    public Map<String, Integer> deleteDownloadedFiles(
+            @PathVariable Long jobId, Authentication authentication) {
+        return crawlService.deleteDownloadedFiles(jobId, userId(authentication));
+    }
+
     @PostMapping("/jobs/{jobId}/assets/restore")
     public Map<String, Integer> restoreAssets(
             @PathVariable Long jobId,

@@ -928,6 +928,23 @@ function toggleAllDownloadable(selected: string | number | boolean) {
   else selectedAssets.value = new Set()
 }
 
+async function deleteDownloadedFiles() {
+  if (!activeJob.value || busy.value) return
+  try {
+    await ElMessageBox.confirm('将永久删除本任务所有已下载原图和缩略图（包含已删除列表中的文件），无法恢复。任务记录和已导入图库的照片保留。是否继续？', '删除所有已下载图片', { type: 'warning', confirmButtonText: '永久删除', cancelButtonText: '取消' })
+  } catch { return }
+  busy.value = 'delete-downloads'
+  try {
+    const { data } = await crawlApi.deleteDownloadedFiles(activeJob.value.id)
+    if (data.failed) ElMessage.warning(`已删除 ${data.success} 张，${data.failed} 张失败，请重试`)
+    else ElMessage.success(`已永久删除 ${data.success} 张采集图片文件`)
+    selectedAssets.value = new Set()
+    await loadJobDetail()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '删除图片失败，请重试')
+  } finally { busy.value = '' }
+}
+
 async function deleteSelected() {
   const groups = selectedAssetGroups()
   if (!groups.length) return
@@ -1612,6 +1629,7 @@ onUnmounted(() => {
             <el-button v-if="['RUNNING','QUEUED'].includes(activeJob.status)" round @click="controlJob('pause')">暂停任务</el-button>
             <el-button v-if="['PAUSED','FAILED','PARTIAL'].includes(activeJob.status) || (activeJob.phase === 'REVIEW' && activeJob.status === 'COMPLETED' && assetTotal === 0)" type="primary" plain round @click="controlJob('resume')">继续 / 重试</el-button>
             <el-button v-if="!['COMPLETED','CANCELLED'].includes(activeJob.status)" type="danger" plain round @click="controlJob('cancel')">取消任务</el-button>
+            <el-button v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" type="danger" plain :disabled="!!busy || ['RUNNING','QUEUED'].includes(activeJob.status)" :loading="busy === 'delete-downloads'" @click="deleteDownloadedFiles()">删除所有已下载图片</el-button>
             <el-button v-if="activeJob.phase === 'REVIEW'" type="primary" plain round @click="taskDrawerVisible = false; activeTab = 'review'">进入待整理区</el-button>
             <el-button v-if="!['RUNNING','QUEUED'].includes(activeJob.status)" type="danger" link :icon="Delete" @click="purgeJob">永久清理</el-button>
           </el-space>

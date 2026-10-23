@@ -55,9 +55,28 @@ class CrawlServiceTest {
                 new ObjectMapper(),
                 stagingStorage,
                 photoRepository,
+                org.mockito.Mockito.mock(com.aiphoto.repository.CrawlImportBatchRepository.class),
                 crawlerSettingsService);
     }
 
+    @Test
+    void permanentlyDeletesDownloadedFilesAndPreventsRestore() throws Exception {
+        CrawlJob job = new CrawlJob();
+        job.setStatus(CrawlJob.Status.COMPLETED);
+        when(jobRepository.findByIdAndOwnerId(10L, 1L)).thenReturn(Optional.of(job));
+        CrawlAsset asset = new CrawlAsset();
+        asset.setStatus(CrawlAsset.Status.DELETED);
+        asset.setLocalPath("10/1.jpg");
+        asset.setThumbnailPath("10/1.thumb.jpg");
+        when(assetRepository.findByJobIdOrderByIdDesc(10L)).thenReturn(List.of(asset));
+        var result = crawlService.deleteDownloadedFiles(10L, 1L);
+        assertThat(result.get("success")).isEqualTo(1);
+        verify(stagingStorage).delete("10/1.jpg");
+        verify(stagingStorage).delete("10/1.thumb.jpg");
+        assertThat(asset.getLocalPath()).isNull();
+        assertThat(asset.getThumbnailPath()).isNull();
+        assertThat(asset.getStatus()).isEqualTo(CrawlAsset.Status.SKIPPED);
+    }
     @Test void reviewAssetsDefaultToAllNonDeletedImagesAcrossOwnerTasks() {
         CrawlAsset first = new CrawlAsset(); first.setId(1L); first.setJobId(10L);
         CrawlAsset second = new CrawlAsset(); second.setId(2L); second.setJobId(11L);
