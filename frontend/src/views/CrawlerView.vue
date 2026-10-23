@@ -908,6 +908,24 @@ function toggleAsset(id: number) {
   selectedAssets.value = next
 }
 
+function taskAssetImported(asset: CrawlAsset) {
+  return asset.status === 'IMPORTED' || asset.importedPhotoId != null
+}
+
+function taskAssetSelectable(asset: CrawlAsset) {
+  return asset.status === 'DOWNLOADED' && !taskAssetImported(asset) && !pendingImportAssetIds.value.has(asset.id)
+}
+
+function selectTaskPageAssets() {
+  selectedAssets.value = new Set(taskImageAssets.value.filter(taskAssetSelectable).map(asset => asset.id))
+}
+
+async function importTaskSelected() {
+  const ids = taskImageAssets.value.filter(asset => selectedAssets.value.has(asset.id) && taskAssetSelectable(asset)).map(asset => asset.id)
+  if (!ids.length || busy.value) return
+  await importSelected(ids)
+}
+
 function selectedAssetGroups(assetIds: Set<number> = selectedAssets.value) {
   const groups = new Map<number, number[]>()
   for (const asset of assets.value) {
@@ -1648,7 +1666,15 @@ onUnmounted(() => {
           <el-empty v-if="!['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" description="扫描任务负责发现图片页，采集图片后会在这里展示结果。" />
           <el-alert v-if="activeJob.phase === 'REVIEW' && assetTotal === 0" type="warning" show-icon :closable="false" title="任务结束，但没有图片记录。请查看图片页清单中的失败原因；历史任务未记录解析原因，可点击继续 / 重试重新诊断。" />
           <div v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" class="image-list-toolbar"><p v-if="activeJob.phase === 'DOWNLOAD'">先解析所有图片链接，再按顺序下载；{{ showCrawlerImages ? '下载完成后显示缩略图。' : '图片显示已关闭，仍可查看下载状态和失败原因。' }}</p><el-radio-group v-model="taskAssetView" size="small" aria-label="图片列表视图"><el-radio-button value="table">表格</el-radio-button><el-radio-button value="cards">卡片</el-radio-button></el-radio-group></div>
+          <el-space v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" wrap class="image-list-toolbar">
+            <el-button :disabled="!!busy" @click="selectTaskPageAssets()">选择本页可入库图片</el-button>
+            <span>已选择 {{ taskImageAssets.filter(asset => selectedAssets.has(asset.id) && taskAssetSelectable(asset)).length }} 张</span>
+            <el-button :disabled="!!busy" @click="selectedAssets = new Set()">取消选择</el-button>
+            <el-button type="primary" :icon="Download" :loading="busy === 'import'" :disabled="!!busy || !taskImageAssets.some(asset => selectedAssets.has(asset.id) && taskAssetSelectable(asset))" @click="importTaskSelected()">批量入库</el-button>
+          </el-space>
           <el-table v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase) && taskAssetView === 'table'" :data="taskImageAssets" height="100%" class="task-image-table" :empty-text="['RUNNING', 'QUEUED'].includes(activeJob.status) ? '正在等待解析图片地址' : '没有解析出的图片记录，请查看图片页清单中的原因'">
+            <el-table-column label="选择" width="64"><template #default="{ row }"><el-checkbox :model-value="selectedAssets.has(row.id)" :disabled="!!busy || !taskAssetSelectable(row)" :aria-label="`选择图片 ${row.id}`" @change="toggleAsset(row.id)" /></template></el-table-column>
+            <el-table-column label="入库状态" width="110"><template #default="{ row }"><el-tag v-if="taskAssetImported(row)" type="success" size="small">已入库</el-tag><el-tag v-else-if="pendingImportAssetIds.has(row.id)" size="small">入库中</el-tag><span v-else>未入库</span></template></el-table-column>
             <el-table-column label="预览" width="90"><template #default="{ row }"><el-image v-if="showCrawlerImages && previewImages[row.id]" :src="previewImages[row.id]" fit="contain" style="width: 64px; height: 64px" /><span v-else>—</span></template></el-table-column>
             <el-table-column label="图片 URL" prop="imageUrl" min-width="240" show-overflow-tooltip />
             <el-table-column label="状态" width="150"><template #default="{ row }">{{ assetStatusLabel(row) }}</template></el-table-column>
@@ -1667,6 +1693,7 @@ onUnmounted(() => {
                 <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
                 <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="download-timer is-running" role="timer" aria-live="off"><i class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(asset) }}</span><span class="task-image-progress-track"><i /></span></div>
               </div>
+              <el-space class="task-image-timing-row"><el-checkbox :model-value="selectedAssets.has(asset.id)" :disabled="!!busy || !taskAssetSelectable(asset)" :aria-label="`选择图片 ${asset.id}`" @change="toggleAsset(asset.id)">选择</el-checkbox><el-tag v-if="taskAssetImported(asset)" type="success" size="small">已入库</el-tag><el-tag v-else-if="pendingImportAssetIds.has(asset.id)" size="small">入库中</el-tag></el-space>
               <div class="task-image-timing-row" title="本次采集耗时，包含等待、重试和图片处理；重试任务后重新计时"><span>采集耗时</span><span class="download-timer" :class="{ 'is-running': imageIsDownloading(asset) }">{{ imageElapsedLabel(asset) }}</span></div>
               <div v-if="asset.errorMessage" class="task-image-card-copy"><small class="task-image-error" :title="asset.errorMessage">{{ asset.errorMessage }}</small></div>
             </article>
