@@ -1397,7 +1397,7 @@ onUnmounted(() => {
 
         <el-card class="selection-bar surface-card" shadow="never">
           <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
-          <el-space wrap><el-button :disabled="!selectedAssets.size" @click="skipSelectedNextTime">以后跳过</el-button><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected">导入图库</el-button></el-space>
+          <el-space wrap><el-button :disabled="!selectedAssets.size" @click="skipSelectedNextTime">以后跳过</el-button><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected()">导入图库</el-button></el-space>
         </el-card>
 
         <el-card class="organize-card surface-card" shadow="never">
