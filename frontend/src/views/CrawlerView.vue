@@ -97,6 +97,7 @@ const reviewImportStatus = ref<'ALL' | 'IMPORTED' | 'NOT_IMPORTED'>('NOT_IMPORTE
 const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
 const similarityThreshold = ref(8)
+const imageAnalysisVisible = ref(false)
 const pagePage = ref(0)
 const pagePageSize = 50
 const pageTotal = ref(0)
@@ -1409,11 +1410,10 @@ onUnmounted(() => {
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
-          <el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select>
+          <el-space wrap><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
         </div>
       </el-card>
-      <el-empty v-if="!reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
-      <template v-else>
+      <el-dialog v-model="imageAnalysisVisible" title="图片分析" width="min(960px, 94vw)" append-to-body class="crawler-controls">
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
             <el-form-item label="图片状态"><el-select v-model="assetStatus" :disabled="exactDuplicateOnly || similarOnly" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option label="可入库" value="DOWNLOADED" /><el-option label="已跳过" value="SKIPPED" /><el-option label="已删除" value="DELETED" /><el-option label="图库重复" value="DUPLICATE" /></el-select></el-form-item>
@@ -1429,6 +1429,11 @@ onUnmounted(() => {
             <el-descriptions-item label="已删除">{{ deletedAssets.length }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
+        <template #footer><el-button @click="imageAnalysisVisible = false">返回待整理区</el-button></template>
+      </el-dialog>
+      <el-empty v-if="!reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
+      <template v-else>
+el-card>
 
         <el-card class="selection-bar surface-card" shadow="never">
           <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
