@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
+import { clampPhotoOffset, photoWheelScale, zoomPhotoOffset } from '@/utils/photoTransform'
 import { useRouter } from 'vue-router'
 import type { Photo, Album } from '@/types'
 import { usePhotoStore } from '@/stores/photoStore'
@@ -39,6 +41,73 @@ const currentPhoto = computed(() => props.photos[currentIndex.value])
 const isVideo = computed(() => {
   return currentPhoto.value?.mediaType === 'VIDEO'
 })
+
+const imageArea = ref<HTMLElement | null>(null)
+const imageElement = ref<HTMLImageElement | null>(null)
+const imageScale = ref(1)
+const imageX = ref(0)
+const imageY = ref(0)
+const dragging = ref(false)
+let dragPointer: number | null = null
+let dragX = 0
+let dragY = 0
+const imageTransform = computed(() => ({
+  transform: `translate(${imageX.value}px, ${imageY.value}px) scale(${imageScale.value})`,
+  cursor: imageScale.value > 1 ? dragging.value ? 'grabbing' : 'grab' : 'zoom-in',
+}))
+function stopImageDrag() {
+  if (dragPointer !== null && imageElement.value?.hasPointerCapture(dragPointer)) {
+    imageElement.value.releasePointerCapture(dragPointer)
+  }
+  dragPointer = null
+  dragging.value = false
+}
+function resetImageTransform() {
+  stopImageDrag()
+  imageScale.value = 1
+  imageX.value = 0
+  imageY.value = 0
+}
+function clampImagePosition() {
+  const area = imageArea.value
+  const image = imageElement.value
+  if (!area || !image) return
+  imageX.value = clampPhotoOffset(imageX.value, image.offsetWidth, area.clientWidth, imageScale.value)
+  imageY.value = clampPhotoOffset(imageY.value, image.offsetHeight, area.clientHeight, imageScale.value)
+}
+function zoomImage(event: WheelEvent) {
+  if (isVideo.value || !imageElement.value?.complete || !imageElement.value.naturalWidth || !imageArea.value) return
+  event.preventDefault()
+  stopImageDrag()
+  const bounds = imageArea.value.getBoundingClientRect()
+  const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1)
+  const nextScale = photoWheelScale(imageScale.value, delta)
+  imageX.value = zoomPhotoOffset(imageX.value, event.clientX - bounds.left - bounds.width / 2, imageScale.value, nextScale)
+  imageY.value = zoomPhotoOffset(imageY.value, event.clientY - bounds.top - bounds.height / 2, imageScale.value, nextScale)
+  imageScale.value = nextScale
+  if (nextScale === 1) resetImageTransform()
+  else clampImagePosition()
+}
+function startImageDrag(event: PointerEvent) {
+  if (event.button !== 0 || imageScale.value <= 1 || isVideo.value || dragPointer !== null) return
+  event.preventDefault()
+  dragPointer = event.pointerId
+  dragX = event.clientX
+  dragY = event.clientY
+  dragging.value = true
+  imageElement.value?.setPointerCapture(event.pointerId)
+}
+function moveImage(event: PointerEvent) {
+  if (dragPointer !== event.pointerId) return
+  imageX.value += event.clientX - dragX
+  imageY.value += event.clientY - dragY
+  dragX = event.clientX
+  dragY = event.clientY
+  clampImagePosition()
+}
+watch([() => currentPhoto.value?.id, () => props.show], resetImageTransform)
+useResizeObserver(imageArea, clampImagePosition)
+useResizeObserver(imageElement, clampImagePosition)
 
 watch(() => props.initialIndex, (val) => {
   currentIndex.value = val
@@ -171,6 +240,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopImageDrag()
   window.removeEventListener('keydown', handleKeydown)
   document.body.style.overflow = ''
 })
@@ -229,7 +299,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Image area -->
-        <div class="viewer-image-area">
+        <div ref="imageArea" class="viewer-image-area" @wheel="zoomImage">
           <el-button class="ep-control nav-btn prev-btn" @click="prev" :disabled="currentIndex <= 0">
             <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
               <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
@@ -246,7 +316,7 @@ onUnmounted(() => {
               playsinline
               preload="auto"
             />
-            <img v-else-if="currentPhoto" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
+            <img v-else-if="currentPhoto" ref="imageElement" :key="currentPhoto.id" :style="imageTransform" :draggable="false" @dragstart.prevent @load="clampImagePosition" @pointerdown="startImageDrag" @pointermove="moveImage" @pointerup="stopImageDrag" @pointercancel="stopImageDrag" @lostpointercapture="stopImageDrag" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
           </div>
 
           <el-button class="ep-control nav-btn next-btn" @click="next" :disabled="currentIndex >= photos.length - 1">
@@ -254,6 +324,11 @@ onUnmounted(() => {
               <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
             </svg>
           </el-button>
+        </div>
+
+        <div v-if="!isVideo && currentPhoto" class="zoom-status">
+          <span>{{ Math.round(imageScale * 100) }}% · 滚轮缩放<span v-if="imageScale > 1"> · 左键拖动</span></span>
+          <button v-if="imageScale > 1" type="button" @click="resetImageTransform">重置</button>
         </div>
 
         <!-- Info panel -->
@@ -440,6 +515,7 @@ onUnmounted(() => {
 
 .viewer-image-area {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -456,6 +532,8 @@ onUnmounted(() => {
 }
 
 .viewer-img {
+  touch-action: none;
+  transform-origin: center;
   max-width: 90vw;
   max-height: 80vh;
   object-fit: contain;
@@ -536,6 +614,30 @@ onUnmounted(() => {
   color: var(--text-primary);
   text-align: right;
   word-break: break-all;
+}
+
+.zoom-status {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(24, 26, 31, 0.9);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.zoom-status button {
+  border: 1px solid #747e8d;
+  border-radius: 5px;
+  padding: 3px 8px;
+  background: #303844;
+  color: #fff;
+  cursor: pointer;
 }
 
 /* Transitions */
