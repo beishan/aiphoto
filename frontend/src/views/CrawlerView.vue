@@ -99,6 +99,7 @@ const similarOnly = ref(false)
 const similarityThreshold = ref(8)
 const imageAnalysisVisible = ref(false)
 const importBatchVisible = ref(false)
+const batchOrganizeVisible = ref(false)
 const pagePage = ref(0)
 const pagePageSize = 50
 const pageTotal = ref(0)
@@ -1451,9 +1452,18 @@ onUnmounted(() => {
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
-          <el-space wrap><el-button :icon="List" :disabled="!recentImportBatch" @click="importBatchVisible = true">最近导入批次</el-button><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
+          <el-space wrap><el-button :icon="EditPen" @click="batchOrganizeVisible = true">批量整理</el-button><el-button :icon="List" :disabled="!recentImportBatch" @click="importBatchVisible = true">最近导入批次</el-button><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
         </div>
       </el-card>
+      <el-dialog v-model="batchOrganizeVisible" title="批量整理" width="min(960px, 94vw)" append-to-body class="crawler-controls">
+          <div class="organize-grid">
+            <el-input v-model="batchNote" clearable placeholder="给选中图片添加备注"><template #prefix><el-icon><EditPen /></el-icon></template></el-input>
+            <el-button :disabled="!selectedAssets.size" @click="editSelected">应用备注</el-button>
+            <el-select v-model="targetAlbumId" clearable placeholder="目标相册"><template #prefix><el-icon><FolderOpened /></el-icon></template><el-option v-for="album in albums" :key="album.id" :label="album.name" :value="album.id" /></el-select>
+            <el-select v-model="targetTagIds" multiple collapse-tags clearable placeholder="入库标签"><template #prefix><el-icon><PriceTag /></el-icon></template><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select>
+          </div>
+        <template #footer><el-button @click="batchOrganizeVisible = false">返回待整理区</el-button></template>
+      </el-dialog>
       <el-dialog v-model="importBatchVisible" title="最近导入批次" width="min(960px, 94vw)" append-to-body class="crawler-controls">
         <div v-if="recentImportBatch">
           <div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="['QUEUED','RUNNING'].includes(recentImportBatch.status) ? 'warning' : recentImportBatch.fail ? 'danger' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div>
@@ -1493,16 +1503,6 @@ onUnmounted(() => {
         <el-card class="selection-bar surface-card" shadow="never">
           <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
           <el-space wrap><el-button :disabled="!selectedAssets.size" @click="skipSelectedNextTime">以后跳过</el-button><el-button :icon="Delete" :disabled="!selectedAssets.size" @click="deleteSelected">删除</el-button><el-button type="primary" :icon="Download" round :loading="busy === 'import'" :disabled="!selectedAssets.size" @click="importSelected()">导入图库</el-button></el-space>
-        </el-card>
-
-        <el-card class="organize-card surface-card" shadow="never">
-          <template #header><div class="card-heading"><div><p class="eyebrow">BATCH METADATA</p><h3>批量整理</h3></div></div></template>
-          <div class="organize-grid">
-            <el-input v-model="batchNote" clearable placeholder="给选中图片添加备注"><template #prefix><el-icon><EditPen /></el-icon></template></el-input>
-            <el-button :disabled="!selectedAssets.size" @click="editSelected">应用备注</el-button>
-            <el-select v-model="targetAlbumId" clearable placeholder="目标相册"><template #prefix><el-icon><FolderOpened /></el-icon></template><el-option v-for="album in albums" :key="album.id" :label="album.name" :value="album.id" /></el-select>
-            <el-select v-model="targetTagIds" multiple collapse-tags clearable placeholder="入库标签"><template #prefix><el-icon><PriceTag /></el-icon></template><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select>
-          </div>
         </el-card>
 
         <div class="asset-grid">
