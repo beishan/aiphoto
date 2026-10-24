@@ -6,7 +6,7 @@ import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
 import type { Album } from '@/types'
 import { useMessage, useDialog } from '@/utils/feedback'
-import PhotoCard from '@/components/PhotoCard.vue'
+import JustifiedPhotoGrid from '@/components/JustifiedPhotoGrid.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import Uploader from '@/components/Uploader.vue'
 
@@ -24,13 +24,10 @@ const loadingMore = ref(false)
 const selectMode = ref(false)
 const selectedIds = ref<Set<number>>(new Set())
 
-// Zoom level: 0=10col, 1=8col, 2=6col, 3=4col(default), 4=3col, 5=2col
-const zoomLevel = ref(0)
-const zoomColumns = [6, 10, 16, 20, 30]
-
-const gridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${zoomColumns[zoomLevel.value]}, 1fr)`,
-}))
+// Larger row heights show fewer, larger photos while preserving their aspect ratios.
+const zoomLevel = ref(2)
+const rowHeights = [420, 340, 260, 190, 130]
+const rowHeight = computed(() => rowHeights[zoomLevel.value])
 
 function zoomIn() {
   if (zoomLevel.value > 0) zoomLevel.value--
@@ -42,7 +39,7 @@ function zoomOut() {
 
 // Set initial zoom based on viewport width
 function initZoom() {
-  zoomLevel.value = 2      // Default: 16 columns (third level)
+  zoomLevel.value = 2
 }
 
 // Selection functions
@@ -411,18 +408,17 @@ async function handleToggleFavorite(photoId: number) {
           :data-month="`${item.year}-${item.month}`"
         >
           <div class="month-label">{{ item.label }}</div>
-          <div class="photo-grid-compact" :style="gridStyle">
-            <PhotoCard
-              v-for="i in item.count"
-              :key="photoStore.photos[item.startIndex + i - 1].id"
-              :photo="photoStore.photos[item.startIndex + i - 1]"
-              :select-mode="selectMode"
-              :selected="selectedIds.has(photoStore.photos[item.startIndex + i - 1].id)"
-              @click="openViewer(item.startIndex + i - 1)"
-              @toggle-favorite="handleToggleFavorite(photoStore.photos[item.startIndex + i - 1].id)"
-              @toggle-select="toggleSelect(photoStore.photos[item.startIndex + i - 1].id)"
-            />
-          </div>
+          <JustifiedPhotoGrid
+            :photos="photoStore.photos"
+            :start-index="item.startIndex"
+            :count="item.count"
+            :row-height="rowHeight"
+            :select-mode="selectMode"
+            :selected-ids="selectedIds"
+            @open="openViewer"
+            @toggle-favorite="handleToggleFavorite"
+            @toggle-select="toggleSelect"
+          />
         </div>
       </template>
 

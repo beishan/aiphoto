@@ -1,6 +1,6 @@
 {
   "name": "aiphoto-frontend",
-  "version": "0.19.23",
+  "version": "0.19.24",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "dayjs": "^1.11.12",
     "echarts": "^6.1.0",
     "element-plus": "^2.8.0",
+    "justified-layout": "^4.1.0",
     "leaflet": "^1.9.4",
     "photoswipe": "^5.4.0",
     "pinia": "^2.2.0",
