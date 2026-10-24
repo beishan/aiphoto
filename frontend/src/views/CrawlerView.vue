@@ -86,7 +86,7 @@ const targetAlbumId = ref<number | null>(null)
 const targetTagIds = ref<number[]>([])
 const batchNote = ref('')
 const assetPage = ref(0)
-const reviewPageSizes = [20, 60, 100, 200]
+const reviewPageSizes = [20, 30, 50, 100, 200]
 const assetTotal = ref(0)
 const reviewSourcePageId = ref<number | null>(null)
 const reviewSourcePages = ref<{ id: number; name: string | null; url: string; assetCount: number }[]>([])
@@ -144,8 +144,8 @@ const reviewPageSizeCacheKey = taskAssetViewCacheKey?.replace('crawler-task-asse
 function readReviewPageSize() {
   try {
     const size = Number(reviewPageSizeCacheKey ? localStorage.getItem(reviewPageSizeCacheKey) : null)
-    return reviewPageSizes.includes(size) ? size : 60
-  } catch { return 60 }
+    return reviewPageSizes.includes(size) ? size : 50
+  } catch { return 50 }
 }
 const autoRefreshOptions = [
   { label: '3秒', value: 3000 }, { label: '5秒', value: 5000 },
