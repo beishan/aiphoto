@@ -1,10 +1,10 @@
 services:
   frontend:
-    image: aiphoto-frontend:${APP_VERSION:-0.19.24}
+    image: aiphoto-frontend:${APP_VERSION:-0.19.25}
     build:
       context: ./frontend
       args:
-        APP_VERSION: ${APP_VERSION:-0.19.24}
+        APP_VERSION: ${APP_VERSION:-0.19.25}
         FRONTEND_NODE_BASE_IMAGE: ${FRONTEND_NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-alpine}
         FRONTEND_NGINX_BASE_IMAGE: ${FRONTEND_NGINX_BASE_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
     container_name: aiphoto-frontend
@@ -17,18 +17,18 @@ services:
     restart: unless-stopped
 
   backend:
-    image: aiphoto-backend:${APP_VERSION:-0.19.24}
+    image: aiphoto-backend:${APP_VERSION:-0.19.25}
     build:
       context: ./backend
       args:
-        APP_VERSION: ${APP_VERSION:-0.19.24}
+        APP_VERSION: ${APP_VERSION:-0.19.25}
         BACKEND_MAVEN_BASE_IMAGE: ${BACKEND_MAVEN_BASE_IMAGE:-docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21}
         BACKEND_JRE_BASE_IMAGE: ${BACKEND_JRE_BASE_IMAGE:-docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine}
     container_name: aiphoto-backend
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
-      - APP_VERSION=${APP_VERSION:-0.19.24}
+      - APP_VERSION=${APP_VERSION:-0.19.25}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/memoryvault
       - SPRING_DATASOURCE_USERNAME=memoryvault
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-memoryvault}
@@ -48,11 +48,11 @@ services:
     restart: unless-stopped
 
   ai-service:
-    image: aiphoto-ai:${APP_VERSION:-0.19.24}
+    image: aiphoto-ai:${APP_VERSION:-0.19.25}
     build:
       context: ./ai-service
       args:
-        APP_VERSION: ${APP_VERSION:-0.19.24}
+        APP_VERSION: ${APP_VERSION:-0.19.25}
         AI_BASE_IMAGE: ${AI_BASE_IMAGE:-docker.m.daocloud.io/pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime}
     container_name: aiphoto-ai
     ports:
@@ -68,7 +68,7 @@ services:
     #           count: 1
     #           capabilities: [gpu]
     environment:
-      - APP_VERSION=${APP_VERSION:-0.19.24}
+      - APP_VERSION=${APP_VERSION:-0.19.25}
       - AI_MODEL_ROOT=/models
       # CPU/Docker Desktop defaults to one resident model to avoid memory exhaustion.
       # Set this to 3 on a NAS with sufficient NVIDIA GPU memory.

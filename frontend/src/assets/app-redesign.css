@@ -46,7 +46,6 @@
 }
 
 .app-shell .main-content :is(
-  .gallery-wrapper,
   .albums-view,
   .baby-view,
   .categories-view,
@@ -68,9 +67,10 @@
 }
 
 .app-shell .main-content .gallery-wrapper {
-  width: min(var(--workspace-max-width), 100%);
-  margin-right: auto;
-  margin-left: auto;
+  width: 100%;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
 }
 
 .app-shell .main-content :is(
