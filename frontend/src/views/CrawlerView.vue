@@ -1473,7 +1473,6 @@ onUnmounted(() => {
       </el-dialog>
       <el-empty v-if="!reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
       <template v-else>
-el-card>
 
         <el-card class="selection-bar surface-card" shadow="never">
           <div class="selection-summary"><el-checkbox :model-value="selectedAssets.size > 0" @change="toggleAllDownloadable">已选择 <strong>{{ selectedAssets.size }}</strong> 张</el-checkbox><el-button link type="primary" @click="selectAllDownloadable">选择本页可入库图片</el-button></div>
