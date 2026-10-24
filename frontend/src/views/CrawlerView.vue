@@ -8,6 +8,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useCrawlerImageVisibility } from '@/composables/useCrawlerImageVisibility'
 import { crawlApi } from '@/api/crawlApi'
+import { createThumbnailQueue } from '@/utils/thumbnailQueue'
 import { crawlJobProgress } from '@/utils/crawlProgress'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
@@ -168,6 +169,7 @@ const recentImportProgress = computed(() => {
 })
 function changeReviewPageSize(size: number) {
   if (!reviewPageSizes.includes(size)) return
+  thumbnailQueue.cancel()
   reviewRequest++
   reviewPageSize.value = size
   assetPage.value = 0
@@ -567,6 +569,7 @@ async function loadJobDetail() {
 
 watch(showCrawlerImages, visible => {
   if (!visible) {
+    thumbnailQueue.cancel()
     closePreviewViewer()
     for (const key of Object.keys(previewImages)) {
       URL.revokeObjectURL(previewImages[Number(key)])
@@ -578,15 +581,33 @@ watch(showCrawlerImages, visible => {
   }
 })
 
+watch([assetStatus, reviewImportStatus, reviewSourcePageId, exactDuplicateOnly, similarOnly, activeJobId], () => thumbnailQueue.cancel())
+
+function thumbnailStillWanted(id: number) {
+  return showCrawlerImages.value && (assets.value.some(asset => asset.id === id)
+    || (pageAssetsDialogVisible.value && pageAssets.value.some(asset => asset.id === id)))
+}
+const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
+  if (!thumbnailStillWanted(id) || previewImages[id]) return
+  const { data } = await crawlApi.thumbnail(id, signal)
+  if (signal.aborted || !thumbnailStillWanted(id)) return
+  const url = URL.createObjectURL(data)
+  try {
+    // Decode in the bounded queue rather than making every card decode at once.
+    const image = new Image()
+    image.src = url
+    await image.decode()
+    if (!signal.aborted && thumbnailStillWanted(id) && !previewImages[id]) {
+      previewImages[id] = url
+      return
+    }
+  } catch { /* Keep the placeholder when the thumbnail cannot be decoded. */ }
+  URL.revokeObjectURL(url)
+})
 async function loadPreviews() {
   if (!showCrawlerImages.value) return
   const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id])
-  await Promise.all(wanted.map(async asset => {
-    try {
-      const { data } = await crawlApi.thumbnail(asset.id)
-      if (showCrawlerImages.value) previewImages[asset.id] = URL.createObjectURL(data)
-    } catch { /* failed assets intentionally have no preview */ }
-  }))
+  await Promise.all(wanted.map(asset => thumbnailQueue.enqueue(asset.id)))
 }
 
 function revokePreviewViewerObjectUrl() {
@@ -1030,12 +1051,9 @@ async function loadPageAssets() {
   pageAssets.value = data.content
   pageAssetsTotal.value = data.totalElements
   if (!showCrawlerImages.value) return
-  await Promise.all(pageAssets.value.filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]).map(async asset => {
-    try {
-      const { data: image } = await crawlApi.thumbnail(asset.id)
-      if (showCrawlerImages.value) previewImages[asset.id] = URL.createObjectURL(image)
-    } catch { /* no local image */ }
-  }))
+  await Promise.all(pageAssets.value
+    .filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id])
+    .map(asset => thumbnailQueue.enqueue(asset.id)))
 }
 
 function changePageAssetsPage(page: number) {
@@ -1258,6 +1276,7 @@ watch([taskPage, taskPageSize, taskKind, taskSiteId, taskStatus, taskPageNameApp
 })
 watch([taskKind, taskSiteId, taskStatus], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
+  thumbnailQueue.cancel()
   if (tab === 'review') {
     detailRequest++
     void loadReviewData()
@@ -1267,6 +1286,7 @@ watch(activeTab, tab => {
   }
 })
 watch(taskDrawerVisible, () => {
+  thumbnailQueue.cancel()
   assetPage.value = 0
   if (activeTab.value === 'review' && !taskDrawerVisible.value) void loadReviewData()
   else {
@@ -1284,6 +1304,7 @@ watch(exactDuplicateOnly, value => { if (value) similarOnly.value = false; asset
 watch(similarOnly, value => { if (value) exactDuplicateOnly.value = false; assetPage.value = 0; selectedAssets.value = new Set(); void reloadVisibleAssets() })
 
 function changeAssetPage(page: number) {
+  thumbnailQueue.cancel()
   assetPage.value = page - 1
   selectedAssets.value = new Set()
   void reloadVisibleAssets()
@@ -1319,6 +1340,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handlePreviewViewerKeydown)
 })
 onUnmounted(() => {
+  thumbnailQueue.dispose()
   crawlerUnmounted = true
   if (pollTimer) clearInterval(pollTimer)
   if (downloadClockTimer) clearInterval(downloadClockTimer)
