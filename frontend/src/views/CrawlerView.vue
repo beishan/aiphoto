@@ -272,7 +272,7 @@ const metrics = computed(() => [
   { label: '已下载图片', value: totalDownloaded.value, note: `${reviewJobs.value.length} 个任务待整理`, icon: Collection },
   { label: '需要关注', value: failedJobs.value.length, note: failedJobs.value.length ? '可进入任务页重试' : '当前运行正常', icon: Warning },
 ])
-const reviewAssets = computed(() => assets.value.filter(asset => asset.status !== 'DELETED'))
+const reviewAssets = computed(() => assets.value.filter(asset => asset.status !== 'DELETED' && !pendingImportAssetIds.value.has(asset.id)))
 const deletedAssets = computed(() => assets.value.filter(asset => asset.status === 'DELETED'))
 const duplicateHashes = computed(() => {
   return new Set(reviewAssets.value
@@ -1115,6 +1115,10 @@ async function importSelected(assetIds?: number[]) {
     catch { return }
   }
   busy.value = 'import'
+  const submittedIds = new Set(groups.flatMap(group => group.ids))
+  pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...submittedIds])
+  selectedAssets.value = new Set([...selectedAssets.value].filter(id => !submittedIds.has(id)))
+  if (activeTab.value === 'review' && !taskDrawerVisible.value) closePreviewViewer()
   const batchIds: number[] = []
   const batchAssets = new Map<number, number[]>()
   const acceptedAssetIds = new Set<number>()
@@ -1132,7 +1136,6 @@ async function importSelected(assetIds?: number[]) {
       batchIds.push(data.batchId)
       batchAssets.set(data.batchId, group.ids)
       group.ids.forEach(id => acceptedAssetIds.add(id))
-      pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...group.ids])
       recentImportProgressCount.value = 0
       await loadImportBatch(data.batchId, '')
     }
@@ -1144,7 +1147,12 @@ async function importSelected(assetIds?: number[]) {
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => !acceptedAssetIds.has(id)))
     if (batchIds.length) void monitorImportBatches(batchIds, batchAssets)
     ElMessage.error(error?.response?.data?.message || error?.message || '入库请求失败，可直接重试，已完成项目不会重复入库')
-  } finally { busy.value = '' }
+  } finally {
+    pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value]
+      .filter(id => !submittedIds.has(id) || acceptedAssetIds.has(id)))
+    busy.value = ''
+    if (submittedIds.size !== acceptedAssetIds.size) await reloadVisibleAssets()
+  }
 }
 
 function newImportKey() {
@@ -1180,6 +1188,8 @@ async function monitorImportBatches(batchIds: number[], batchAssets: Map<number,
           try { await loadImportBatch(batchId, data.fail ? 'FAILED' : importItemStatus.value) }
           catch { /* The batch is complete; a later refresh can load its item details. */ }
         }
+        // Refresh while completed images are still hidden to avoid flashing successful imports.
+        await reloadVisibleAssets()
         pending.delete(batchId)
         totals.success += data.success
         totals.skipped += data.skipped
