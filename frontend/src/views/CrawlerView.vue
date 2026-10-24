@@ -144,6 +144,19 @@ function readReviewPageSize() {
     return reviewPageSizes.includes(size) ? size : 60
   } catch { return 60 }
 }
+const autoRefreshOptions = [
+  { label: '3秒', value: 3000 }, { label: '5秒', value: 5000 },
+  { label: '1分钟', value: 60000 }, { label: '5分钟', value: 300000 },
+  { label: '30分钟', value: 1800000 },
+]
+const autoRefreshCacheKey = taskAssetViewCacheKey?.replace('crawler-task-asset-view', 'crawler-auto-refresh-interval')
+function readAutoRefreshInterval() {
+  try {
+    const value = Number(autoRefreshCacheKey ? localStorage.getItem(autoRefreshCacheKey) : null)
+    return autoRefreshOptions.some(option => option.value === value) ? value : 3000
+  } catch { return 3000 }
+}
+const autoRefreshInterval = ref(readAutoRefreshInterval())
 const reviewPageSize = ref(readReviewPageSize())
 const assetPageSize = computed(() => taskDrawerVisible.value || activeTab.value !== 'review' ? 60 : reviewPageSize.value)
 const recentImportProgress = computed(() => {
@@ -1263,12 +1276,10 @@ function changeAssetPage(page: number) {
   selectedAssets.value = new Set()
   void reloadVisibleAssets()
 }
-onMounted(async () => {
-  const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
-  await loadInspectionProxies()
-  albums.value = albumResult.data
-  tags.value = tagResult.data
-  await loadJobDetail()
+let crawlerUnmounted = false
+function startAutoRefresh() {
+  if (pollTimer) clearInterval(pollTimer)
+  if (crawlerUnmounted) return
   pollTimer = setInterval(async () => {
     if (polling) return
     polling = true
@@ -1278,10 +1289,25 @@ onMounted(async () => {
       else if (activeTab.value === 'review') await loadReviewData()
     } catch { /* A transient polling failure is retried on the next interval. */ }
     finally { polling = false }
-  }, 2500)
+  }, autoRefreshInterval.value)
+}
+watch(autoRefreshInterval, value => {
+  if (autoRefreshCacheKey) {
+    try { localStorage.setItem(autoRefreshCacheKey, String(value)) } catch { /* Keep the preference in memory. */ }
+  }
+  startAutoRefresh()
+})
+onMounted(async () => {
+  const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
+  await loadInspectionProxies()
+  albums.value = albumResult.data
+  tags.value = tagResult.data
+  await loadJobDetail()
+  startAutoRefresh()
   window.addEventListener('keydown', handlePreviewViewerKeydown)
 })
 onUnmounted(() => {
+  crawlerUnmounted = true
   if (pollTimer) clearInterval(pollTimer)
   if (downloadClockTimer) clearInterval(downloadClockTimer)
   window.removeEventListener('keydown', handlePreviewViewerKeydown)
@@ -1302,6 +1328,10 @@ onUnmounted(() => {
         <el-space wrap>
           <el-tag v-if="activeJobs.length" type="primary" effect="light" round>{{ activeJobs.length }} 个任务运行中</el-tag>
           <el-tag v-else type="success" effect="light" round><el-icon><CircleCheck /></el-icon>&nbsp;系统空闲</el-tag>
+          <span>自动刷新</span>
+          <el-select v-model="autoRefreshInterval" aria-label="自动刷新时间间隔" style="width: 110px">
+            <el-option v-for="option in autoRefreshOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
           <el-button :icon="Refresh" circle aria-label="刷新采集数据" @click="refresh" />
           <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">新增网站</el-button>
         </el-space>
@@ -1374,8 +1404,8 @@ onUnmounted(() => {
       <el-empty v-else description="尚未配置采集网站"><el-button type="primary" :icon="Plus" @click="openNewSiteDialog">新增网站</el-button></el-empty>
     </section>
 
-    <CrawlWorkflowPanel v-else-if="activeTab === 'pages'" mode="pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
-    <CrawlWorkflowPanel v-else-if="activeTab === 'collected-pages'" mode="collected-pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+    <CrawlWorkflowPanel :refresh-interval="autoRefreshInterval" v-else-if="activeTab === 'pages'" mode="pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
+    <CrawlWorkflowPanel :refresh-interval="autoRefreshInterval" v-else-if="activeTab === 'collected-pages'" mode="collected-pages" :sites="sites" :jobs="jobs" @open-job="openWorkflowJob" @changed="loadJobs" />
 
     <section v-else-if="activeTab === 'tasks'" class="surface-card task-list-panel" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">TASKS</p><h2>扫描与采集任务</h2><p>点击任务，查看实时进度、页面和采集结果。</p></div><el-button :icon="Refresh" circle aria-label="刷新任务" @click="refresh" /></div>
@@ -1577,7 +1607,7 @@ el-card>
               <el-collapse-item v-if="previewImageUrls.length" :title="`原图地址预览（${previewImageUrls.length}）`" name="images"><el-scrollbar max-height="220px"><div class="url-list"><el-link v-for="url in previewImageUrls" :key="url" :href="url" target="_blank" type="primary">{{ url }}</el-link></div></el-scrollbar></el-collapse-item>
             </el-collapse>
           </el-card>
-          <CrawlWorkflowPanel v-if="(siteConfigurationTab === 'scans' || siteConfigurationTab === 'queues') && activeSiteId"
+          <CrawlWorkflowPanel :refresh-interval="autoRefreshInterval" v-if="(siteConfigurationTab === 'scans' || siteConfigurationTab === 'queues') && activeSiteId"
             :key="`${activeSiteId}-${siteConfigurationTab}`" :mode="siteConfigurationTab"
             :scoped-site-id="activeSiteId" :sites="sites.filter(site => site.id === activeSiteId)"
             :jobs="jobs.filter(job => job.siteId === activeSiteId)" @open-job="openWorkflowJob" @changed="loadJobs" />

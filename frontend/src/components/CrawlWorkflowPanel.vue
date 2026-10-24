@@ -7,7 +7,7 @@ import { settingApi, type CrawlerExecutor, type CrawlerProxy } from '@/api/setti
 import type { CrawlJob, CrawlSite } from '@/types'
 import CrawlerExecutorsSettingsPanel from './CrawlerExecutorsSettingsPanel.vue'
 
-const props = defineProps<{ mode: 'scans' | 'pages' | 'collected-pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[]; scopedSiteId?: number | null }>()
+const props = defineProps<{ refreshInterval: number; mode: 'scans' | 'pages' | 'collected-pages' | 'queues'; sites: CrawlSite[]; jobs: CrawlJob[]; scopedSiteId?: number | null }>()
 const emit = defineEmits<{ 'open-job': [job: CrawlJob]; changed: [] }>()
 const scans = ref<CrawlScanPage[]>([])
 const pages = ref<DiscoveredPage[]>([])
@@ -218,7 +218,12 @@ async function manageExecutors() {
 }
 watch(siteId, search)
 watch(() => props.mode, () => { pageNumber.value = 1; void load() })
-onMounted(() => { void load(); timer = setInterval(() => { if (!loading.value && !selectedPageIds.value.length) void load(true) }, 5000) })
+function startAutoRefresh() {
+  if (timer) clearInterval(timer)
+  timer = setInterval(() => { if (!loading.value && !selectedPageIds.value.length) void load(true) }, props.refreshInterval)
+}
+watch(() => props.refreshInterval, startAutoRefresh)
+onMounted(() => { void load(); startAutoRefresh() })
 onUnmounted(() => { requestId++; if (timer) clearInterval(timer) })
 </script>
 
