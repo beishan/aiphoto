@@ -98,6 +98,7 @@ const exactDuplicateOnly = ref(false)
 const similarOnly = ref(false)
 const similarityThreshold = ref(8)
 const imageAnalysisVisible = ref(false)
+const importBatchVisible = ref(false)
 const pagePage = ref(0)
 const pagePageSize = 50
 const pageTotal = ref(0)
@@ -1450,9 +1451,24 @@ onUnmounted(() => {
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
-          <el-space wrap><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
+          <el-space wrap><el-button :icon="List" :disabled="!recentImportBatch" @click="importBatchVisible = true">最近导入批次</el-button><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
         </div>
       </el-card>
+      <el-dialog v-model="importBatchVisible" title="最近导入批次" width="min(960px, 94vw)" append-to-body class="crawler-controls">
+        <div v-if="recentImportBatch">
+          <div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="['QUEUED','RUNNING'].includes(recentImportBatch.status) ? 'warning' : recentImportBatch.fail ? 'danger' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div>
+          <el-progress v-if="['QUEUED','RUNNING'].includes(recentImportBatch.status)" :percentage="recentImportProgress" :stroke-width="8" />
+          <el-radio-group :model-value="importItemStatus" size="small" @change="filterImportItems(String($event))"><el-radio-button value="">全部</el-radio-button><el-radio-button value="SUCCESS">成功</el-radio-button><el-radio-button value="SKIPPED">跳过</el-radio-button><el-radio-button value="FAILED">失败</el-radio-button></el-radio-group>
+          <el-table :data="recentImportItems" size="small" empty-text="当前筛选没有明细">
+            <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCESS' ? 'success' : 'info'" effect="light">{{ row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="待整理图片" width="130"><template #default="{ row }">#{{ row.assetId }}</template></el-table-column>
+            <el-table-column label="图库照片" width="130"><template #default="{ row }">{{ row.photoId ? `#${row.photoId}` : '—' }}</template></el-table-column>
+            <el-table-column label="说明" prop="errorMessage" min-width="220" />
+          </el-table>
+        </div>
+        <el-empty v-else description="暂无导入批次" />
+        <template #footer><el-button @click="importBatchVisible = false">返回待整理区</el-button></template>
+      </el-dialog>
       <el-dialog v-model="imageAnalysisVisible" title="图片分析" width="min(960px, 94vw)" append-to-body class="crawler-controls">
         <el-card class="filter-card surface-card" shadow="never">
           <el-form label-position="top" class="review-filter-form">
@@ -1488,20 +1504,6 @@ onUnmounted(() => {
             <el-select v-model="targetTagIds" multiple collapse-tags clearable placeholder="入库标签"><template #prefix><el-icon><PriceTag /></el-icon></template><el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" /></el-select>
           </div>
         </el-card>
-
-        <el-collapse v-if="recentImportBatch" class="history-collapse surface-card">
-          <el-collapse-item name="import">
-            <template #title><div class="collapse-title"><strong>最近导入批次 #{{ recentImportBatch.id }}</strong><el-tag :type="['QUEUED','RUNNING'].includes(recentImportBatch.status) ? 'warning' : recentImportBatch.fail ? 'danger' : 'success'" size="small" effect="light" round>{{ recentImportBatch.status }}</el-tag><span>成功 {{ recentImportBatch.success }} · 跳过 {{ recentImportBatch.skipped }} · 失败 {{ recentImportBatch.fail }}</span></div></template>
-            <el-progress v-if="['QUEUED','RUNNING'].includes(recentImportBatch.status)" :percentage="recentImportProgress" :stroke-width="8" />
-            <el-radio-group :model-value="importItemStatus" size="small" @change="filterImportItems(String($event))"><el-radio-button value="">全部</el-radio-button><el-radio-button value="SUCCESS">成功</el-radio-button><el-radio-button value="SKIPPED">跳过</el-radio-button><el-radio-button value="FAILED">失败</el-radio-button></el-radio-group>
-            <el-table :data="recentImportItems" size="small" empty-text="当前筛选没有明细">
-              <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag size="small" :type="row.status === 'FAILED' ? 'danger' : row.status === 'SUCCESS' ? 'success' : 'info'" effect="light">{{ row.status }}</el-tag></template></el-table-column>
-              <el-table-column label="待整理图片" width="130"><template #default="{ row }">#{{ row.assetId }}</template></el-table-column>
-              <el-table-column label="图库照片" width="130"><template #default="{ row }">{{ row.photoId ? `#${row.photoId}` : '—' }}</template></el-table-column>
-              <el-table-column label="说明" prop="errorMessage" min-width="220" />
-            </el-table>
-          </el-collapse-item>
-        </el-collapse>
 
         <div class="asset-grid">
           <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id), 'is-importing': pendingImportAssetIds.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && !pendingImportAssetIds.has(asset.id) && toggleAsset(asset.id)">
