@@ -186,38 +186,44 @@ onUnmounted(() => {
             <span class="counter">{{ currentIndex + 1 }} / {{ photos.length }}</span>
           </div>
           <div class="topbar-right">
-            <el-button class="ep-control toolbar-btn" @click="toggleFavorite">
+            <el-button class="ep-control toolbar-btn" @click="toggleFavorite" :title="currentPhoto?.favorite ? '取消收藏' : '收藏照片'" :aria-label="currentPhoto?.favorite ? '取消收藏' : '收藏照片'" :aria-pressed="Boolean(currentPhoto?.favorite)">
               <svg v-if="currentPhoto?.favorite" viewBox="0 0 24 24" fill="#ff453a" width="22" height="22">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
                 <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
               </svg>
+              <span class="toolbar-label">{{ currentPhoto?.favorite ? '已收藏' : '收藏' }}</span>
             </el-button>
-            <el-button class="ep-control toolbar-btn" @click="openAlbumPicker">
+            <el-button class="ep-control toolbar-btn" @click="openAlbumPicker" title="添加到相册" aria-label="添加到相册">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
                 <path d="M12 5v14M5 12h14" />
               </svg>
+              <span class="toolbar-label">加入相册</span>
             </el-button>
-            <el-button type="danger" class="ep-control toolbar-btn danger" @click="deletePhoto">
+            <el-button type="danger" class="ep-control toolbar-btn danger" @click="deletePhoto" title="移入回收站" aria-label="移入回收站">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
               </svg>
+              <span class="toolbar-label">删除</span>
             </el-button>
-            <el-button class="ep-control toolbar-btn" @click="showInfo = !showInfo">
+            <el-button class="ep-control toolbar-btn" @click="showInfo = !showInfo" :title="showInfo ? '隐藏照片信息' : '显示照片信息'" aria-label="照片信息" :aria-expanded="showInfo">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
               </svg>
+              <span class="toolbar-label">信息</span>
             </el-button>
-            <el-button class="ep-control toolbar-btn" @click="goToDetail" title="查看详情">
+            <el-button class="ep-control toolbar-btn" @click="goToDetail" title="查看详情" aria-label="查看详情">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
                 <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM6 20V4h5v7h7v9H6z"/>
               </svg>
+              <span class="toolbar-label">详情</span>
             </el-button>
-            <el-button class="ep-control toolbar-btn" @click="close">
+            <el-button class="ep-control toolbar-btn" @click="close" title="关闭预览（Esc）" aria-label="关闭预览">
               <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                 <path d="M18.3 5.71a1 1 0 00-1.42 0L12 10.59 7.12 5.71a1 1 0 00-1.42 1.42L10.59 12l-4.89 4.88a1 1 0 101.42 1.42L12 13.41l4.88 4.89a1 1 0 001.42-1.42L13.41 12l4.89-4.88a1 1 0 000-1.41z" />
               </svg>
+              <span class="toolbar-label">关闭</span>
             </el-button>
           </div>
         </div>
@@ -338,7 +344,11 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-.viewer-topbar {
+.viewer-overlay .viewer-topbar {
+  background: #181a1f;
+  border-bottom: 1px solid #393d45;
+  gap: 12px;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -356,37 +366,70 @@ onUnmounted(() => {
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.toolbar-btn {
-  display: flex;
+/* Keep preview controls legible across light, dark and glass themes. */
+.viewer-overlay .topbar-right .toolbar-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  color: white;
-  border: none;
-  background: rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-  transition: opacity 0.2s, background 0.2s;
+  gap: 7px;
+  width: auto;
+  min-width: 72px;
+  height: 42px;
+  padding: 0 12px;
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid #555b66;
+  background: #2b3039;
+  color: #fff;
+  box-shadow: none;
+  white-space: nowrap;
 }
 
-.toolbar-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+.toolbar-btn svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
 }
 
-.toolbar-btn:active {
-  opacity: 0.6;
+.toolbar-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
 }
 
-.toolbar-btn.danger {
-  color: #ff453a;
+.viewer-overlay .topbar-right .toolbar-btn:hover {
+  background: #414956;
+  border-color: #919baa;
 }
 
-.toolbar-btn.danger:hover {
-  background: rgba(255, 69, 58, 0.15);
+.viewer-overlay .topbar-right .toolbar-btn:focus-visible {
+  outline: 2px solid #86bdff;
+  outline-offset: 3px;
+}
+
+.viewer-overlay .topbar-right .toolbar-btn.danger {
+  color: #ffaaa5;
+}
+
+.viewer-overlay .topbar-right .toolbar-btn.danger:hover {
+  background: #542d31;
+}
+
+@media (max-width: 600px) {
+  .topbar-right { gap: 6px; }
+  .viewer-overlay .topbar-right .toolbar-btn {
+    min-width: 44px;
+    height: 52px;
+    padding: 6px 8px;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .toolbar-label { font-size: 12px; }
 }
 
 .counter {
