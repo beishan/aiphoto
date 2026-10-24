@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
@@ -257,13 +258,44 @@ watch(
   () => nextTick(setupObserver)
 )
 
+let galleryActive = false
+let fillingViewport = false
+
+async function fillViewport() {
+  if (fillingViewport || !galleryActive || photoStore.loading || loadingMore.value) return
+  fillingViewport = true
+  try {
+    await nextTick()
+    const container = scrollContainer.value
+    while (galleryActive && container && container.clientHeight > 0
+      && container.scrollHeight - container.scrollTop - container.clientHeight < 300) {
+      if (!await loadMore()) break
+      await nextTick()
+    }
+  } finally { fillingViewport = false }
+}
+
+async function refreshGallery() {
+  page.value = 0
+  try {
+    await photoStore.fetchPhotos(0, pageSize)
+    await fillViewport()
+  } catch { message.error('照片加载失败，请刷新后重试') }
+}
+
+watch(zoomLevel, () => { void fillViewport() })
+useResizeObserver(scrollContainer, () => { void fillViewport() })
 onMounted(() => {
-  photoStore.fetchPhotos(0, pageSize)
-  nextTick(setupObserver)
+  galleryActive = true
   initZoom()
+  void refreshGallery()
+  nextTick(setupObserver)
+  window.addEventListener('photos-changed', refreshGallery)
 })
 
 onBeforeUnmount(() => {
+  galleryActive = false
+  window.removeEventListener('photos-changed', refreshGallery)
   if (observer) observer.disconnect()
 })
 
@@ -272,25 +304,20 @@ function scrollToMonth(item: TimelineItem) {
   el?.scrollIntoView({ behavior: 'smooth' })
 }
 
-async function loadMore() {
-  if (loadingMore.value) return
-  if (photoStore.totalPages > 0 && page.value >= photoStore.totalPages - 1) return
-  if (photoStore.photos.length >= photoStore.totalElements && photoStore.totalElements > 0) return
+async function loadMore(): Promise<boolean> {
+  if (!galleryActive || photoStore.loading || loadingMore.value) return false
+  if (page.value >= photoStore.totalPages - 1) return false
+  if (photoStore.photos.length >= photoStore.totalElements) return false
   loadingMore.value = true
   try {
     const nextPage = page.value + 1
-    const prevLength = photoStore.photos.length
-    await photoStore.loadMore(nextPage, pageSize)
-    // Only increment page if we actually loaded more data
-    if (photoStore.photos.length > prevLength) {
-      page.value = nextPage
-    } else {
-      // No new data loaded, mark as last page
-      photoStore.totalPages = nextPage
-    }
-  } finally {
-    loadingMore.value = false
-  }
+    const added = await photoStore.loadMore(nextPage, pageSize)
+    if (added) page.value = nextPage
+    return added
+  } catch {
+    message.error('更多照片加载失败，请再次滚动重试')
+    return false
+  } finally { loadingMore.value = false }
 }
 
 function openViewer(index: number) {
@@ -300,14 +327,13 @@ function openViewer(index: number) {
 
 async function handleUploaded() {
   showUploader.value = false
-  page.value = 0
-  await photoStore.fetchPhotos(0, pageSize)
+  await refreshGallery()
 }
 
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   if (target.scrollHeight - target.scrollTop - target.clientHeight < 300) {
-    loadMore()
+    void loadMore().then(() => fillViewport())
   }
 }
 
@@ -380,7 +406,7 @@ async function handleToggleFavorite(photoId: number) {
       <template v-else>
         <div
           v-for="item in timelineItems"
-          :key="`${item.year}-${item.month}`"
+          :key="`${item.year}-${item.month}-${item.startIndex}`"
           class="month-section"
           :data-month="`${item.year}-${item.month}`"
         >
@@ -410,7 +436,7 @@ async function handleToggleFavorite(photoId: number) {
     <div v-if="timelineItems.length > 0 && !selectMode" class="timeline-rail">
       <el-button
         v-for="item in timelineItems"
-        :key="`${item.year}-${item.month}`"
+        :key="`${item.year}-${item.month}-${item.startIndex}`"
         class="ep-control timeline-item"
         :class="{ active: activeMonthKey === `${item.year}-${item.month}` }"
         :style="{ flex: item.count }"

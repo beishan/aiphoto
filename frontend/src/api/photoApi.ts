@@ -1,9 +1,11 @@
 import http from './http'
+import { normalizePage, type SpringPage } from './pageResponse'
 import type { Photo, PhotoDetail, PageResponse } from '@/types'
 
 export const photoApi = {
   list(page = 0, size = 20) {
-    return http.get<PageResponse<Photo>>('/photos', { params: { page, size } })
+    return http.get<SpringPage<Photo>>('/photos', { params: { page, size } })
+      .then(response => ({ ...response, data: normalizePage(response.data) }))
   },
 
   get(id: number) {

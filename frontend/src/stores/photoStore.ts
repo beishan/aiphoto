@@ -10,27 +10,32 @@ export const usePhotoStore = defineStore('photo', () => {
   const totalElements = ref(0)
   const totalPages = ref(0)
 
+  let listRequest = 0
+
   async function fetchPhotos(page = 0, size = 20) {
+    const request = ++listRequest
     loading.value = true
     try {
       const { data } = await photoApi.list(page, size)
+      if (request !== listRequest) return
       photos.value = data.content
       totalElements.value = data.totalElements
       totalPages.value = data.totalPages
     } finally {
-      loading.value = false
+      if (request === listRequest) loading.value = false
     }
   }
 
   async function loadMore(page = 0, size = 40) {
-    try {
-      const { data } = await photoApi.list(page, size)
-      photos.value = [...photos.value, ...data.content]
-      totalElements.value = data.totalElements
-      totalPages.value = data.totalPages
-    } catch (e) {
-      // silently fail on load more
-    }
+    const request = listRequest
+    const { data } = await photoApi.list(page, size)
+    if (request !== listRequest) return false
+    const existing = new Set(photos.value.map(photo => photo.id))
+    const added = data.content.filter(photo => !existing.has(photo.id))
+    photos.value = [...photos.value, ...added]
+    totalElements.value = data.totalElements
+    totalPages.value = data.totalPages
+    return added.length > 0
   }
 
   async function fetchPhoto(id: number) {
