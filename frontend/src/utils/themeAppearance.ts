@@ -197,6 +197,8 @@ export function applyThemeAppearance(theme: AppTheme) {
 
 export function loadDockConfig(): DockConfig {
   try {
+    const user = JSON.parse(sessionStorage.getItem('user') || 'null')
+    if (user) return { ...DEFAULT_DOCK, ...user.dockConfig }
     const value = JSON.parse(localStorage.getItem('dockConfig') || '{}')
     return value && typeof value === 'object' ? { ...DEFAULT_DOCK, ...value } : { ...DEFAULT_DOCK }
   }

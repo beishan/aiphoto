@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { clearSession, isSessionTokenValid } from '@/utils/authSession'
 import { connectWebSocket } from '@/stores/websocket'
+import { userApi } from '@/api/userApi'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -121,12 +122,28 @@ const router = createRouter({
 
 let wsInitialized = false
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth !== false && !isSessionTokenValid(token)) {
     clearSession()
     next('/login')
   } else {
+    if (to.meta.requiresAuth !== false && token) {
+      let hasUser = false
+      try {
+        hasUser = Boolean(JSON.parse(sessionStorage.getItem('user') || 'null')?.id)
+      } catch { /* Recover missing or invalid tab session data from the account. */ }
+      if (!hasUser) {
+        try {
+          const { data } = await userApi.me()
+          if (localStorage.getItem('token') !== token) return next('/login')
+          sessionStorage.setItem('user', JSON.stringify(data))
+        } catch {
+          // A 401 is handled by the HTTP interceptor; transient failures can retry on navigation.
+          if (!isSessionTokenValid(localStorage.getItem('token'))) return next('/login')
+        }
+      }
+    }
     if (token && !wsInitialized) {
       wsInitialized = true
       connectWebSocket()
