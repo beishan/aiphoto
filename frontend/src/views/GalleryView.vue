@@ -444,33 +444,35 @@ async function handleToggleFavorite(photoId: number) {
       </el-button>
     </div>
 
-    <!-- Zoom controls -->
-    <div v-if="!selectMode" class="zoom-controls">
-      <el-button class="zoom-btn" circle text @click="zoomIn" :disabled="zoomLevel === 0" title="放大">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
+    <div v-if="!selectMode" class="gallery-floating-actions" role="group" aria-label="照片操作">
+      <!-- Zoom controls -->
+      <div class="gallery-zoom-controls">
+        <el-button class="zoom-btn" circle text @click="zoomIn" :disabled="zoomLevel === 0" title="放大" aria-label="放大照片">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+            <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
+          </svg>
+        </el-button>
+        <el-button class="zoom-btn" circle text @click="zoomOut" :disabled="zoomLevel === 4" title="缩小" aria-label="缩小照片">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+            <path d="M5 12a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z" />
+          </svg>
+        </el-button>
+      </div>
+
+      <!-- Select mode FAB -->
+      <el-button v-if="photoStore.photos.length > 0" type="primary" circle class="fab-select" aria-label="选择照片" @click="toggleSelectMode">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="none" stroke="currentColor" stroke-width="2"/>
         </svg>
       </el-button>
-      <el-button class="zoom-btn" circle text @click="zoomOut" :disabled="zoomLevel === 4" title="缩小">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M5 12a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z" />
+
+      <!-- Upload FAB -->
+      <el-button type="primary" circle class="fab-upload" aria-label="上传照片" @click="showUploader = true">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
         </svg>
       </el-button>
     </div>
-
-    <!-- Upload FAB -->
-    <el-button v-if="!selectMode" type="primary" circle class="fab-upload" aria-label="上传照片" @click="showUploader = true">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-        <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
-      </svg>
-    </el-button>
-
-    <!-- Select mode FAB -->
-    <el-button v-if="!selectMode && photoStore.photos.length > 0" type="primary" circle class="fab-select" aria-label="选择照片" @click="toggleSelectMode">
-      <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="none" stroke="currentColor" stroke-width="2"/>
-      </svg>
-    </el-button>
 
     <el-dialog append-to-body v-model="showUploader" title="上传照片" width="min(720px, calc(100vw - 24px))" class="mv-dialog uploader-dialog" destroy-on-close>
       <Uploader @uploaded="handleUploaded" @done="showUploader = false" />
@@ -672,11 +674,26 @@ async function handleToggleFavorite(photoId: number) {
   display: inline;
 }
 
-/* Zoom controls */
-.zoom-controls {
+/* Keep all actions in flow so theme button sizes cannot cause overlap. */
+.gallery-floating-actions {
   position: fixed;
-  bottom: calc(var(--tab-height) + 130px);
-  right: 20px;
+  bottom: calc(var(--tab-height) + 20px + env(safe-area-inset-bottom, 0px));
+  right: max(20px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 50;
+}
+
+.gallery-floating-actions .el-button {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+}
+
+.gallery-zoom-controls {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -729,9 +746,6 @@ async function handleToggleFavorite(photoId: number) {
 
 /* FAB */
 .fab-upload {
-  position: fixed;
-  bottom: calc(var(--tab-height) + 20px);
-  right: 20px;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -758,9 +772,6 @@ async function handleToggleFavorite(photoId: number) {
 
 /* Select FAB */
 .fab-select {
-  position: fixed;
-  bottom: calc(var(--tab-height) + 86px);
-  right: 20px;
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -829,17 +840,9 @@ async function handleToggleFavorite(photoId: number) {
 }
 
 @media (max-width: 768px) {
-  .fab-upload {
-    bottom: calc(var(--tab-height) + 16px);
-    right: 16px;
-  }
-  .fab-select {
-    bottom: calc(var(--tab-height) + 80px);
-    right: 16px;
-  }
-  .zoom-controls {
-    right: 16px;
-    bottom: calc(var(--tab-height) + 124px);
+  .gallery-floating-actions {
+    bottom: calc(var(--tab-height) + 16px + env(safe-area-inset-bottom, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
   }
   .toolbar-actions {
     gap: 4px;
