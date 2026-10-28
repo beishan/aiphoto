@@ -45,7 +45,12 @@ public class CrawlRecoveryService {
             }
         }
         for (Long batchId : importBatchRepository.findRunnableBatchIds(LocalDateTime.now())) {
-            importWorker.process(batchId);
+            try {
+                importWorker.process(batchId);
+            } catch (org.springframework.core.task.TaskRejectedException exception) {
+                // Leave persisted batches queued until the next dispatch cycle.
+                break;
+            }
         }
     }
 }

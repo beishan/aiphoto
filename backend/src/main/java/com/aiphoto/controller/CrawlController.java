@@ -324,7 +324,11 @@ public class CrawlController {
                 request.idempotencyKey());
         if (result.status() == com.aiphoto.entity.CrawlImportBatch.Status.QUEUED
                 || result.status() == com.aiphoto.entity.CrawlImportBatch.Status.RUNNING) {
-            importWorker.process(result.batchId());
+            try {
+                importWorker.process(result.batchId());
+            } catch (org.springframework.core.task.TaskRejectedException exception) {
+                // The persisted QUEUED batch will be retried by CrawlRecoveryService.
+            }
         }
         return result;
     }

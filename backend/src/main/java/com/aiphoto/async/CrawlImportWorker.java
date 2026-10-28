@@ -15,7 +15,7 @@ public class CrawlImportWorker {
     private final CrawlImportBatchQueueService queueService;
     private final CrawlImportService importService;
 
-    @Async
+    @Async("crawlImportExecutor")
     public void process(Long batchId) {
         String workerId = queueService.newWorkerId();
         if (!queueService.claim(batchId, workerId)) return;

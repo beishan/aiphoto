@@ -50,6 +50,23 @@ class CrawlRecoveryServiceTest {
         verify(importWorker).process(11L);
     }
 
+    @Test
+    void retriesPersistedBatchesOnNextDispatchAfterExecutorSaturation() {
+        when(jobRepository.findRunnableJobIds(ArgumentMatchers.any(LocalDateTime.class)))
+                .thenReturn(List.of());
+        when(importBatchRepository.findRunnableBatchIds(ArgumentMatchers.any(LocalDateTime.class)))
+                .thenReturn(List.of(11L, 12L));
+        org.mockito.Mockito.doThrow(new org.springframework.core.task.TaskRejectedException("full"))
+                .doNothing().when(importWorker).process(11L);
+        var recovery = new CrawlRecoveryService(
+                jobRepository, crawlWorker, importBatchRepository, importWorker);
+        recovery.dispatchRunnableJobs();
+        verify(importWorker, never()).process(12L);
+        recovery.dispatchRunnableJobs();
+        verify(importWorker, org.mockito.Mockito.times(2)).process(11L);
+        verify(importWorker).process(12L);
+    }
+
     private CrawlJob job(Long id, CrawlJob.Phase phase) {
         CrawlJob job = new CrawlJob();
         job.setId(id);
