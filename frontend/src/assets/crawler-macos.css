@@ -15,7 +15,7 @@
 }
 
 [data-theme="macos26"] .crawler-page.crawler-controls {
-  width: min(var(--workspace-max-width), 100%);
+  width: 100%;
   gap: 18px;
   padding: 20px var(--workspace-gutter) 112px;
 }

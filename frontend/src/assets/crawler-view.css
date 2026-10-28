@@ -37,7 +37,7 @@
 .crawler-page {
   display: grid;
   gap: 16px;
-  width: min(1500px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding: 24px 28px 116px;
   color: var(--text-primary);

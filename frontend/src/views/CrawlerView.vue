@@ -408,7 +408,15 @@ async function loadReviewData() {
       await loadReviewData()
       return
     }
-    assets.value = assetsResult.data.content
+    const visibleAssets = assetsResult.data.content.filter(asset => !pendingImportAssetIds.value.has(asset.id))
+    let nextPage = assetPage.value + 1
+    while (visibleAssets.length < assetPageSize.value && nextPage < assetsResult.data.totalPages) {
+      const { data } = await crawlApi.reviewAssets(nextPage++, assetPageSize.value, assetStatus.value,
+        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
+      if (request !== reviewRequest) return
+      visibleAssets.push(...data.content.filter(asset => !pendingImportAssetIds.value.has(asset.id)))
+    }
+    assets.value = visibleAssets.slice(0, assetPageSize.value)
     assetTotal.value = assetsResult.data.totalElements
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => assets.value.some(asset => asset.id === id)))
     for (const key of Object.keys(previewImages)) {
@@ -1171,7 +1179,7 @@ async function importSelected(assetIds?: number[]) {
     pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value]
       .filter(id => !submittedIds.has(id) || acceptedAssetIds.has(id)))
     busy.value = ''
-    if (submittedIds.size !== acceptedAssetIds.size) await reloadVisibleAssets()
+    await reloadVisibleAssets()
   }
 }
 
