@@ -88,13 +88,6 @@ class CrawlWorkflowServiceTest {
         assertThat(page.getLastScanAt()).isAfter(LocalDateTime.now().minusMinutes(1));
     }
 
-    @Test void pausedOrQueuedScanCannotBeSubmittedAgain() {
-        when(scans.lockOwned(7L, 9L)).thenReturn(Optional.of(scanPage()));
-        when(jobs.existsByScanPageIdAndStatusIn(eq(7L), any())).thenReturn(true);
-        assertThatThrownBy(() -> workflow.scan(7L, 9L, false)).hasMessageContaining("已有");
-        verifyNoInteractions(crawl, rules);
-    }
-
     @Test void createsExactlyOneCollectionJobAndCopiesOnlyRequestedPage() throws Exception {
         CrawlPage page = new CrawlPage(); page.setId(11L); page.setJobId(10L);
         page.setUrl("https://example.com/photos/1"); page.setNormalizedUrl(page.getUrl()); page.setUrlHash("hash");

@@ -94,11 +94,6 @@ public class CrawlWorkflowService {
         if (scheduled && (!Boolean.TRUE.equals(page.getAutoScanEnabled())
                 || page.getLastScanAt() != null && page.getLastScanAt()
                     .plusMinutes(page.getScanIntervalMinutes()).isAfter(now))) return null;
-        if (jobRepository.existsByScanPageIdAndStatusIn(id,
-                List.of(CrawlJob.Status.RUNNING, CrawlJob.Status.QUEUED, CrawlJob.Status.PAUSED))) {
-            if (scheduled) return null;
-            throw new IllegalStateException("该扫描页已有待执行、运行中或暂停的扫描任务");
-        }
         CrawlRule active = ruleRepository.findBySiteIdAndOwnerIdAndEnabledTrue(page.getSiteId(), ownerId)
                 .orElseThrow(() -> new IllegalStateException("请先配置生效的解析规则"));
         CrawlJob job = crawlService.createJob(active.getId(), ownerId);

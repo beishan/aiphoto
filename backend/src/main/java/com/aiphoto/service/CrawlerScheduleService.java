@@ -42,8 +42,7 @@ public class CrawlerScheduleService {
                 LocalTime scanTime = site.getDailyScanTime() == null
                         ? LocalTime.of(3, 0) : site.getDailyScanTime();
                 if (currentTime.isBefore(scanTime)
-                        || today.equals(site.getLastScheduledScanDate())
-                        || jobRepository.existsBySiteIdAndStatusIn(site.getId(), ACTIVE_STATUSES)) {
+                        || today.equals(site.getLastScheduledScanDate())) {
                     continue;
                 }
                 CrawlRule rule = ruleRepository

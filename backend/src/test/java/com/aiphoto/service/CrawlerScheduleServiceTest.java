@@ -40,7 +40,6 @@ class CrawlerScheduleServiceTest {
         CrawlJob job = new CrawlJob();
         job.setId(5L);
         when(siteRepository.findByScheduleEnabledTrue()).thenReturn(List.of(site));
-        when(jobRepository.existsBySiteIdAndStatusIn(any(), any())).thenReturn(false);
         when(ruleRepository.findBySiteIdAndOwnerIdAndEnabledTrue(3L, 9L))
                 .thenReturn(Optional.of(rule));
         when(siteRepository.claimDailyScan(any(), any())).thenReturn(1);
