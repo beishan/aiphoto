@@ -166,6 +166,7 @@ public class PhotoService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setLikeCount(photo.getLikeCount());
         dto.setInTimeline(photo.getInTimeline());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
@@ -215,6 +216,15 @@ public class PhotoService {
         dto.setPeople(peopleDTOs);
 
         return dto;
+    }
+
+    @Transactional
+    public long likePhoto(Long id) {
+        if (photoRepository.incrementLikes(id) == 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.NOT_FOUND, "Photo not found");
+        }
+        return photoRepository.getLikeCount(id);
     }
 
     @Transactional
@@ -528,6 +538,7 @@ public class PhotoService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setLikeCount(photo.getLikeCount());
         dto.setInTimeline(photo.getInTimeline());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());

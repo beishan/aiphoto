@@ -8,6 +8,10 @@ export const photoApi = {
       .then(response => ({ ...response, data: normalizePage(response.data) }))
   },
 
+  like(id: number) {
+    return http.post<{ likeCount: number }>(`/photos/${id}/like`)
+  },
+
   get(id: number) {
     return http.get<Photo>(`/photos/${id}`)
   },

@@ -20,6 +20,7 @@ public class PhotoDTO {
     private Long fileSize;
     private String mediaType;
     private Boolean favorite;
+    private long likeCount;
     private Boolean inTimeline;
     private String originalFilename;
     private String thumbnailUrl;

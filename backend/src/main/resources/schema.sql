@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS photos (
 -- Migration: Add in_timeline column to photos (idempotent)
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS in_timeline BOOLEAN DEFAULT FALSE;
 ALTER TABLE photos ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE photos ADD COLUMN IF NOT EXISTS like_count BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_photos_deleted_at ON photos (deleted_at);
 
 -- Albums table

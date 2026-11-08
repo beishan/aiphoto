@@ -138,6 +138,22 @@ function next() {
   }
 }
 
+const likeCounts = ref<Record<number, number>>({})
+const likeCount = computed(() => currentPhoto.value
+  ? Math.max(currentPhoto.value.likeCount ?? 0, likeCounts.value[currentPhoto.value.id] ?? 0)
+  : 0)
+
+async function likePhoto() {
+  const photo = currentPhoto.value
+  if (!photo) return
+  try {
+    const { data } = await photoApi.like(photo.id)
+    likeCounts.value[photo.id] = Math.max(data.likeCount, likeCounts.value[photo.id] ?? 0)
+  } catch {
+    ElMessage.error('点赞失败，请重试')
+  }
+}
+
 async function toggleFavorite() {
   if (currentPhoto.value) {
     await photoStore.toggleFavorite(currentPhoto.value.id)
@@ -256,6 +272,12 @@ onUnmounted(() => {
             <span class="counter">{{ currentIndex + 1 }} / {{ photos.length }}</span>
           </div>
           <div class="topbar-right">
+            <el-button v-if="currentPhoto" class="ep-control toolbar-btn" @click="likePhoto" title="点赞" :aria-label="`点赞，当前 ${likeCount} 个赞`">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M7 10v10H3V10h4Zm0 0 5-7a2 2 0 0 1 2 2v4h5a2 2 0 0 1 2 2.4l-1.5 7A2 2 0 0 1 17.5 20H7" />
+              </svg>
+              <span class="toolbar-label">点赞 {{ likeCount }}</span>
+            </el-button>
             <el-button class="ep-control toolbar-btn" @click="toggleFavorite" :title="currentPhoto?.favorite ? '取消收藏' : '收藏照片'" :aria-label="currentPhoto?.favorite ? '取消收藏' : '收藏照片'" :aria-pressed="Boolean(currentPhoto?.favorite)">
               <svg v-if="currentPhoto?.favorite" viewBox="0 0 24 24" fill="#ff453a" width="22" height="22">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />

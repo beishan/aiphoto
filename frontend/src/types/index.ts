@@ -12,6 +12,7 @@ export interface Photo {
   fileSize: number | null
   mediaType: 'PHOTO' | 'VIDEO' | 'GIF' | 'RAW'
   favorite: boolean
+  likeCount?: number
   inTimeline: boolean
   originalFilename: string | null
   thumbnailUrl: string | null

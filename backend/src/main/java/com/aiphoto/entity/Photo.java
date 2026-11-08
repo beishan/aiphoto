@@ -76,6 +76,9 @@ public class Photo {
 
     private Boolean favorite = false;
 
+    @Column(name = "like_count", updatable = false)
+    private long likeCount;
+
     private Boolean inTimeline = false;
 
     @Column(length = 255)

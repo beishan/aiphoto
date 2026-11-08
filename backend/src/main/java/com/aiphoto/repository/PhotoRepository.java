@@ -28,6 +28,13 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NULL")
     Optional<Photo> findById(@Param("id") Long id);
 
+    @Modifying
+    @Query(value = "UPDATE photos SET like_count = like_count + 1 WHERE id = :id AND deleted_at IS NULL", nativeQuery = true)
+    int incrementLikes(@Param("id") Long id);
+
+    @Query("SELECT p.likeCount FROM Photo p WHERE p.id = :id")
+    long getLikeCount(@Param("id") Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Photo p WHERE p.id = :id AND p.deletedAt IS NULL")
     Optional<Photo> findForIndexing(@Param("id") Long id);

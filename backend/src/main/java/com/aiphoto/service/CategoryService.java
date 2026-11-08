@@ -291,6 +291,7 @@ public class CategoryService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setLikeCount(photo.getLikeCount());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
         try {

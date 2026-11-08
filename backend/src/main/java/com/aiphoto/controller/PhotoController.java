@@ -168,6 +168,11 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("success", result.success(), "fail", result.fail()));
     }
 
+    @PostMapping("/{id}/like")
+    public Map<String, Long> likePhoto(@PathVariable Long id) {
+        return Map.of("likeCount", photoService.likePhoto(id));
+    }
+
     @PostMapping("/batch-favorite")
     public ResponseEntity<Map<String, Object>> batchFavorite(@RequestBody Map<String, Object> request) {
         @SuppressWarnings("unchecked")

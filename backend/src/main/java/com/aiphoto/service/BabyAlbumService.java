@@ -87,6 +87,7 @@ public class BabyAlbumService {
         dto.setAiCaption(photo.getAiCaption());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setLikeCount(photo.getLikeCount());
         try {
             String thumbExt = photo.getOriginalFilename() != null
                     && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "webp" : "jpg";
