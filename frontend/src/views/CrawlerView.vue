@@ -195,6 +195,7 @@ const previewViewerAction = ref<'import' | 'skip' | 'delete' | 'delete-ignore' |
 const previewViewerPages = reactive<Record<number, CrawlAsset[]>>({})
 let previewViewerRequest = 0
 let previewViewerObjectUrl = ''
+let previewViewerController: AbortController | undefined
 const taskKind = ref('')
 const taskSiteId = ref<number>()
 const taskStatus = ref<CrawlJob['status'] | ''>('')
@@ -630,20 +631,32 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
   previewViewerAsset.value = asset
   previewViewerRequest += 1
   const request = previewViewerRequest
+  previewViewerController?.abort()
+  const controller = new AbortController()
+  previewViewerController = controller
   revokePreviewViewerObjectUrl()
+  previewViewerUrl.value = previewImages[asset.id] || ''
   previewViewerLoading.value = true
   try {
-    const { data } = await crawlApi.content(asset.id)
+    if (!previewViewerUrl.value) {
+      void crawlApi.thumbnail(asset.id, controller.signal).then(({ data }) => {
+        if (request !== previewViewerRequest || previewViewerUrl.value) return
+        previewViewerObjectUrl = URL.createObjectURL(data)
+        previewViewerUrl.value = previewViewerObjectUrl
+      }).catch(() => { /* The original can still load if the thumbnail fails. */ })
+    }
+    const { data } = await crawlApi.content(asset.id, controller.signal)
     const objectUrl = URL.createObjectURL(data)
     if (!showCrawlerImages.value || request !== previewViewerRequest || !previewViewerVisible.value) {
       URL.revokeObjectURL(objectUrl)
       return
     }
+    revokePreviewViewerObjectUrl()
     previewViewerObjectUrl = objectUrl
     previewViewerUrl.value = objectUrl
   } catch {
     if (request === previewViewerRequest && previewViewerVisible.value) {
-      previewViewerUrl.value = previewImages[asset.id] || ''
+      previewViewerUrl.value ||= previewImages[asset.id] || ''
     }
   } finally {
     if (request === previewViewerRequest) previewViewerLoading.value = false
@@ -728,6 +741,7 @@ async function stepPreviewViewer(direction: -1 | 1) {
 }
 
 function closePreviewViewer() {
+  previewViewerController?.abort()
   previewViewerVisible.value = false
   previewViewerRequest += 1
   previewViewerLoading.value = false

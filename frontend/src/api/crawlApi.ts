@@ -119,6 +119,6 @@ export const crawlApi = {
   importBatch: (batchId: number) => http.get<CrawlImportBatch>(`/crawl/imports/${batchId}`),
   importItems: (batchId: number, page = 0, size = 50, status = '') => http.get<PageResponse<CrawlImportItem>>(`/crawl/imports/${batchId}/items`, { params: { page, size, status: status || undefined } }),
   purgeJob: (jobId: number) => http.delete<{ success: number; fileFail: number }>(`/crawl/jobs/${jobId}`),
-  content: (assetId: number) => http.get<Blob>(`/crawl/assets/${assetId}/content`, { responseType: 'blob' }),
+  content: (assetId: number, signal?: AbortSignal) => http.get<Blob>(`/crawl/assets/${assetId}/content`, { responseType: 'blob', signal }),
   thumbnail: (assetId: number, signal?: AbortSignal) => http.get<Blob>(`/crawl/assets/${assetId}/thumbnail`, { responseType: 'blob', signal }),
 }
