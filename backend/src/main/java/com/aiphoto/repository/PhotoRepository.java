@@ -70,6 +70,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long> {
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.favorite = true ORDER BY p.id DESC")
     Page<Photo> findFavorites(Pageable pageable);
 
+    @Query("SELECT p FROM Photo p WHERE p.likeCount > 0 AND p.deletedAt IS NULL ORDER BY p.likeCount DESC, p.id DESC")
+    Page<Photo> findLiked(Pageable pageable);
+
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.inTimeline = true AND p.exifDate IS NOT NULL ORDER BY p.exifDate DESC")
     List<Photo> findTimelinePhotos();
 

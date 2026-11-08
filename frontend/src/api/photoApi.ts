@@ -122,6 +122,10 @@ export const photoApi = {
     return http.post<Photo>(`/photos/${id}/toggle-timeline`)
   },
 
+  liked(page = 0, size = 20) {
+    return http.get<PageResponse<Photo>>('/photos/liked', { params: { page, size } })
+  },
+
   favorites(page = 0, size = 20) {
     return http.get<PageResponse<Photo>>('/photos/favorites', { params: { page, size } })
   },

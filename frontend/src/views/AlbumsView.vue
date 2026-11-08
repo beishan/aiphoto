@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from '@/utils/feedback'
 import { useAlbumStore } from '@/stores/albumStore'
+import { photoApi } from '@/api/photoApi'
 import type { Album } from '@/types'
 
 const router = useRouter()
@@ -11,8 +12,20 @@ const message = useMessage()
 const showCreate = ref(false)
 const newAlbum = ref<{ name: string; description: string; type: 'VIRTUAL' | 'DIRECTORY' | 'TRAINING' | 'BABY' }>({ name: '', description: '', type: 'VIRTUAL' })
 
+const smartAlbums = ref([
+  { title: '收藏相册', name: '我的收藏', path: '/favorites', icon: '♥', cover: '', count: null as number | null, fetch: photoApi.favorites },
+  { title: '点赞组', name: '点赞照片', path: '/liked', icon: '👍', cover: '', count: null as number | null, fetch: photoApi.liked },
+])
+
 onMounted(() => {
-  albumStore.fetchAlbums()
+  void albumStore.fetchAlbums()
+  for (const album of smartAlbums.value) {
+    void album.fetch(0, 1).then(({ data }) => {
+      const photo = data.content[0]
+      album.cover = photo?.thumbnailUrl || ''
+      album.count = data.totalElements
+    }).catch(() => message.error(`${album.title}加载失败`))
+  }
 })
 
 function goToAlbum(album: Album) {
@@ -61,11 +74,13 @@ const albumTypeIcons: Record<string, string> = {
 
 <template>
   <div class="albums-view">
-    <!-- Empty -->
-    <el-empty v-if="!albumStore.loading && albumStore.albums.length === 0" class="empty-state" description="暂无相册" :image-size="92"><el-button type="primary" round @click="showCreate = true">创建第一个相册</el-button></el-empty>
-
-    <!-- Album grid -->
-    <div v-else class="album-grid">
+    <section class="album-section" aria-labelledby="custom-albums-title">
+      <header class="section-heading">
+        <h2 id="custom-albums-title">自定义相册</h2>
+        <el-button type="primary" @click="showCreate = true">＋ 新建相册</el-button>
+      </header>
+      <el-empty v-if="!albumStore.loading && !albumStore.albums.length" description="暂无自定义相册" :image-size="64" />
+      <div v-else class="album-grid">
       <el-card
         v-for="album in albumStore.albums"
         :key="album.id"
@@ -92,14 +107,26 @@ const albumTypeIcons: Record<string, string> = {
           </el-button>
         </div>
       </el-card>
-    </div>
+      </div>
+    </section>
 
-    <!-- Create FAB -->
-    <el-button v-if="albumStore.albums.length > 0" type="primary" circle class="fab-create" aria-label="新建相册" @click="showCreate = true">
-      <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-        <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" />
-      </svg>
-    </el-button>
+    <section v-for="album in smartAlbums" :key="album.path" class="album-section">
+      <header class="section-heading">
+        <h2>{{ album.title }}</h2>
+        <span v-if="album.path === '/liked'">按点赞数排序</span>
+      </header>
+      <div class="album-grid">
+        <router-link :to="album.path" class="album-cover smart-album">
+          <img v-if="album.cover" :src="album.cover" alt="" />
+          <div v-else class="album-cover-placeholder" aria-hidden="true">{{ album.icon }}</div>
+          <span class="album-badge" :class="{ favorite: album.path === '/favorites' }" aria-hidden="true">{{ album.icon }}</span>
+          <div class="album-overlay">
+            <span class="album-name">{{ album.name }}</span>
+            <span v-if="album.count !== null" class="album-meta">{{ album.count }} 张照片</span>
+          </div>
+        </router-link>
+      </div>
+    </section>
 
     <el-dialog append-to-body v-model="showCreate" title="新建相册" width="460px" destroy-on-close class="mv-dialog">
       <el-form label-position="top">
@@ -124,51 +151,32 @@ const albumTypeIcons: Record<string, string> = {
 <style scoped>
 .albums-view {
   min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
-  padding: 16px;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding: clamp(16px, 3vw, 32px);
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  gap: 12px;
-  color: var(--text-secondary);
-}
-
-.empty-icon { color: var(--text-tertiary); }
-.empty-state h3 { font-size: 20px; font-weight: 600; color: var(--text-primary); }
-
-.create-btn {
-  margin-top: 8px;
-  padding: 10px 24px;
-  background: var(--accent);
-  color: white;
-  border-radius: var(--radius-full);
-  font-size: 15px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-}
-
-.album-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
+.album-section + .album-section { margin-top: 26px; }
+.section-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.section-heading h2 { margin: 0; font-size: clamp(18px, 2vw, 24px); }
+.section-heading span { color: var(--text-secondary); font-size: 13px; }
+.section-heading .el-button { margin-left: auto; }
+.album-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (min-width: 768px) {
-  .album-grid { grid-template-columns: repeat(4, 1fr); }
+  .album-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-
-@media (min-width: 1024px) {
-  .album-grid { grid-template-columns: repeat(5, 1fr); }
+.smart-album { display: block; text-decoration: none; border: 1px solid var(--separator); }
+.smart-album:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.album-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .56);
+  color: white;
 }
-
-@media (min-width: 1440px) {
-  .album-grid { grid-template-columns: repeat(6, 1fr); }
-}
+.album-badge.favorite { color: #ff6686; }
 
 .album-card {
   cursor: pointer;
@@ -176,7 +184,7 @@ const albumTypeIcons: Record<string, string> = {
 
 .album-cover {
   position: relative;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-secondary);
@@ -245,137 +253,4 @@ const albumTypeIcons: Record<string, string> = {
   opacity: 1;
 }
 
-.fab-create {
-  position: fixed;
-  bottom: calc(var(--tab-height) + 20px);
-  right: 20px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.4);
-  z-index: 50;
-  border: none;
-  cursor: pointer;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.modal-sheet {
-  width: 100%;
-  max-width: 400px;
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  border: 0.5px solid var(--glass-border);
-}
-
-.sheet-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.sheet-header h3 { font-size: 20px; font-weight: 600; }
-.sheet-close { color: var(--text-secondary); padding: 4px; }
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.ios-input {
-  width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 16px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.ios-input:focus {
-  border-color: var(--accent);
-}
-
-.ios-textarea {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.2s;
-}
-
-.ios-textarea:focus {
-  border-color: var(--accent);
-}
-
-.type-selector {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.type-btn {
-  padding: 8px 16px;
-  border-radius: var(--radius-full);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-family: inherit;
-  border: 0.5px solid var(--border);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.type-btn.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-.submit-btn {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: var(--accent);
-  color: white;
-  font-size: 17px;
-  font-weight: 600;
-  font-family: inherit;
-  border: none;
-  cursor: pointer;
-  margin-top: 4px;
-}
 </style>

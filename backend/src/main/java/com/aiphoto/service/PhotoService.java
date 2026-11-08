@@ -314,6 +314,10 @@ public class PhotoService {
         photoRepository.delete(photo);
     }
 
+    public Page<PhotoDTO> getLiked(Pageable pageable) {
+        return photoRepository.findLiked(pageable).map(this::toDTO);
+    }
+
     public Page<PhotoDTO> getFavorites(Pageable pageable) {
         return photoRepository.findFavorites(pageable).map(this::toDTO);
     }

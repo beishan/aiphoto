@@ -6,6 +6,10 @@ import { usePhotoStore } from '@/stores/photoStore'
 import PhotoCard from '@/components/PhotoCard.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 
+const props = defineProps<{ liked?: boolean }>()
+const fetchPage = (page: number, size: number) => props.liked
+  ? photoApi.liked(page, size)
+  : photoApi.favorites(page, size)
 const photoStore = usePhotoStore()
 const photos = ref<Photo[]>([])
 const page = ref(0)
@@ -89,7 +93,7 @@ onMounted(async () => {
 async function fetchFavorites() {
   loading.value = true
   try {
-    const { data } = await photoApi.favorites(0, pageSize)
+    const { data } = await fetchPage(0, pageSize)
     photos.value = data.content
     totalElements.value = data.totalElements
     page.value = 0
@@ -105,7 +109,7 @@ async function loadMore() {
   try {
     const nextPage = page.value + 1
     const prevLength = photos.value.length
-    const { data } = await photoApi.favorites(nextPage, pageSize)
+    const { data } = await fetchPage(nextPage, pageSize)
     photos.value = [...photos.value, ...data.content]
     totalElements.value = data.totalElements
     // Only increment page if we actually loaded more data
@@ -132,9 +136,16 @@ function openViewer(index: number) {
 }
 
 async function handleToggleFavorite(photoId: number) {
-  await photoStore.toggleFavorite(photoId)
-  // Remove from favorites list since it was unfavorited
-  photos.value = photos.value.filter(p => p.id !== photoId)
+  if (props.liked) {
+    const photo = photos.value.find(item => item.id === photoId)
+    if (photo) {
+      const { data } = await photoApi.update(photoId, { favorite: !photo.favorite })
+      photo.favorite = data.favorite
+    }
+  } else {
+    await photoStore.toggleFavorite(photoId)
+    photos.value = photos.value.filter(p => p.id !== photoId)
+  }
 }
 </script>
 
@@ -142,7 +153,17 @@ async function handleToggleFavorite(photoId: number) {
   <div class="gallery-wrapper">
     <div ref="scrollContainer" class="gallery-scroll" @scroll="handleScroll">
       <!-- Empty state -->
-      <el-empty v-if="!loading && photos.length === 0" class="empty-state" description="还没有喜欢的照片，点击照片上的爱心按钮收藏" :image-size="96" />
+      <el-empty v-if="!loading && photos.length === 0" class="empty-state" :description="liked ? '还没有点赞照片' : '还没有喜欢的照片，点击照片上的爱心按钮收藏'" :image-size="96" />
+
+      <div v-else-if="liked" class="month-section">
+        <div class="month-label">点赞照片 · 按点赞数排序</div>
+        <div class="photo-grid-compact" :style="gridStyle">
+          <div v-for="(photo, index) in photos" :key="photo.id">
+            <PhotoCard :photo="photo" @click="openViewer(index)" @toggle-favorite="handleToggleFavorite(photo.id)" />
+            <small>{{ photo.likeCount }} 个赞</small>
+          </div>
+        </div>
+      </div>
 
       <!-- Photo grid grouped by month -->
       <template v-else>
@@ -165,6 +186,8 @@ async function handleToggleFavorite(photoId: number) {
         </div>
       </template>
 
+      <el-button v-if="!loading && photos.length < totalElements" :loading="loadingMore" @click="loadMore">加载更多</el-button>
+
       <!-- Loading indicator -->
       <div v-if="loading || loadingMore" class="loading-indicator">
         <div class="loading-spinner"></div>
@@ -172,7 +195,7 @@ async function handleToggleFavorite(photoId: number) {
     </div>
 
     <!-- Timeline rail -->
-    <div v-if="timelineItems.length > 0" class="timeline-rail">
+    <div v-if="!liked && timelineItems.length > 0" class="timeline-rail">
       <el-button
         v-for="item in timelineItems"
         :key="`${item.year}-${item.month}`"

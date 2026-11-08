@@ -32,6 +32,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AlbumDetailView.vue'),
       },
       {
+        path: 'liked',
+        name: 'LikedPhotos',
+        component: () => import('@/views/FavoritesView.vue'),
+        props: { liked: true },
+      },
+      {
         path: 'favorites',
         name: 'Favorites',
         component: () => import('@/views/FavoritesView.vue'),

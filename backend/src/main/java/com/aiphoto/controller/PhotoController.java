@@ -234,6 +234,13 @@ public class PhotoController {
         return ResponseEntity.ok(photoService.toggleTimeline(id));
     }
 
+    @GetMapping("/liked")
+    public ResponseEntity<Page<PhotoDTO>> getLiked(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(photoService.getLiked(PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 200))));
+    }
+
     @GetMapping("/favorites")
     public ResponseEntity<Page<PhotoDTO>> getFavorites(
             @RequestParam(defaultValue = "0") int page,
