@@ -663,7 +663,7 @@ async function importPreviewAsset() {
   const asset = previewViewerAsset.value
   if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
   previewViewerAction.value = 'import'
-  try { await importSelected([asset.id]) }
+  try { await importSelected([asset.id], asset) }
   finally { previewViewerAction.value = '' }
 }
 
@@ -690,7 +690,7 @@ async function deletePreviewAsset(ignore: boolean) {
     if (ignore) {
       const { data } = await crawlApi.skipAssets(asset.jobId, [asset.id], '用户选择删除并忽略')
       if (!data.success) throw new Error('加入忽略清单失败')
-      await loadImageSkips()
+      void loadImageSkips()
     }
     const { data } = await crawlApi.deleteAssets(asset.jobId, [asset.id])
     if (!data.success) throw new Error(ignore ? '已加入忽略清单，但删除失败，请重试' : '删除图片失败')
@@ -698,13 +698,13 @@ async function deletePreviewAsset(ignore: boolean) {
     if (previewViewerIndex.value + 1 < assetTotal.value) await stepPreviewViewer(1)
     else closePreviewViewer()
     ElMessage.success(ignore ? '已删除并加入忽略清单' : '已移到待整理区已删除列表')
-    await reloadVisibleAssets()
+    void reloadVisibleAssets()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || error?.message || '操作失败，请重试')
   } finally { previewViewerAction.value = '' }
 }
 async function stepPreviewViewer(direction: -1 | 1) {
-  if (!previewViewerVisible.value || previewViewerLoading.value) return
+  if (!previewViewerVisible.value) return
   const targetIndex = previewViewerIndex.value + direction
   if (targetIndex < 0 || targetIndex >= assetTotal.value) return
   const targetPage = Math.floor(targetIndex / assetPageSize.value)
@@ -724,7 +724,7 @@ async function stepPreviewViewer(direction: -1 | 1) {
   }
   if (!previewViewerVisible.value) return
   const asset = pageAssets[targetIndex % assetPageSize.value]
-  if (asset) await loadPreviewViewerAsset(asset, targetIndex)
+  if (asset) void loadPreviewViewerAsset(asset, targetIndex)
 }
 
 function closePreviewViewer() {
@@ -1153,8 +1153,8 @@ async function analyzeSimilarity() {
   } finally { busy.value = '' }
 }
 
-async function importSelected(assetIds?: number[]) {
-  const groups = selectedAssetGroups(assetIds ? new Set(assetIds) : selectedAssets.value)
+async function importSelected(assetIds?: number[], previewAsset?: CrawlAsset) {
+  const groups = previewAsset ? [{ jobId: previewAsset.jobId, ids: [previewAsset.id] }] : selectedAssetGroups(assetIds ? new Set(assetIds) : selectedAssets.value)
   if (!groups.length) return
   if (!assetIds) {
     const previews = await Promise.all(groups.map(async group => ({
@@ -1209,7 +1209,7 @@ async function importSelected(assetIds?: number[]) {
     pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value]
       .filter(id => !submittedIds.has(id) || acceptedAssetIds.has(id)))
     busy.value = ''
-    await reloadVisibleAssets()
+    void reloadVisibleAssets()
   }
 }
 
