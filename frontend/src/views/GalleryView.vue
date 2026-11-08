@@ -4,6 +4,7 @@ import { useResizeObserver } from '@vueuse/core'
 import { usePhotoStore } from '@/stores/photoStore'
 import { photoApi } from '@/api/photoApi'
 import { albumApi } from '@/api/albumApi'
+import { settingApi } from '@/api/settingApi'
 import type { Album } from '@/types'
 import { useMessage, useDialog } from '@/utils/feedback'
 import JustifiedPhotoGrid from '@/components/JustifiedPhotoGrid.vue'
@@ -29,17 +30,35 @@ const zoomLevel = ref(2)
 const rowHeights = [420, 340, 260, 190, 130]
 const rowHeight = computed(() => rowHeights[zoomLevel.value])
 
-function zoomIn() {
-  if (zoomLevel.value > 0) zoomLevel.value--
+const zoomSettingKey = 'gallery_zoom_level'
+const zoomBusy = ref(true)
+
+async function changeZoom(direction: -1 | 1) {
+  const previous = zoomLevel.value
+  const level = previous + direction
+  if (zoomBusy.value || level < 0 || level >= rowHeights.length) return
+  zoomBusy.value = true
+  zoomLevel.value = level
+  try {
+    await settingApi.update({ [zoomSettingKey]: String(level) })
+  } catch {
+    zoomLevel.value = previous
+    message.error('照片大小保存失败，请重试')
+  } finally {
+    zoomBusy.value = false
+  }
 }
 
-function zoomOut() {
-  if (zoomLevel.value < 4) zoomLevel.value++
-}
-
-// Set initial zoom based on viewport width
-function initZoom() {
-  zoomLevel.value = 2
+async function initZoom() {
+  try {
+    const { data } = await settingApi.getAll()
+    const saved = data[zoomSettingKey]
+    if (/^[0-4]$/.test(saved)) zoomLevel.value = Number(saved)
+  } catch {
+    message.error('照片大小设置加载失败')
+  } finally {
+    zoomBusy.value = false
+  }
 }
 
 // Selection functions
@@ -284,7 +303,7 @@ watch(zoomLevel, () => { void fillViewport() })
 useResizeObserver(scrollContainer, () => { void fillViewport() })
 onMounted(() => {
   galleryActive = true
-  initZoom()
+  void initZoom()
   void refreshGallery()
   nextTick(setupObserver)
   window.addEventListener('photos-changed', refreshGallery)
@@ -447,12 +466,12 @@ async function handleToggleFavorite(photoId: number) {
     <div v-if="!selectMode" class="gallery-floating-actions" role="group" aria-label="照片操作">
       <!-- Zoom controls -->
       <div class="gallery-zoom-controls">
-        <el-button class="zoom-btn" circle text @click="zoomIn" :disabled="zoomLevel === 0" title="放大" aria-label="放大照片">
+        <el-button class="zoom-btn" circle text @click="changeZoom(-1)" :disabled="zoomBusy || zoomLevel === 0" title="放大" aria-label="放大照片">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M12 4a1 1 0 011 1v6h6a1 1 0 110 2h-6v6a1 1 0 11-2 0v-6H5a1 1 0 110-2h6V5a1 1 0 011-1z" />
           </svg>
         </el-button>
-        <el-button class="zoom-btn" circle text @click="zoomOut" :disabled="zoomLevel === 4" title="缩小" aria-label="缩小照片">
+        <el-button class="zoom-btn" circle text @click="changeZoom(1)" :disabled="zoomBusy || zoomLevel === 4" title="缩小" aria-label="缩小照片">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M5 12a1 1 0 011-1h12a1 1 0 110 2H6a1 1 0 01-1-1z" />
           </svg>
