@@ -297,7 +297,7 @@ function getDockItemStyle(index: number) {
     </header>
 
     <!-- Main content -->
-    <main class="main-content" :class="{ 'has-tab-bar': isTabRoute }">
+    <main class="main-content" :class="{ 'has-tab-bar': isTabRoute, 'gallery-content': route.name === 'Gallery' }">
       <router-view v-slot="{ Component }">
         <transition name="slide-fade" mode="out-in">
           <component :is="Component" />
@@ -446,7 +446,7 @@ function getDockItemStyle(index: number) {
   overflow-y: auto;
 }
 
-.main-content.has-tab-bar {
+.main-content.has-tab-bar:not(.gallery-content) {
   padding-bottom: calc(110px + var(--safe-bottom));
 }
 

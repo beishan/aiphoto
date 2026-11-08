@@ -491,12 +491,14 @@ async function handleToggleFavorite(photoId: number) {
 
 .gallery-wrapper {
   position: relative;
-  min-height: calc(100vh - var(--top-bar-height) - var(--tab-height));
+  min-height: calc(100dvh - var(--top-bar-height));
 }
 
 .gallery-scroll {
-  height: calc(100vh - var(--top-bar-height) - var(--tab-height));
+  height: calc(100dvh - var(--top-bar-height));
+  box-sizing: border-box;
   overflow-y: auto;
+  padding-bottom: calc(110px + var(--safe-bottom));
 }
 
 /* Selection toolbar */
