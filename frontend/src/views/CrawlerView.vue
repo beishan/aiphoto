@@ -191,7 +191,7 @@ const previewViewerSourcePageName = computed(() => {
 const previewViewerIndex = ref(0)
 const previewViewerUrl = ref('')
 const previewViewerLoading = ref(false)
-const previewViewerAction = ref<'import' | 'skip' | ''>('')
+const previewViewerAction = ref<'import' | 'skip' | 'delete' | 'delete-ignore' | ''>('')
 const previewViewerPages = reactive<Record<number, CrawlAsset[]>>({})
 let previewViewerRequest = 0
 let previewViewerObjectUrl = ''
@@ -675,6 +675,34 @@ async function skipPreviewAsset() {
   finally { previewViewerAction.value = '' }
 }
 
+async function deletePreviewAsset(ignore: boolean) {
+  const asset = previewViewerAsset.value
+  if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
+  previewViewerAction.value = ignore ? 'delete-ignore' : 'delete'
+  try {
+    const nextIndex = previewViewerIndex.value + 1
+    const nextPage = Math.floor(nextIndex / assetPageSize.value)
+    if (nextIndex < assetTotal.value && !previewViewerPages[nextPage]) {
+      const { data } = await crawlApi.reviewAssets(nextPage, assetPageSize.value, assetStatus.value,
+        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
+      previewViewerPages[nextPage] = data.content
+    }
+    if (ignore) {
+      const { data } = await crawlApi.skipAssets(asset.jobId, [asset.id], '用户选择删除并忽略')
+      if (!data.success) throw new Error('加入忽略清单失败')
+      await loadImageSkips()
+    }
+    const { data } = await crawlApi.deleteAssets(asset.jobId, [asset.id])
+    if (!data.success) throw new Error(ignore ? '已加入忽略清单，但删除失败，请重试' : '删除图片失败')
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => id !== asset.id))
+    if (previewViewerIndex.value + 1 < assetTotal.value) await stepPreviewViewer(1)
+    else closePreviewViewer()
+    ElMessage.success(ignore ? '已删除并加入忽略清单' : '已移到待整理区已删除列表')
+    await reloadVisibleAssets()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || error?.message || '操作失败，请重试')
+  } finally { previewViewerAction.value = '' }
+}
 async function stepPreviewViewer(direction: -1 | 1) {
   if (!previewViewerVisible.value || previewViewerLoading.value) return
   const targetIndex = previewViewerIndex.value + direction
@@ -1825,6 +1853,8 @@ onUnmounted(() => {
                 <span>{{ previewViewerAsset?.fileSize ? formatBytes(previewViewerAsset.fileSize) : '未知大小' }}</span>
               </div>
               <div v-if="activeTab === 'review' && !taskDrawerVisible && previewViewerAsset?.status === 'DOWNLOADED'" class="collection-preview-actions">
+                <el-button size="small" :loading="previewViewerAction === 'delete-ignore'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(true)">删除并忽略</el-button>
+                <el-button size="small" :loading="previewViewerAction === 'delete'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(false)">删除</el-button>
                 <el-button size="small" :loading="previewViewerAction === 'skip'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="skipPreviewAsset">以后跳过</el-button>
                 <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">入库</el-button>
               </div>
