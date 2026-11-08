@@ -166,7 +166,7 @@ const assetPageSize = computed(() => taskDrawerVisible.value || activeTab.value 
 const recentImportProgress = computed(() => {
   if (!recentImportBatch.value?.requested) return 0
   if (['COMPLETED', 'PARTIAL', 'FAILED'].includes(recentImportBatch.value.status)) return 100
-  return Math.min(100, Math.round(recentImportProgressCount.value / recentImportBatch.value.requested * 100))
+  return Math.min(100, Math.round(Math.max(recentImportProgressCount.value, recentImportBatch.value.success + recentImportBatch.value.skipped + recentImportBatch.value.fail) / recentImportBatch.value.requested * 100))
 })
 function changeReviewPageSize(size: number) {
   if (!reviewPageSizes.includes(size)) return
@@ -1246,13 +1246,16 @@ async function loadImportBatch(batchId: number, status = importItemStatus.value)
 async function monitorImportBatches(batchIds: number[], batchAssets: Map<number, number[]>) {
   const pending = new Set(batchIds)
   const totals = { success: 0, skipped: 0, fail: 0 }
+  let interval = 10000
   while (pending.size && !importPolling.signal.aborted) {
+    await new Promise(resolve => setTimeout(resolve, interval))
+    interval = Math.min(interval * 2, 30000)
     for (const batchId of pending) {
       if (importPolling.signal.aborted) return
       try {
         const { data } = await crawlApi.importBatch(batchId, importPolling.signal)
         if (recentImportBatch.value?.id === batchId || batchId === batchIds[batchIds.length - 1]) recentImportBatch.value = data
-        if (batchId === batchIds[batchIds.length - 1] && ['QUEUED', 'RUNNING'].includes(data.status)) {
+        if (batchId === batchIds[batchIds.length - 1] && data.status === 'RUNNING' && importBatchVisible.value) {
           const { data: itemPage } = await crawlApi.importItems(batchId, 0, 200, '', importPolling.signal)
           recentImportProgressCount.value = itemPage.content.filter(item => ['SUCCESS', 'SKIPPED', 'FAILED'].includes(item.status)).length
           if (!importItemStatus.value) recentImportItems.value = itemPage.content
@@ -1262,8 +1265,6 @@ async function monitorImportBatches(batchIds: number[], batchAssets: Map<number,
           try { await loadImportBatch(batchId, data.fail ? 'FAILED' : importItemStatus.value) }
           catch { /* The batch is complete; a later refresh can load its item details. */ }
         }
-        // Refresh while completed images are still hidden to avoid flashing successful imports.
-        await reloadVisibleAssets()
         pending.delete(batchId)
         totals.success += data.success
         totals.skipped += data.skipped
@@ -1272,7 +1273,6 @@ async function monitorImportBatches(batchIds: number[], batchAssets: Map<number,
         pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value].filter(id => !completedIds.has(id)))
       } catch { /* Retry transient status polling failures. */ }
     }
-    if (pending.size) await new Promise(resolve => setTimeout(resolve, 2000))
   }
   if (importPolling.signal.aborted) return
   window.dispatchEvent(new Event('photos-changed'))
