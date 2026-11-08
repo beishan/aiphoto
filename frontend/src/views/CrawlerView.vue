@@ -1146,7 +1146,6 @@ async function importSelected(assetIds?: number[]) {
   const submittedIds = new Set(groups.flatMap(group => group.ids))
   pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...submittedIds])
   selectedAssets.value = new Set([...selectedAssets.value].filter(id => !submittedIds.has(id)))
-  if (activeTab.value === 'review' && !taskDrawerVisible.value) closePreviewViewer()
   const batchIds: number[] = []
   const batchAssets = new Map<number, number[]>()
   const acceptedAssetIds = new Set<number>()
@@ -1168,6 +1167,9 @@ async function importSelected(assetIds?: number[]) {
       await loadImportBatch(data.batchId, '')
     }
     pendingImport.value = null
+    if (assetIds && previewViewerVisible.value && previewViewerAsset.value && acceptedAssetIds.has(previewViewerAsset.value.id)) {
+      await stepPreviewViewer(1)
+    }
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => !acceptedAssetIds.has(id)))
     void monitorImportBatches(batchIds, batchAssets)
     ElMessage.info('图片已提交后台入库，批次进度会显示在下方；完成后会自动刷新图库和待整理列表')
