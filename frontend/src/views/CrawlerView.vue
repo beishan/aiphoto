@@ -106,6 +106,7 @@ const pagePageSize = 50
 const pageTotal = ref(0)
 const includedPageTotal = ref(0)
 const pageQuery = ref('')
+const importPolling = new AbortController()
 const recentImportBatch = ref<CrawlImportBatch | null>(null)
 const recentImportItems = ref<CrawlImportItem[]>([])
 const recentImportProgressCount = ref(0)
@@ -1233,8 +1234,8 @@ function newImportKey() {
 
 async function loadImportBatch(batchId: number, status = importItemStatus.value) {
   const [batchResult, itemResult] = await Promise.all([
-    crawlApi.importBatch(batchId),
-    crawlApi.importItems(batchId, 0, 100, status),
+    crawlApi.importBatch(batchId, importPolling.signal),
+    crawlApi.importItems(batchId, 0, 100, status, importPolling.signal),
   ])
   recentImportBatch.value = batchResult.data
   recentImportItems.value = itemResult.data.content
@@ -1245,13 +1246,14 @@ async function loadImportBatch(batchId: number, status = importItemStatus.value)
 async function monitorImportBatches(batchIds: number[], batchAssets: Map<number, number[]>) {
   const pending = new Set(batchIds)
   const totals = { success: 0, skipped: 0, fail: 0 }
-  while (pending.size) {
+  while (pending.size && !importPolling.signal.aborted) {
     for (const batchId of pending) {
+      if (importPolling.signal.aborted) return
       try {
-        const { data } = await crawlApi.importBatch(batchId)
+        const { data } = await crawlApi.importBatch(batchId, importPolling.signal)
         if (recentImportBatch.value?.id === batchId || batchId === batchIds[batchIds.length - 1]) recentImportBatch.value = data
         if (batchId === batchIds[batchIds.length - 1] && ['QUEUED', 'RUNNING'].includes(data.status)) {
-          const { data: itemPage } = await crawlApi.importItems(batchId, 0, 200)
+          const { data: itemPage } = await crawlApi.importItems(batchId, 0, 200, '', importPolling.signal)
           recentImportProgressCount.value = itemPage.content.filter(item => ['SUCCESS', 'SKIPPED', 'FAILED'].includes(item.status)).length
           if (!importItemStatus.value) recentImportItems.value = itemPage.content
         }
@@ -1272,6 +1274,7 @@ async function monitorImportBatches(batchIds: number[], batchAssets: Map<number,
     }
     if (pending.size) await new Promise(resolve => setTimeout(resolve, 2000))
   }
+  if (importPolling.signal.aborted) return
   window.dispatchEvent(new Event('photos-changed'))
   if (totals.fail) ElMessage.warning(`入库批次已结束：成功 ${totals.success}，重复跳过 ${totals.skipped}，失败 ${totals.fail}`)
   else ElMessage.success(`入库批次已结束：成功 ${totals.success}，重复跳过 ${totals.skipped}`)
@@ -1392,6 +1395,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handlePreviewViewerKeydown)
 })
 onUnmounted(() => {
+  importPolling.abort()
   thumbnailQueue.dispose()
   crawlerUnmounted = true
   if (pollTimer) clearInterval(pollTimer)
