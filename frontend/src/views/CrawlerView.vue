@@ -601,8 +601,29 @@ const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
   if (!thumbnailStillWanted(id) || previewImages[id]) return
   const { data } = await crawlApi.thumbnail(id, signal)
   if (signal.aborted || !thumbnailStillWanted(id)) return
-  const url = URL.createObjectURL(data)
+  let url = ''
   try {
+    // The thumbnail endpoint can fall back to an animated original.
+    let thumbnail = data
+    if (data.type !== 'image/jpeg') {
+      const bitmap = await createImageBitmap(data)
+      try {
+        if (signal.aborted || !thumbnailStillWanted(id)) return
+        const scale = Math.min(1, 400 / Math.max(bitmap.width, bitmap.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+        const context = canvas.getContext('2d')
+        if (!context) return
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+        const frame = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve))
+        if (!frame || signal.aborted || !thumbnailStillWanted(id)) return
+        thumbnail = frame
+      } finally {
+        bitmap.close()
+      }
+    }
+    url = URL.createObjectURL(thumbnail)
     // Decode in the bounded queue rather than making every card decode at once.
     const image = new Image()
     image.src = url
@@ -612,7 +633,7 @@ const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
       return
     }
   } catch { /* Keep the placeholder when the thumbnail cannot be decoded. */ }
-  URL.revokeObjectURL(url)
+  if (url) URL.revokeObjectURL(url)
 })
 async function loadPreviews() {
   if (!showCrawlerImages.value) return
