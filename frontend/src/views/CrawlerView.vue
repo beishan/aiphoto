@@ -10,6 +10,7 @@ import { useCrawlerImageVisibility } from '@/composables/useCrawlerImageVisibili
 import { crawlApi } from '@/api/crawlApi'
 import { createThumbnailQueue } from '@/utils/thumbnailQueue'
 import { crawlJobProgress } from '@/utils/crawlProgress'
+import StaticPhotoImage from '@/components/StaticPhotoImage.vue'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
 import '@/assets/crawler-actions.css'
@@ -115,6 +116,7 @@ const pendingImport = ref<{ signature: string; key: string } | null>(null)
 const pendingImportAssetIds = ref(new Set<number>())
 const imageSkips = ref<CrawlImageSkip[]>([])
 const skipQuery = ref('')
+const skipImageErrors = reactive(new Set<number>())
 const skipPage = ref(0)
 const skipLoading = ref(false)
 let skipRequest = 0
@@ -454,6 +456,7 @@ async function loadImageSkips() {
       await loadImageSkips()
       return
     }
+    skipImageErrors.clear()
     imageSkips.value = data.content
   } catch {
     if (request === skipRequest) ElMessage.error('跳过图片加载失败，请重试')
@@ -1705,10 +1708,8 @@ onUnmounted(() => {
           <el-empty v-if="!imageSkips.length && !skipLoading" description="暂无永久跳过的图片" />
           <div v-else class="skip-card-grid">
             <article v-for="skip in imageSkips" :key="skip.id" class="skip-image-card">
-              <el-image :key="skip.imageUrl" class="skip-card-image" :src="skip.imageUrl" fit="contain" loading="lazy" referrerpolicy="no-referrer">
-                <template #error><span class="skip-image-placeholder">原图不可用</span></template>
-                <template #placeholder><span class="skip-image-placeholder">加载图片中…</span></template>
-              </el-image>
+              <span v-if="skipImageErrors.has(skip.id)" class="skip-image-placeholder">原图不可用</span>
+              <StaticPhotoImage v-else :key="skip.imageUrl" class="skip-card-image" :src="skip.imageUrl" alt="跳过的图片静态封面" remote @error="skipImageErrors.add(skip.id)" style="object-fit:contain" />
               <div class="skip-card-copy">
                 <el-link :href="skip.imageUrl" target="_blank" rel="noopener noreferrer" type="primary" class="skip-card-url" :title="skip.imageUrl">{{ skip.imageUrl }}</el-link>
                 <p class="skip-card-source" :title="skip.sourcePageUrl || ''">来源：{{ skip.sourcePageUrl || '未记录来源' }}</p>
