@@ -789,16 +789,31 @@ function closePreviewViewer() {
 }
 
 function handlePreviewViewerKeydown(event: KeyboardEvent) {
-  if (!previewViewerVisible.value) return
+  if (!previewViewerVisible.value || event.defaultPrevented || event.isComposing
+    || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable
+    || target.closest('input, textarea, select, [role="textbox"], [role="combobox"], .el-message-box, .el-dialog'))) return
+  if (document.querySelector('.el-overlay-message-box')) return
+  const key = event.key.toLowerCase()
+  if (['a', 's', 'd', 'f'].includes(key)) {
+    const asset = previewViewerAsset.value
+    if (!showCrawlerImages.value || activeTab.value !== 'review' || taskDrawerVisible.value
+      || !asset || asset.status !== 'DOWNLOADED' || previewViewerLoading.value
+      || previewViewerAction.value || busy.value || pendingImportAssetIds.value.has(asset.id)) return
+    event.preventDefault()
+    const action = key === 'a' ? importPreviewAsset : key === 's' ? skipPreviewAsset
+      : () => deletePreviewAsset(key === 'f')
+    void action().catch((error: any) => ElMessage.error(error?.response?.data?.message || error?.message || '操作失败，请重试'))
+    return
+  }
   if (event.key === 'ArrowLeft') {
     event.preventDefault()
     void stepPreviewViewer(-1)
   } else if (event.key === 'ArrowRight') {
     event.preventDefault()
     void stepPreviewViewer(1)
-  } else if (event.key === 'Escape') {
-    closePreviewViewer()
-  }
+  } else if (event.key === 'Escape') closePreviewViewer()
 }
 
 onBeforeRouteLeave(() => {
@@ -1919,10 +1934,10 @@ onUnmounted(() => {
                 <span>{{ previewViewerAsset?.fileSize ? formatBytes(previewViewerAsset.fileSize) : '未知大小' }}</span>
               </div>
               <div v-if="activeTab === 'review' && !taskDrawerVisible && previewViewerAsset?.status === 'DOWNLOADED'" class="collection-preview-actions">
-                <el-button size="small" :loading="previewViewerAction === 'delete-ignore'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(true)">删除并忽略</el-button>
-                <el-button size="small" :loading="previewViewerAction === 'delete'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(false)">删除</el-button>
-                <el-button size="small" :loading="previewViewerAction === 'skip'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="skipPreviewAsset">以后跳过</el-button>
-                <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">{{ previewViewerAction === 'import' ? '正在提交…' : pendingImportAssetIds.has(previewViewerAsset.id) ? '后台入库中…' : '入库' }}</el-button>
+                <el-button size="small" :loading="previewViewerAction === 'delete-ignore'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(true)">删除并忽略 (F)</el-button>
+                <el-button size="small" :loading="previewViewerAction === 'delete'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(false)">删除 (D)</el-button>
+                <el-button size="small" :loading="previewViewerAction === 'skip'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="skipPreviewAsset">以后跳过 (S)</el-button>
+                <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">{{ previewViewerAction === 'import' ? '正在提交…' : pendingImportAssetIds.has(previewViewerAsset.id) ? '后台入库中…' : '入库 (A)' }}</el-button>
               </div>
             </footer>
           </section>
