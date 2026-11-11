@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Photo } from '@/types'
+import StaticPhotoImage from './StaticPhotoImage.vue'
 
 const props = defineProps<{
   photo: Photo
@@ -47,7 +48,8 @@ function handleClick() {
 
 <template>
   <div class="photo-cell" :class="{ selected }" @click="handleClick">
-    <img v-if="thumbnailSrc" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" loading="lazy" decoding="async" class="photo-img" @error="handleImageError" />
+    <StaticPhotoImage v-if="thumbnailSrc && !/\.(jpe?g)(?:[?#]|$)/i.test(thumbnailSrc)" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" class="photo-img" @error="handleImageError" />
+    <img v-else-if="thumbnailSrc" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" loading="lazy" decoding="async" class="photo-img" @error="handleImageError" />
     <span v-else class="photo-unavailable" role="status">{{ isVideo ? '视频封面不可用' : '图片加载失败，点击预览' }}</span>
     <div v-if="isVideo" class="badge video-badge">
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
