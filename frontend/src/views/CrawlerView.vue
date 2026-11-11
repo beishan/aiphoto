@@ -1700,6 +1700,7 @@ onUnmounted(() => {
       <el-card class="surface-card" shadow="never">
         <template #header><div class="card-heading"><div><p class="eyebrow">PERSISTENT EXCLUSIONS</p><h2>跳过图片管理</h2><p>这些图片 URL 再次出现时会留下来源记录，但不会下载文件。</p></div><el-tag type="info" round>{{ skipTotal }} 条</el-tag></div></template>
         <el-input v-model="skipQuery" class="page-search" clearable placeholder="搜索图片 URL" :prefix-icon="Search" @keyup.enter="searchImageSkips" @clear="searchImageSkips"><template #append><el-button @click="searchImageSkips">搜索</el-button></template></el-input>
+        <el-pagination class="pagination" layout="total, prev, pager, next, jumper" :disabled="skipLoading" :current-page="skipPage + 1" :page-size="50" :total="skipTotal" @current-change="changeSkipPage" />
         <div v-loading="skipLoading" class="skip-results" aria-label="跳过图片列表" :aria-busy="skipLoading">
           <el-empty v-if="!imageSkips.length && !skipLoading" description="暂无永久跳过的图片" />
           <div v-else class="skip-card-grid">

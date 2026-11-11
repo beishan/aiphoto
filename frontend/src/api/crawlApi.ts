@@ -107,7 +107,8 @@ export const crawlApi = {
   reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null, importStatus = 'NOT_IMPORTED') => http.get<SpringPage<CrawlAsset>>('/crawl/review/assets', { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined, importStatus } })
     .then(response => ({ ...response, data: normalizePage(response.data) })),
   skipAssets: (jobId: number, ids: number[], reason: string) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/skip`, { ids, reason }),
-  imageSkips: (page = 0, size = 50, query = '') => http.get<PageResponse<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } }),
+  imageSkips: (page = 0, size = 50, query = '') => http.get<SpringPage<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } })
+    .then(response => ({ ...response, data: normalizePage(response.data) })),
   deleteImageSkip: (id: number) => http.delete<{ success: number }>(`/crawl/image-skips/${id}`),
   analyzeSimilarity: (jobId: number, threshold: number) => http.post<{ analyzed: number; groups: number; matched: number; threshold: number }>(`/crawl/jobs/${jobId}/similarity`, null, { params: { threshold } }),
   deleteDownloadedFiles: (jobId: number) => http.post<{ success: number; failed: number }>(`/crawl/jobs/${jobId}/assets/delete-downloaded`),
