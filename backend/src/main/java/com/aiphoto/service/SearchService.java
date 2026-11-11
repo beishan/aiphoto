@@ -32,7 +32,7 @@ public class SearchService {
     private final SettingService settingService;
 
     public Page<PhotoDTO> search(SearchRequest request, Long userId) {
-        PageRequest pageRequest = PageRequest.of(request.getPage(), request.getSize());
+        PageRequest pageRequest = PageRequest.of(Math.max(0, request.getPage()), Math.clamp(request.getSize(), 1, 200));
 
         // Check if there are filter conditions
         boolean hasFilters = request.getTagId() != null
@@ -93,26 +93,7 @@ public class SearchService {
     }
 
     private Page<PhotoDTO> filteredSearch(SearchRequest request, PageRequest pageRequest) {
-        List<Photo> allPhotos = photoRepository.findAll();
-        List<Photo> filtered = applyFilters(allPhotos, request);
-
-        // Sort
-        String sortBy = request.getSortBy();
-        String sortOrder = request.getSortOrder();
-        Comparator<Photo> comparator;
-        if ("rating".equals(sortBy)) {
-            comparator = Comparator.comparing(p -> p.getRating() != null ? p.getRating() : 0);
-        } else if ("name".equals(sortBy)) {
-            comparator = Comparator.comparing(p -> p.getOriginalFilename() != null ? p.getOriginalFilename() : "");
-        } else {
-            comparator = Comparator.comparing(p -> p.getExifDate() != null ? p.getExifDate() : p.getCreatedAt());
-        }
-        if ("desc".equals(sortOrder)) {
-            comparator = comparator.reversed();
-        }
-        filtered.sort(comparator);
-
-        return paginate(filtered, pageRequest);
+        return photoRepository.findAll(PhotoSearchSpecification.from(request), pageRequest).map(this::toDTO);
     }
 
     private List<Photo> applyFilters(List<Photo> photos, SearchRequest request) {

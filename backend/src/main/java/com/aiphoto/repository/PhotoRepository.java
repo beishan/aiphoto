@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface PhotoRepository extends JpaRepository<Photo, Long> {
+public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Photo> {
 
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
