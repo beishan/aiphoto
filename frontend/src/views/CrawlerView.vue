@@ -116,6 +116,8 @@ const pendingImportAssetIds = ref(new Set<number>())
 const imageSkips = ref<CrawlImageSkip[]>([])
 const skipQuery = ref('')
 const skipPage = ref(0)
+const skipLoading = ref(false)
+let skipRequest = 0
 const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
@@ -438,9 +440,24 @@ async function reloadVisibleAssets() {
   else await loadJobDetail()
 }
 async function loadImageSkips() {
-  const { data } = await crawlApi.imageSkips(skipPage.value, 50, skipQuery.value)
-  imageSkips.value = data.content
-  skipTotal.value = data.totalElements
+  const request = ++skipRequest
+  skipLoading.value = true
+  try {
+    const { data } = await crawlApi.imageSkips(skipPage.value, 50, skipQuery.value)
+    if (request !== skipRequest) return
+    skipTotal.value = data.totalElements
+    const lastPage = Math.max(0, Math.ceil(data.totalElements / 50) - 1)
+    if (skipPage.value > lastPage) {
+      skipPage.value = lastPage
+      await loadImageSkips()
+      return
+    }
+    imageSkips.value = data.content
+  } catch {
+    if (request === skipRequest) ElMessage.error('跳过图片加载失败，请重试')
+  } finally {
+    if (request === skipRequest) skipLoading.value = false
+  }
 }
 
 async function refresh() {
@@ -1625,15 +1642,25 @@ onUnmounted(() => {
       <el-card class="surface-card" shadow="never">
         <template #header><div class="card-heading"><div><p class="eyebrow">PERSISTENT EXCLUSIONS</p><h2>跳过图片管理</h2><p>这些图片 URL 再次出现时会留下来源记录，但不会下载文件。</p></div><el-tag type="info" round>{{ skipTotal }} 条</el-tag></div></template>
         <el-input v-model="skipQuery" class="page-search" clearable placeholder="搜索图片 URL" :prefix-icon="Search" @keyup.enter="searchImageSkips" @clear="searchImageSkips"><template #append><el-button @click="searchImageSkips">搜索</el-button></template></el-input>
-        <el-table :data="imageSkips" table-layout="fixed" empty-text="暂无永久跳过的图片">
-          <el-table-column label="图片 URL" min-width="360" show-overflow-tooltip><template #default="{ row }"><el-link :href="row.imageUrl" target="_blank" type="primary">{{ row.imageUrl }}</el-link></template></el-table-column>
-          <el-table-column label="规则来源页面" min-width="300" show-overflow-tooltip prop="sourcePageUrl" />
-          <el-table-column label="原因" width="150" show-overflow-tooltip prop="reason" />
-          <el-table-column label="已跳过" width="90"><template #default="{ row }">{{ row.skipCount }} 次</template></el-table-column>
-          <el-table-column label="加入时间" width="150"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
-          <el-table-column label="" width="100"><template #default="{ row }"><el-button link type="danger" @click="removeImageSkip(row)">恢复采集</el-button></template></el-table-column>
-        </el-table>
-        <el-pagination v-if="skipTotal > 50" class="pagination" layout="prev, pager, next, total" :current-page="skipPage + 1" :page-size="50" :total="skipTotal" @current-change="changeSkipPage" />
+        <div v-loading="skipLoading" class="skip-results" aria-label="跳过图片列表" :aria-busy="skipLoading">
+          <el-empty v-if="!imageSkips.length && !skipLoading" description="暂无永久跳过的图片" />
+          <div v-else class="skip-card-grid">
+            <article v-for="skip in imageSkips" :key="skip.id" class="skip-image-card">
+              <el-image :key="skip.imageUrl" class="skip-card-image" :src="skip.imageUrl" fit="contain" loading="lazy" referrerpolicy="no-referrer">
+                <template #error><span class="skip-image-placeholder">原图不可用</span></template>
+                <template #placeholder><span class="skip-image-placeholder">加载图片中…</span></template>
+              </el-image>
+              <div class="skip-card-copy">
+                <el-link :href="skip.imageUrl" target="_blank" rel="noopener noreferrer" type="primary" class="skip-card-url" :title="skip.imageUrl">{{ skip.imageUrl }}</el-link>
+                <p class="skip-card-source" :title="skip.sourcePageUrl || ''">来源：{{ skip.sourcePageUrl || '未记录来源' }}</p>
+                <p>{{ skip.reason || '永久跳过' }}</p>
+                <div class="skip-card-meta"><el-tag size="small" type="info">已跳过 {{ skip.skipCount }} 次</el-tag><time>{{ formatTime(skip.createdAt) }}</time></div>
+                <el-button type="primary" plain @click="removeImageSkip(skip)">恢复采集</el-button>
+              </div>
+            </article>
+          </div>
+        </div>
+        <el-pagination class="pagination" layout="total, prev, pager, next, jumper" :disabled="skipLoading" :current-page="skipPage + 1" :page-size="50" :total="skipTotal" @current-change="changeSkipPage" />
       </el-card>
     </section>
 
@@ -1913,6 +1940,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.skip-results{min-height:240px;margin-top:20px}.skip-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:16px}.skip-image-card{min-width:0;overflow:hidden;border:1px solid var(--separator);border-radius:14px;background:var(--bg-secondary)}.skip-card-image{display:block;width:100%;height:190px;background:var(--bg-card)}.skip-image-placeholder{display:grid;place-items:center;width:100%;height:190px;color:var(--text-tertiary);font-size:12px}.skip-card-copy{display:grid;gap:12px;padding:16px;min-width:0}.skip-card-copy p{margin:0;color:var(--text-secondary);font-size:12px;overflow-wrap:anywhere}.skip-card-url{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.skip-card-source{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.skip-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.skip-card-meta time{font-size:11px;color:var(--text-tertiary)}
+
 .source-page-url{display:block;color:var(--text-secondary);font-size:12px}
 
 .task-list-panel{padding:24px;min-width:0}.task-list-filters{margin:0 0 20px}.task-list-filters .el-select{width:180px}.task-list-filters .task-page-search{width:280px}.workspace-switcher{overflow-x:auto}.workspace-switcher :deep(.el-segmented){min-width:920px}
