@@ -35,10 +35,20 @@ public class PhotoIndexingService {
     private final IndexResultService resultService;
     private final ObjectMapper objectMapper;
 
-    public List<Photo> findPendingPhotos() {
+    public record IndexPlan(long maxId, long total, boolean clip, boolean faces, boolean tags, boolean caption) {}
+
+    public IndexPlan planPendingPhotos() {
         var models = aiServiceClient.modelStatus();
-        return photoRepository.findNeedingIndexing(models.enabled("clip"), models.enabled("insightface"),
-                models.enabled("yolo"), models.enabled("blip"));
+        long max = photoRepository.maxPhotoId();
+        boolean clip = models.enabled("clip"), faces = models.enabled("insightface");
+        boolean tags = models.enabled("yolo"), caption = models.enabled("blip");
+        long total = photoRepository.countPendingIndex(0, max, clip, faces, tags, caption);
+        return new IndexPlan(max, total, clip, faces, tags, caption);
+    }
+
+    @Async
+    public void indexPendingPhotos(Long taskId, IndexPlan plan, Long userId) {
+        runIndex(taskId, null, userId, plan);
     }
 
     @Async
@@ -48,16 +58,35 @@ public class PhotoIndexingService {
 
     @Async
     public void indexPhotos(Long taskId, List<Long> photoIds, Long requestingUserId) {
+        runIndex(taskId, photoIds, requestingUserId, null);
+    }
+
+    private void runIndex(Long taskId, List<Long> photoIds, Long requestingUserId, IndexPlan plan) {
         AiTask task = aiTaskRepository.findById(taskId).orElse(null);
         if (task == null) return;
         task.setStatus(AiTask.TaskStatus.RUNNING);
         aiTaskRepository.save(task);
         List<Map<String, Object>> failures = new ArrayList<>();
-        int succeeded = 0;
+        long succeeded = 0;
+        long failed = 0;
+        long processed = 0;
+        long total = plan == null ? photoIds.size() : plan.total();
         try {
             var models = aiServiceClient.modelStatus();
-            for (int i = 0; i < photoIds.size(); i++) {
-                Long id = photoIds.get(i);
+            java.util.Iterator<Long> ids = plan == null ? photoIds.iterator() : new java.util.Iterator<>() {
+                private long cursor = 0;
+                private java.util.Iterator<Long> batch = List.<Long>of().iterator();
+                public boolean hasNext() {
+                    if (!batch.hasNext()) {
+                        batch = photoRepository.pendingIndexIds(cursor, plan.maxId(), plan.clip(), plan.faces(),
+                                plan.tags(), plan.caption(), org.springframework.data.domain.PageRequest.of(0, 100)).iterator();
+                    }
+                    return batch.hasNext();
+                }
+                public Long next() { Long id = batch.next(); cursor = id; return id; }
+            };
+            while (ids.hasNext()) {
+                Long id = ids.next();
                 Map<String, String> errors = new LinkedHashMap<>();
                 Photo photo = photoRepository.findById(id).orElse(null);
                 if (photo == null) {
@@ -92,15 +121,21 @@ public class PhotoIndexingService {
                     }
                 }
                 if (errors.isEmpty()) succeeded++;
-                else failures.add(Map.of("photoId", id, "stages", errors));
-                task.setProgress((i + 1) * 100 / photoIds.size());
-                aiTaskRepository.save(task);
-                send(task, "已处理 " + (i + 1) + "/" + photoIds.size());
+                else {
+                    failed++;
+                    if (failures.size() < 100) failures.add(Map.of("photoId", id, "stages", errors));
+                }
+                processed++;
+                task.setProgress((int) Math.min(99, processed * 100 / Math.max(1, total)));
+                if (processed % 10 == 0 || processed == total) {
+                    aiTaskRepository.save(task);
+                    send(task, "已处理 " + processed + "/" + total);
+                }
             }
-            task.setStatus(failures.isEmpty() ? AiTask.TaskStatus.COMPLETED : AiTask.TaskStatus.FAILED);
+            task.setStatus(failed == 0 ? AiTask.TaskStatus.COMPLETED : AiTask.TaskStatus.FAILED);
             task.setProgress(100);
-            task.setResultJson(json(Map.of("total", photoIds.size(), "succeeded", succeeded,
-                    "failed", failures.size(), "failures", failures)));
+            task.setResultJson(json(Map.of("total", processed, "planned", total, "succeeded", succeeded,
+                    "failed", failed, "failures", failures, "failuresTruncated", failed > failures.size())));
         } catch (Exception exception) {
             log.error("AI indexing failed", exception);
             task.setStatus(AiTask.TaskStatus.FAILED);

@@ -272,20 +272,19 @@ public class PhotoController {
 
     @PostMapping("/index-all")
     public ResponseEntity<Map<String, Object>> indexAllPhotos(Authentication authentication) {
-        List<Photo> photos = photoIndexingService.findPendingPhotos();
-        if (photos.isEmpty()) {
+        var plan = photoIndexingService.planPendingPhotos();
+        if (plan.total() == 0) {
             return ResponseEntity.ok(Map.of("taskId", 0, "count", 0, "message", "No photos to index"));
         }
 
-        List<Long> photoIds = photos.stream().map(Photo::getId).collect(Collectors.toList());
 
         AiTask aiTask = new AiTask();
         aiTask.setType(AiTask.TaskType.INDEX);
-        aiTask.setPhotoIdsJson(photoIds.toString());
+        aiTask.setPhotoIdsJson("[]");
         aiTask = aiTaskRepository.save(aiTask);
 
-        photoIndexingService.indexPhotos(aiTask.getId(), photoIds, getUserId(authentication));
+        photoIndexingService.indexPendingPhotos(aiTask.getId(), plan, getUserId(authentication));
 
-        return ResponseEntity.ok(Map.of("taskId", aiTask.getId(), "count", photoIds.size()));
+        return ResponseEntity.ok(Map.of("taskId", aiTask.getId(), "count", plan.total()));
     }
 }

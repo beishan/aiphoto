@@ -19,6 +19,19 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.id < :beforeId ORDER BY p.id DESC")
     List<Photo> findBeforeId(@Param("beforeId") long beforeId, Pageable pageable);
 
+    @Query("SELECT COALESCE(MAX(p.id), 0) FROM Photo p")
+    long maxPhotoId();
+
+    @Query("SELECT COUNT(p) FROM Photo p WHERE p.deletedAt IS NULL AND p.id > :afterId AND p.id <= :maxId AND ((:clip = true AND p.embedding IS NULL) OR (:faces = true AND p.facesIndexed = false) OR (:tags = true AND p.tagsIndexed = false) OR (:caption = true AND p.captionIndexed = false))")
+    long countPendingIndex(@Param("afterId") long afterId, @Param("maxId") long maxId,
+            @Param("clip") boolean clip, @Param("faces") boolean faces,
+            @Param("tags") boolean tags, @Param("caption") boolean caption);
+
+    @Query("SELECT p.id FROM Photo p WHERE p.deletedAt IS NULL AND p.id > :afterId AND p.id <= :maxId AND ((:clip = true AND p.embedding IS NULL) OR (:faces = true AND p.facesIndexed = false) OR (:tags = true AND p.tagsIndexed = false) OR (:caption = true AND p.captionIndexed = false)) ORDER BY p.id")
+    List<Long> pendingIndexIds(@Param("afterId") long afterId, @Param("maxId") long maxId,
+            @Param("clip") boolean clip, @Param("faces") boolean faces,
+            @Param("tags") boolean tags, @Param("caption") boolean caption, Pageable pageable);
+
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
     Page<Photo> findAll(Pageable pageable);
