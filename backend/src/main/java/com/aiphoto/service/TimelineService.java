@@ -19,6 +19,19 @@ public class TimelineService {
     private final PhotoRepository photoRepository;
     private final LocalStorageService storageService;
 
+    public record MonthSummary(int year, int month, long count) {}
+
+    public List<MonthSummary> months() {
+        return photoRepository.getTimelineGrouped().stream().map(row -> new MonthSummary(
+                ((Number) row[0]).intValue(), ((Number) row[1]).intValue(), ((Number) row[2]).longValue())).toList();
+    }
+
+    public org.springframework.data.domain.Page<PhotoDTO> month(int year, int month, int page, int size) {
+        var start = java.time.YearMonth.of(year, month).atDay(1).atStartOfDay();
+        return photoRepository.timelineMonth(start, start.plusMonths(1),
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 200))).map(this::toDTO);
+    }
+
     public Map<Integer, Map<Integer, List<PhotoDTO>>> getTimelineGrouped() {
         // Only show photos that are added to timeline
         List<Photo> photos = photoRepository.findTimelinePhotos();

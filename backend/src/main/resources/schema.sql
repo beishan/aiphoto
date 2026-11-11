@@ -739,3 +739,5 @@ ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS image_host_timeout_threshold IN
 
 -- Cursor browsing of live photos without scanning trash entries.
 CREATE INDEX IF NOT EXISTS idx_photos_live_id ON photos (id DESC) WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_photos_live_timeline_date_id ON photos (exif_date DESC, id DESC) WHERE deleted_at IS NULL AND in_timeline = TRUE AND exif_date IS NOT NULL;

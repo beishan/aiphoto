@@ -1,102 +1,75 @@
 <script setup lang="ts">
-import { onMounted, ref, onUnmounted, nextTick, computed } from 'vue'
+import { onMounted, ref, computed, onUnmounted } from 'vue'
 import http from '@/api/http'
-import type { Photo, TimelineData } from '@/types'
+import { normalizePage, type SpringPage } from '@/api/pageResponse'
+import type { Photo } from '@/types'
 import PhotoViewer from '@/components/PhotoViewer.vue'
+import PhotoCard from '@/components/PhotoCard.vue'
+import { photoApi } from '@/api/photoApi'
+import { ElMessage } from 'element-plus'
 
-const timeline = ref<TimelineData>({})
 const loading = ref(false)
+const monthLoading = ref(false)
+const photos = ref<Photo[]>([])
+const page = ref(1)
+const total = ref(0)
 const viewerVisible = ref(false)
 const viewerPhotos = ref<Photo[]>([])
 const viewerIndex = ref(0)
-
-// Timeline axis
-const scrollContainer = ref<HTMLElement | null>(null)
-const activeYearMonth = ref<string>('')
+const activeYearMonth = ref('')
 const timelineNodes = ref<{ year: number; month: number; count: number; key: string }[]>([])
-
-onMounted(async () => {
+const activeNode = computed(() => timelineNodes.value.find(node => node.key === activeYearMonth.value))
+let requestId = 0
+onUnmounted(() => { requestId++ })
+async function loadMonth() {
+  const node = activeNode.value
+  if (!node) return
+  const request = ++requestId
+  monthLoading.value = true
+  photos.value = []
+  try {
+    const response = await http.get<SpringPage<Photo>>('/timeline/photos', { params: { year: node.year, month: node.month, page: page.value - 1, size: 60 } })
+    if (request !== requestId) return
+    const data = normalizePage(response.data)
+    photos.value = data.content
+    total.value = data.totalElements
+  } catch { if (request === requestId) ElMessage.error('时间线照片加载失败，请重试') }
+  finally { if (request === requestId) monthLoading.value = false }
+}
+async function init() {
   loading.value = true
   try {
-    const { data } = await http.get('/timeline')
-    timeline.value = data
-    buildTimelineNodes()
-    await nextTick()
-    setupScrollObserver()
-  } finally {
-    loading.value = false
-  }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
-})
-
-function buildTimelineNodes() {
-  const nodes: { year: number; month: number; count: number; key: string }[] = []
-  for (const [year, months] of Object.entries(timeline.value)) {
-    for (const [month, photos] of Object.entries(months as Record<string, Photo[]>)) {
-      nodes.push({
-        year: Number(year),
-        month: Number(month),
-        count: photos.length,
-        key: `ym-${year}-${month}`,
-      })
-    }
-  }
-  // Sort: newest first
-  nodes.sort((a, b) => b.year - a.year || b.month - a.month)
-  timelineNodes.value = nodes
-  if (nodes.length > 0) {
-    activeYearMonth.value = nodes[0].key
-  }
+    const { data } = await http.get<{ year: number; month: number; count: number }[]>('/timeline/months')
+    timelineNodes.value = data.map(node => ({ ...node, key: 'ym-' + node.year + '-' + node.month }))
+    if (data.length) await scrollToNode(timelineNodes.value[0].key)
+  } catch { ElMessage.error('时间线加载失败，请重试') }
+  finally { loading.value = false }
 }
-
-function setupScrollObserver() {
-  window.addEventListener('scroll', onScroll, { passive: true })
-  onScroll()
+onMounted(init)
+async function scrollToNode(key: string) {
+  viewerVisible.value = false
+  viewerPhotos.value = []
+  activeYearMonth.value = key
+  page.value = 1
+  total.value = activeNode.value?.count || 0
+  await loadMonth()
 }
-
-function onScroll() {
-  const sections = document.querySelectorAll('[data-ym-key]')
-  for (let i = sections.length - 1; i >= 0; i--) {
-    const el = sections[i] as HTMLElement
-    const rect = el.getBoundingClientRect()
-    if (rect.top <= 120) {
-      activeYearMonth.value = el.dataset.ymKey || ''
-      break
-    }
-  }
+async function toggleFavorite(photo: Photo) {
+  try {
+    const { data } = await photoApi.update(photo.id, { favorite: !photo.favorite })
+    photo.favorite = data.favorite
+  } catch { ElMessage.error('收藏更新失败，请重试') }
 }
-
-function scrollToNode(key: string) {
-  const el = document.querySelector(`[data-ym-key="${key}"]`) as HTMLElement
-  if (el) {
-    const top = el.offsetTop - 60
-    window.scrollTo({ top, behavior: 'smooth' })
-    activeYearMonth.value = key
-  }
-}
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-function openViewer(photos: Photo[], index: number) {
-  viewerPhotos.value = photos
+function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function openViewer(index: number) {
+  viewerPhotos.value = photos.value
   viewerIndex.value = index
   viewerVisible.value = true
 }
-
 const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
-
-// Group nodes by year for display
 const groupedNodes = computed(() => {
   const groups: Record<number, typeof timelineNodes.value> = {}
-  for (const node of timelineNodes.value) {
-    if (!groups[node.year]) groups[node.year] = []
-    groups[node.year].push(node)
-  }
+  for (const node of timelineNodes.value) (groups[node.year] ||= []).push(node)
   return groups
 })
 </script>
@@ -140,49 +113,20 @@ const groupedNodes = computed(() => {
         <!-- Empty -->
         <el-empty v-else-if="timelineNodes.length === 0" class="empty-state" description="时间线暂无照片，在照片详情页中添加照片" :image-size="92" />
 
-        <!-- Timeline -->
-        <div v-else>
-          <div v-for="(months, year) in timeline" :key="year" class="timeline-year">
-            <div v-for="(photos, month) in months" :key="`${year}-${month}`"
-              :data-ym-key="`ym-${year}-${month}`"
-              class="timeline-month-section">
-              <div class="month-header">
-                <span class="month-label">{{ year }}年 {{ monthNames[(month as number) - 1] }}</span>
-                <span class="month-count">{{ photos.length }} 张</span>
-              </div>
-
-              <div class="photo-grid-compact">
-                <div
-                  v-for="(photo, index) in photos"
-                  :key="photo.id"
-                  class="grid-item"
-                  @click="openViewer(photos, index)"
-                >
-                  <img
-                    v-if="photo.thumbnailUrl"
-                    :src="photo.thumbnailUrl"
-                    :alt="photo.originalFilename || ''"
-                    loading="lazy"
-                    class="grid-img"
-                  />
-                  <div v-else class="grid-placeholder"></div>
-                  <div v-if="photo.rating" class="rating-badge">{{ '★'.repeat(photo.rating) }}</div>
-                </div>
-              </div>
-            </div>
+        <section v-else-if="activeNode" v-loading="monthLoading" class="timeline-month-section">
+          <div class="month-header"><span class="month-label">{{ activeNode.year }}年 {{ monthNames[activeNode.month - 1] }}</span><span class="month-count">{{ total }} 张</span><el-button text @click="loadMonth">刷新</el-button></div>
+          <div class="photo-grid-compact">
+            <PhotoCard v-for="(photo, index) in photos" :key="photo.id" :photo="photo" @click="openViewer(index)" @toggle-favorite="toggleFavorite(photo)" />
           </div>
-        </div>
+          <el-empty v-if="!monthLoading && !photos.length" description="本页暂无照片" />
+          <el-pagination v-model:current-page="page" :page-size="60" :total="total" :disabled="monthLoading" layout="total, prev, pager, next" @current-change="loadMonth" />
+        </section>
+
       </div>
     </div>
-
-    <PhotoViewer
-      v-model:show="viewerVisible"
-      :photos="viewerPhotos"
-      :initial-index="viewerIndex"
-    />
+    <PhotoViewer v-model:show="viewerVisible" :photos="viewerPhotos" :initial-index="viewerIndex" />
   </div>
 </template>
-
 <style scoped>
 .timeline-view {
   min-height: calc(100vh - var(--top-bar-height));

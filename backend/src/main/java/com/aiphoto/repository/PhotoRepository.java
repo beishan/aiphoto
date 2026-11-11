@@ -32,6 +32,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
             @Param("clip") boolean clip, @Param("faces") boolean faces,
             @Param("tags") boolean tags, @Param("caption") boolean caption, Pageable pageable);
 
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.inTimeline = true AND p.exifDate >= :start AND p.exifDate < :end ORDER BY p.exifDate DESC, p.id DESC")
+    Page<Photo> timelineMonth(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end, Pageable pageable);
+
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
     Page<Photo> findAll(Pageable pageable);
