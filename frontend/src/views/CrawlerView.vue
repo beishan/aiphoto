@@ -730,7 +730,7 @@ async function deletePreviewAsset(ignore: boolean) {
     const { data } = await crawlApi.deleteAssets(asset.jobId, [asset.id])
     if (!data.success) throw new Error(ignore ? '已加入忽略清单，但删除失败，请重试' : '删除图片失败')
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => id !== asset.id))
-    if (previewViewerIndex.value + 1 < assetTotal.value) await stepPreviewViewer(1)
+    if (previewViewerIndex.value + 1 < assetTotal.value) void stepPreviewViewer(1).catch(() => { ElMessage.warning('下一张预览加载失败，请手动切换') })
     else closePreviewViewer()
     ElMessage.success(ignore ? '已删除并加入忽略清单' : '已移到待整理区已删除列表')
     void reloadVisibleAssets()
@@ -1228,11 +1228,11 @@ async function importSelected(assetIds?: number[], previewAsset?: CrawlAsset) {
       batchAssets.set(data.batchId, group.ids)
       group.ids.forEach(id => acceptedAssetIds.add(id))
       recentImportProgressCount.value = 0
-      await loadImportBatch(data.batchId, '')
+      void loadImportBatch(data.batchId, '').catch(() => { ElMessage.warning('入库已提交，进度获取失败，稍后自动重试') })
     }
     pendingImport.value = null
     if (assetIds && previewViewerVisible.value && previewViewerAsset.value && acceptedAssetIds.has(previewViewerAsset.value.id)) {
-      await stepPreviewViewer(1)
+      void stepPreviewViewer(1).catch(() => { ElMessage.warning('下一张预览加载失败，请手动切换') })
     }
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => !acceptedAssetIds.has(id)))
     void monitorImportBatches(batchIds, batchAssets)
@@ -1895,7 +1895,7 @@ onUnmounted(() => {
                 <el-button size="small" :loading="previewViewerAction === 'delete-ignore'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(true)">删除并忽略</el-button>
                 <el-button size="small" :loading="previewViewerAction === 'delete'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="deletePreviewAsset(false)">删除</el-button>
                 <el-button size="small" :loading="previewViewerAction === 'skip'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="skipPreviewAsset">以后跳过</el-button>
-                <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">入库</el-button>
+                <el-button type="primary" size="small" :loading="previewViewerAction === 'import' || busy === 'import'" :disabled="Boolean(previewViewerAction) || busy === 'import' || pendingImportAssetIds.has(previewViewerAsset.id)" @click="importPreviewAsset">{{ previewViewerAction === 'import' ? '正在提交…' : pendingImportAssetIds.has(previewViewerAsset.id) ? '后台入库中…' : '入库' }}</el-button>
               </div>
             </footer>
           </section>
