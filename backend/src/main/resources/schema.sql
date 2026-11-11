@@ -741,3 +741,14 @@ ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS image_host_timeout_threshold IN
 CREATE INDEX IF NOT EXISTS idx_photos_live_id ON photos (id DESC) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_photos_live_timeline_date_id ON photos (exif_date DESC, id DESC) WHERE deleted_at IS NULL AND in_timeline = TRUE AND exif_date IS NOT NULL;
+
+-- Nine disjoint hash bands: distance <= 8 implies at least one unchanged band.
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_0 ON photos ((substring(lower(file_hash_phash), 1, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_1 ON photos ((substring(lower(file_hash_phash), 3, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_2 ON photos ((substring(lower(file_hash_phash), 5, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_3 ON photos ((substring(lower(file_hash_phash), 7, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_4 ON photos ((substring(lower(file_hash_phash), 9, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_5 ON photos ((substring(lower(file_hash_phash), 11, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_6 ON photos ((substring(lower(file_hash_phash), 13, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_7 ON photos ((substring(lower(file_hash_phash), 15, 1)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+CREATE INDEX IF NOT EXISTS idx_photos_phash_band_8 ON photos ((substring(lower(file_hash_phash), 16, 1)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';

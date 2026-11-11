@@ -43,16 +43,25 @@ async function loadExact(page: number) {
   } catch { message.error('精确重复加载失败') }
   finally { loading.value = false }
 }
+const similarCursor = ref(0)
+const similarHasMore = ref(false)
+const similarTruncated = ref(false)
+async function loadSimilar(reset = false) {
+  loading.value = true
+  similarError.value = ''
+  try {
+    const { data } = await dedupApi.similarPage(reset ? 0 : similarCursor.value)
+    similarGroups.value = data.groups
+    similarCursor.value = data.nextCursor
+    similarHasMore.value = data.hasMore
+    similarTruncated.value = data.truncated
+  } catch { similarError.value = '相似候选加载失败，请重试' }
+  finally { loading.value = false }
+}
 async function scan() {
   scanned.value = true
-  similarError.value = ''
   await loadExact(0)
-  loading.value = true
-  try { similarGroups.value = (await dedupApi.getSimilar()).data }
-  catch (error: any) {
-    similarGroups.value = []
-    similarError.value = error?.response?.data?.message || '相似分析未完成，大图库候选索引尚未启用'
-  } finally { loading.value = false }
+  await loadSimilar(true)
 }
 
 function openGroup(group: Photo[], index: number) {
@@ -112,6 +121,7 @@ function formatSize(bytes: number | null) {
 
     <!-- Results -->
     <div v-if="scanned && !loading" class="dedup-results">
+      <div v-if="activeTab === 'similar'"><el-alert title="每批分析 20 张种子照片，与全库索引候选匹配；同一照片可出现在多个组中，空批次不代表全库无相似照片。" type="info" :closable="false" /><el-alert v-if="similarTruncated" title="部分种子的候选超过 500 张，本批结果不完整。" type="warning" :closable="false" /><el-button @click="loadSimilar(true)">重新开始</el-button><el-button :disabled="!similarHasMore" @click="loadSimilar()">继续分析下一批</el-button></div>
       <el-alert v-if="activeTab === 'similar' && similarError" :title="similarError" type="warning" :closable="false" />
       <el-space v-if="activeTab === 'exact'"><el-button :disabled="exactPage === 0" @click="loadExact(exactPage - 1)">上一页</el-button><span>第 {{ exactPage + 1 }} 页 · 每页最多 20 组</span><el-button :disabled="!exactHasMore" @click="loadExact(exactPage + 1)">下一页</el-button></el-space>
       <!-- Empty -->

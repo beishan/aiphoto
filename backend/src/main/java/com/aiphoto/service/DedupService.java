@@ -44,6 +44,28 @@ public class DedupService {
      * Find similar photos by pHash (perceptual hash).
      * Photos with hamming distance <= 8 are considered similar.
      */
+    public record SimilarPage(List<List<Photo>> groups, long nextCursor, boolean hasMore, boolean truncated) {}
+
+    public SimilarPage similarPage(long afterId) {
+        var seeds = photoRepository.similaritySeeds(Math.max(0, afterId), 21);
+        var groups = new ArrayList<List<Photo>>();
+        var hashService = new PerceptualHashService();
+        boolean truncated = false;
+        long cursor = afterId;
+        for (Photo seed : seeds.subList(0, Math.min(20, seeds.size()))) {
+            cursor = seed.getId();
+            var candidates = photoRepository.similarityCandidates(seed.getId(), seed.getFileHashPhash());
+            truncated |= candidates.size() > 500;
+            var group = new ArrayList<Photo>();
+            group.add(seed);
+            for (Photo candidate : candidates.subList(0, Math.min(500, candidates.size()))) {
+                if (hashService.hammingDistance(seed.getFileHashPhash(), candidate.getFileHashPhash()) <= 8) group.add(candidate);
+            }
+            if (group.size() > 1) groups.add(group);
+        }
+        return new SimilarPage(groups, cursor, seeds.size() > 20, truncated);
+    }
+
     public List<List<Photo>> findSimilarPhotos() {
         if (photoRepository.countWithPhash() > 5000) {
             throw new org.springframework.web.server.ResponseStatusException(

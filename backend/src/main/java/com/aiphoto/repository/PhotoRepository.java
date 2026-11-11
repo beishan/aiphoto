@@ -47,6 +47,12 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.fileHashPhash IS NOT NULL ORDER BY p.id")
     List<Photo> findPhashCandidates(Pageable pageable);
 
+    @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND id > :afterId AND file_hash_phash ~ '^[0-9a-fA-F]{16}$' ORDER BY id LIMIT :limit", nativeQuery = true)
+    List<Photo> similaritySeeds(@Param("afterId") long afterId, @Param("limit") int limit);
+
+    @Query(value = "SELECT * FROM photos WHERE deleted_at IS NULL AND id > :seedId AND file_hash_phash ~ '^[0-9a-fA-F]{16}$' AND (substring(lower(file_hash_phash), 1, 2) = substring(lower(:hash), 1, 2) OR substring(lower(file_hash_phash), 3, 2) = substring(lower(:hash), 3, 2) OR substring(lower(file_hash_phash), 5, 2) = substring(lower(:hash), 5, 2) OR substring(lower(file_hash_phash), 7, 2) = substring(lower(:hash), 7, 2) OR substring(lower(file_hash_phash), 9, 2) = substring(lower(:hash), 9, 2) OR substring(lower(file_hash_phash), 11, 2) = substring(lower(:hash), 11, 2) OR substring(lower(file_hash_phash), 13, 2) = substring(lower(:hash), 13, 2) OR substring(lower(file_hash_phash), 15, 1) = substring(lower(:hash), 15, 1) OR substring(lower(file_hash_phash), 16, 1) = substring(lower(:hash), 16, 1)) ORDER BY id LIMIT 501", nativeQuery = true)
+    List<Photo> similarityCandidates(@Param("seedId") long seedId, @Param("hash") String hash);
+
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
     Page<Photo> findAll(Pageable pageable);

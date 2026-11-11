@@ -36,6 +36,13 @@ public class DedupController {
         return ResponseEntity.ok(convertGroups(dedupService.findExactDuplicates()));
     }
 
+    @GetMapping("/similar-page")
+    public ResponseEntity<Map<String, Object>> similarPage(@RequestParam(defaultValue = "0") long afterId) {
+        var result = dedupService.similarPage(afterId);
+        return ResponseEntity.ok(Map.of("groups", convertGroups(result.groups()), "nextCursor", result.nextCursor(),
+                "hasMore", result.hasMore(), "truncated", result.truncated()));
+    }
+
     @GetMapping("/similar")
     public ResponseEntity<List<List<PhotoDTO>>> getSimilarGroups() {
         return ResponseEntity.ok(convertGroups(dedupService.findSimilarPhotos()));
