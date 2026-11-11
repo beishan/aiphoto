@@ -1550,3 +1550,6 @@
   border-radius: 10px;
   background: var(--bg-card);
 }
+
+.collection-preview-dialog:has(.preview-filmstrip) { grid-template-rows: 72px minmax(0, 1fr) 76px 64px; }
+@media(max-width:640px) { .collection-preview-dialog:has(.preview-filmstrip) { grid-template-rows: 68px minmax(0, 1fr) 76px auto; } }

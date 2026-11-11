@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { defineAsyncComponent, computed, onMounted, onUnmounted, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave } from 'vue-router'
 import {
@@ -615,8 +615,33 @@ watch(showCrawlerImages, visible => {
 
 watch([assetStatus, reviewImportStatus, reviewSourcePageId, exactDuplicateOnly, similarOnly, activeJobId], () => thumbnailQueue.cancel())
 
+const previewFilmstrip = ref<HTMLElement | null>(null)
+const previewNearbyImages = computed(() => {
+  if (!previewViewerVisible.value) return []
+  const items: { asset: CrawlAsset; index: number }[] = []
+  const start = Math.max(0, previewViewerIndex.value - 8)
+  const end = Math.min(assetTotal.value - 1, previewViewerIndex.value + 8)
+  for (let index = start; index <= end; index++) {
+    const asset = previewViewerPages[Math.floor(index / assetPageSize.value)]?.[index % assetPageSize.value]
+    if (asset) items.push({ asset, index })
+  }
+  return items
+})
+watch(previewNearbyImages, async items => {
+  for (const item of items) if (!previewImages[item.asset.id]) void thumbnailQueue.enqueue(item.asset.id)
+  await nextTick()
+  const strip = previewFilmstrip.value
+  const active = strip?.querySelector<HTMLElement>('[aria-current="true"]')
+  if (strip && active) strip.scrollTo({ left: active.offsetLeft - strip.clientWidth / 2 + active.offsetWidth / 2, behavior: 'smooth' })
+}, { flush: 'post' })
+function selectPreviewThumbnail(index: number) {
+  if (previewViewerAction.value || busy.value) return
+  const asset = previewViewerPages[Math.floor(index / assetPageSize.value)]?.[index % assetPageSize.value]
+  if (asset) void loadPreviewViewerAsset(asset, index)
+}
+
 function thumbnailStillWanted(id: number) {
-  return showCrawlerImages.value && (assets.value.some(asset => asset.id === id)
+  return showCrawlerImages.value && (previewNearbyImages.value.some(item => item.asset.id === id) || assets.value.some(asset => asset.id === id)
     || (pageAssetsDialogVisible.value && pageAssets.value.some(asset => asset.id === id)))
 }
 const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
@@ -1972,6 +1997,15 @@ onUnmounted(() => {
               </div>
               <el-button class="collection-preview-nav collection-preview-next" circle :icon="ArrowRight" aria-label="下一张" :disabled="previewViewerIndex + 1 >= assetTotal || previewViewerLoading" @click="stepPreviewViewer(1)" />
             </div>
+            <nav v-if="activeTab === 'review' && !taskDrawerVisible" ref="previewFilmstrip" class="preview-filmstrip" aria-label="相邻图片缩略图">
+              <TransitionGroup name="filmstrip" tag="div" class="preview-filmstrip-track">
+                <button v-for="item in previewNearbyImages" :key="item.asset.id" type="button" class="preview-filmstrip-item" :class="{ active: item.index === previewViewerIndex }" :aria-current="item.index === previewViewerIndex ? 'true' : undefined" :aria-label="'预览第 ' + (item.index + 1) + ' 张图片'" :disabled="Boolean(previewViewerAction) || Boolean(busy)" @click="selectPreviewThumbnail(item.index)">
+                  <img v-if="previewImages[item.asset.id]" :src="previewImages[item.asset.id]" alt="" />
+                  <span v-else class="preview-filmstrip-placeholder">{{ item.index + 1 }}</span>
+                  <span class="preview-filmstrip-number">{{ item.index + 1 }}</span>
+                </button>
+              </TransitionGroup>
+            </nav>
             <footer class="collection-preview-footer">
               <div class="collection-preview-meta">
                 <span>{{ imageTypeLabel(previewViewerAsset) }}</span>
@@ -2000,6 +2034,8 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.preview-filmstrip{position:relative;flex-shrink:0;overflow-x:auto;overflow-y:hidden;padding:10px 0;background:rgba(0,0,0,.25);scrollbar-width:thin}.preview-filmstrip-track{display:flex;align-items:center;gap:8px;width:max-content;padding:0 calc(50vw - 45px)}.preview-filmstrip-item{position:relative;flex:0 0 64px;width:64px;height:52px;padding:0;border:2px solid transparent;border-radius:7px;overflow:hidden;background:#252525;cursor:pointer;opacity:.55;transition:opacity .2s,border-color .2s,transform .2s}.preview-filmstrip-item.active{opacity:1;border-color:#fff;box-shadow:0 0 0 2px var(--accent);transform:scale(1.06)}.preview-filmstrip-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.preview-filmstrip-item img{width:100%;height:100%;object-fit:cover}.preview-filmstrip-placeholder{display:grid;place-items:center;height:100%;color:#aaa}.preview-filmstrip-number{position:absolute;bottom:1px;right:3px;color:white;font-size:9px;text-shadow:0 1px 3px black}.filmstrip-move{transition:transform .25s ease}.filmstrip-enter-active,.filmstrip-leave-active{transition:opacity .2s}.filmstrip-enter-from,.filmstrip-leave-to{opacity:0}@media(prefers-reduced-motion:reduce){.filmstrip-move,.preview-filmstrip-item{transition:none}}
+
 .skip-results{min-height:240px;margin-top:20px}.skip-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:16px}.skip-image-card{min-width:0;overflow:hidden;border:1px solid var(--separator);border-radius:14px;background:var(--bg-secondary)}.skip-card-image{display:block;width:100%;height:190px;background:var(--bg-card)}.skip-image-placeholder{display:grid;place-items:center;width:100%;height:190px;color:var(--text-tertiary);font-size:12px}.skip-card-copy{display:grid;gap:12px;padding:16px;min-width:0}.skip-card-copy p{margin:0;color:var(--text-secondary);font-size:12px;overflow-wrap:anywhere}.skip-card-url{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.skip-card-source{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.skip-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.skip-card-meta time{font-size:11px;color:var(--text-tertiary)}
 
 .source-page-url{display:block;color:var(--text-secondary);font-size:12px}
