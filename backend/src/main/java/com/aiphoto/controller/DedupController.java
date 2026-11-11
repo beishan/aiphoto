@@ -22,6 +22,15 @@ public class DedupController {
     private final DedupService dedupService;
     private final LocalStorageService storageService;
 
+    @GetMapping("/exact-page")
+    public ResponseEntity<Map<String, Object>> exactPage(@RequestParam(defaultValue = "0") int page) {
+        var result = dedupService.exactPage(page);
+        var groups = result.groups().stream().map(group -> Map.of(
+                "hash", group.hash(), "photos", group.photos().stream().map(this::toPhotoDTO).toList(),
+                "total", group.total())).toList();
+        return ResponseEntity.ok(Map.of("groups", groups, "hasMore", result.hasMore()));
+    }
+
     @GetMapping("/groups")
     public ResponseEntity<List<List<PhotoDTO>>> getDuplicateGroups() {
         return ResponseEntity.ok(convertGroups(dedupService.findExactDuplicates()));

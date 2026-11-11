@@ -29,22 +29,30 @@ const totalDuplicates = computed(() =>
   currentGroups.value.reduce((sum, g) => sum + g.length, 0)
 )
 
-async function scan() {
+const exactPage = ref(0)
+const exactHasMore = ref(false)
+const similarError = ref('')
+async function loadExact(page: number) {
   loading.value = true
-  scanned.value = true
   try {
-    const [exactRes, similarRes] = await Promise.all([
-      dedupApi.getGroups(),
-      dedupApi.getSimilar(),
-    ])
-    exactGroups.value = exactRes.data
-    similarGroups.value = similarRes.data
-    message.success(`扫描完成：${exactGroups.value.length} 组精确重复，${similarGroups.value.length} 组相似照片`)
-  } catch (e) {
-    message.error('扫描失败')
-  } finally {
-    loading.value = false
-  }
+    const { data } = await dedupApi.exactPage(page)
+    exactGroups.value = data.groups.map(group => group.photos)
+    exactHasMore.value = data.hasMore
+    exactPage.value = page
+    if (data.groups.some(group => group.total > group.photos.length)) message.warning('部分重复组超过 100 张，本页仅展示每组前 100 张')
+  } catch { message.error('精确重复加载失败') }
+  finally { loading.value = false }
+}
+async function scan() {
+  scanned.value = true
+  similarError.value = ''
+  await loadExact(0)
+  loading.value = true
+  try { similarGroups.value = (await dedupApi.getSimilar()).data }
+  catch (error: any) {
+    similarGroups.value = []
+    similarError.value = error?.response?.data?.message || '相似分析未完成，大图库候选索引尚未启用'
+  } finally { loading.value = false }
 }
 
 function openGroup(group: Photo[], index: number) {
@@ -104,8 +112,10 @@ function formatSize(bytes: number | null) {
 
     <!-- Results -->
     <div v-if="scanned && !loading" class="dedup-results">
+      <el-alert v-if="activeTab === 'similar' && similarError" :title="similarError" type="warning" :closable="false" />
+      <el-space v-if="activeTab === 'exact'"><el-button :disabled="exactPage === 0" @click="loadExact(exactPage - 1)">上一页</el-button><span>第 {{ exactPage + 1 }} 页 · 每页最多 20 组</span><el-button :disabled="!exactHasMore" @click="loadExact(exactPage + 1)">下一页</el-button></el-space>
       <!-- Empty -->
-      <el-empty v-if="currentGroups.length === 0" class="empty-state" :description="`没有发现${activeTab === 'exact' ? '精确重复' : '相似'}的照片`" :image-size="88" />
+      <el-empty v-if="currentGroups.length === 0 && !(activeTab === 'similar' && similarError)" class="empty-state" :description="`没有发现${activeTab === 'exact' ? '精确重复' : '相似'}的照片`" :image-size="88" />
 
       <!-- Group list -->
       <div v-else class="group-list">

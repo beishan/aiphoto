@@ -35,6 +35,18 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.inTimeline = true AND p.exifDate >= :start AND p.exifDate < :end ORDER BY p.exifDate DESC, p.id DESC")
     Page<Photo> timelineMonth(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end, Pageable pageable);
 
+    @Query(value = "SELECT file_hash_md5 FROM photos WHERE deleted_at IS NULL AND file_hash_md5 IS NOT NULL GROUP BY file_hash_md5 HAVING COUNT(*) > 1 ORDER BY file_hash_md5", nativeQuery = true)
+    List<String> duplicateHashes(Pageable pageable);
+
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.fileHashMd5 = :hash ORDER BY p.id")
+    Page<Photo> duplicateMembers(@Param("hash") String hash, Pageable pageable);
+
+    @Query("SELECT COUNT(p) FROM Photo p WHERE p.deletedAt IS NULL AND p.fileHashPhash IS NOT NULL")
+    long countWithPhash();
+
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.fileHashPhash IS NOT NULL ORDER BY p.id")
+    List<Photo> findPhashCandidates(Pageable pageable);
+
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
     Page<Photo> findAll(Pageable pageable);

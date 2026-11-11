@@ -23,19 +23,21 @@ public class DedupService {
     /**
      * Find exact duplicates by MD5 hash.
      */
-    public List<List<Photo>> findExactDuplicates() {
-        List<Photo> allPhotos = photoRepository.findAll();
-        Map<String, List<Photo>> hashGroups = new HashMap<>();
+    public record ExactGroup(String hash, List<Photo> photos, long total) {}
+    public record ExactPage(List<ExactGroup> groups, boolean hasMore) {}
 
-        for (Photo photo : allPhotos) {
-            if (photo.getFileHashMd5() != null) {
-                hashGroups.computeIfAbsent(photo.getFileHashMd5(), k -> new ArrayList<>()).add(photo);
-            }
+    public ExactPage exactPage(int page) {
+        var hashes = photoRepository.duplicateHashes(org.springframework.data.domain.PageRequest.of(Math.max(0, page), 20));
+        var groups = new ArrayList<ExactGroup>();
+        for (String hash : hashes.subList(0, Math.min(20, hashes.size()))) {
+            var members = photoRepository.duplicateMembers(hash, org.springframework.data.domain.PageRequest.of(0, 100));
+            groups.add(new ExactGroup(hash, members.getContent(), members.getTotalElements()));
         }
+        return new ExactPage(groups, hashes.size() == 20);
+    }
 
-        return hashGroups.values().stream()
-                .filter(group -> group.size() > 1)
-                .toList();
+    public List<List<Photo>> findExactDuplicates() {
+        return exactPage(0).groups().stream().map(ExactGroup::photos).toList();
     }
 
     /**
@@ -43,7 +45,15 @@ public class DedupService {
      * Photos with hamming distance <= 8 are considered similar.
      */
     public List<List<Photo>> findSimilarPhotos() {
-        List<Photo> photosWithPhash = photoRepository.findAllWithPhash();
+        if (photoRepository.countWithPhash() > 5000) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "相似分析暂支持最多 5000 张有感知哈希的照片；大图库候选索引尚未启用");
+        }
+        List<Photo> photosWithPhash = photoRepository.findPhashCandidates(org.springframework.data.domain.PageRequest.of(0, 5001));
+        if (photosWithPhash.size() > 5000) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "相似分析最多支持 5000 张照片");
+        var hashService = new PerceptualHashService();
         List<List<Photo>> groups = new ArrayList<>();
         boolean[] assigned = new boolean[photosWithPhash.size()];
 
@@ -56,7 +66,7 @@ public class DedupService {
 
             for (int j = i + 1; j < photosWithPhash.size(); j++) {
                 if (assigned[j]) continue;
-                int distance = hammingDistance(
+                int distance = hashService.hammingDistance(
                         photosWithPhash.get(i).getFileHashPhash(),
                         photosWithPhash.get(j).getFileHashPhash()
                 );
@@ -72,19 +82,6 @@ public class DedupService {
         }
 
         return groups;
-    }
-
-    private int hammingDistance(String hash1, String hash2) {
-        if (hash1 == null || hash2 == null || hash1.length() != hash2.length()) {
-            return Integer.MAX_VALUE;
-        }
-        int distance = 0;
-        for (int i = 0; i < hash1.length(); i++) {
-            if (hash1.charAt(i) != hash2.charAt(i)) {
-                distance++;
-            }
-        }
-        return distance;
     }
 
     @Transactional
