@@ -16,6 +16,9 @@ import java.util.Optional;
 
 public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Photo> {
 
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.id < :beforeId ORDER BY p.id DESC")
+    List<Photo> findBeforeId(@Param("beforeId") long beforeId, Pageable pageable);
+
     @Override
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
     Page<Photo> findAll(Pageable pageable);

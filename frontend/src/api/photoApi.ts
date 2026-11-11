@@ -3,6 +3,9 @@ import { normalizePage, type SpringPage } from './pageResponse'
 import type { Photo, PhotoDetail, PageResponse } from '@/types'
 
 export const photoApi = {
+  browse(beforeId?: number, size = 40) {
+    return http.get<{ content: Photo[]; nextCursor: number | null; hasMore: boolean }>('/photos/browse', { params: { beforeId, size } })
+  },
   list(page = 0, size = 20) {
     return http.get<SpringPage<Photo>>('/photos', { params: { page, size } })
       .then(response => ({ ...response, data: normalizePage(response.data) }))

@@ -136,6 +136,16 @@ public class PhotoService {
         return toDTO(photo);
     }
 
+    public com.aiphoto.dto.PhotoCursorPage browsePhotos(Long beforeId, int requestedSize) {
+        int size = Math.clamp(requestedSize, 1, 200);
+        var photos = photoRepository.findBeforeId(beforeId == null ? Long.MAX_VALUE : beforeId,
+                PageRequest.of(0, size + 1));
+        boolean hasMore = photos.size() > size;
+        var visible = photos.subList(0, Math.min(size, photos.size()));
+        Long nextCursor = visible.isEmpty() ? null : visible.get(visible.size() - 1).getId();
+        return new com.aiphoto.dto.PhotoCursorPage(visible.stream().map(this::toDTO).toList(), nextCursor, hasMore);
+    }
+
     public Page<PhotoDTO> listPhotos(Pageable pageable) {
         Pageable sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                 Sort.by(Sort.Direction.DESC, "id"));

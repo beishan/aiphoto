@@ -43,6 +43,13 @@ public class PhotoController {
         return ResponseEntity.ok(photoService.listPhotos(PageRequest.of(page, size)));
     }
 
+    @GetMapping("/browse")
+    public ResponseEntity<com.aiphoto.dto.PhotoCursorPage> browsePhotos(
+            @RequestParam(required = false) Long beforeId,
+            @RequestParam(defaultValue = "40") int size) {
+        return ResponseEntity.ok(photoService.browsePhotos(beforeId, size));
+    }
+
     @PostMapping("/upload")
     public ResponseEntity<PhotoDTO> uploadPhoto(@RequestParam("file") MultipartFile file, Authentication authentication) throws Exception {
         Long userId = getUserId(authentication);

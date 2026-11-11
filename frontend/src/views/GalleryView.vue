@@ -15,7 +15,6 @@ const photoStore = usePhotoStore()
 const message = useMessage()
 const dialog = useDialog()
 const page = ref(0)
-const pageSize = 40
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
 const showUploader = ref(false)
@@ -294,7 +293,7 @@ async function fillViewport() {
 async function refreshGallery() {
   page.value = 0
   try {
-    await photoStore.fetchPhotos(0, pageSize)
+    await photoStore.browsePhotos(true)
     await fillViewport()
   } catch { message.error('照片加载失败，请刷新后重试') }
 }
@@ -322,18 +321,30 @@ function scrollToMonth(item: TimelineItem) {
 
 async function loadMore(): Promise<boolean> {
   if (!galleryActive || photoStore.loading || loadingMore.value) return false
-  if (page.value >= photoStore.totalPages - 1) return false
-  if (photoStore.photos.length >= photoStore.totalElements) return false
+  if (!photoStore.browseHasMore || photoStore.photos.length >= 1000 || viewerVisible.value) return false
   loadingMore.value = true
   try {
     const nextPage = page.value + 1
-    const added = await photoStore.loadMore(nextPage, pageSize)
+    const added = await photoStore.browsePhotos()
     if (added) page.value = nextPage
     return added
   } catch {
     message.error('更多照片加载失败，请再次滚动重试')
     return false
   } finally { loadingMore.value = false }
+}
+
+async function continueBrowsing() {
+  if (loadingMore.value || viewerVisible.value || selectMode.value) return
+  loadingMore.value = true
+  try {
+    if (await photoStore.browsePhotos(false, true)) {
+      selectedIds.value = new Set()
+      await nextTick()
+      scrollContainer.value?.scrollTo({ top: 0 })
+    }
+  } catch { message.error('照片加载失败，请重试') }
+  finally { loadingMore.value = false }
 }
 
 function openViewer(index: number) {
@@ -441,6 +452,9 @@ async function handleToggleFavorite(photoId: number) {
         </div>
       </template>
 
+      <div v-if="photoStore.photos.length >= 1000 && photoStore.browseHasMore" class="loading-indicator">
+        <el-button :loading="loadingMore" :disabled="selectMode || viewerVisible" @click="continueBrowsing">继续浏览更早的照片</el-button>
+      </div>
       <!-- Loading indicator -->
       <div v-if="photoStore.loading || loadingMore" class="loading-indicator">
         <div class="loading-spinner"></div>

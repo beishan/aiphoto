@@ -12,6 +12,24 @@ export const usePhotoStore = defineStore('photo', () => {
 
   let listRequest = 0
 
+  const browseHasMore = ref(true)
+  let browseCursor: number | undefined
+  async function browsePhotos(reset = false, replace = false) {
+    const request = reset ? ++listRequest : listRequest
+    const cursor = reset ? undefined : browseCursor
+    if (reset) loading.value = true
+    try {
+      const { data } = await photoApi.browse(cursor)
+      if (request !== listRequest) return false
+      photos.value = reset || replace ? data.content : [...photos.value, ...data.content]
+      browseCursor = data.nextCursor ?? undefined
+      browseHasMore.value = data.hasMore
+      return data.content.length > 0
+    } finally {
+      if (reset && request === listRequest) loading.value = false
+    }
+  }
+
   async function fetchPhotos(page = 0, size = 20) {
     const request = ++listRequest
     loading.value = true
@@ -84,6 +102,8 @@ export const usePhotoStore = defineStore('photo', () => {
     totalElements,
     totalPages,
     fetchPhotos,
+    browsePhotos,
+    browseHasMore,
     loadMore,
     addPhoto,
     fetchPhoto,

@@ -736,3 +736,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS crawler_show_images BOOLEAN NOT NULL 
 
 -- Per-site image host timeout protection (existing sites retain the previous threshold).
 ALTER TABLE crawl_sites ADD COLUMN IF NOT EXISTS image_host_timeout_threshold INTEGER NOT NULL DEFAULT 3;
+
+-- Cursor browsing of live photos without scanning trash entries.
+CREATE INDEX IF NOT EXISTS idx_photos_live_id ON photos (id DESC) WHERE deleted_at IS NULL;
