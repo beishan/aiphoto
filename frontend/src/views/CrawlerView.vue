@@ -393,6 +393,7 @@ async function updateJobPriority(job: CrawlJob, priority: number | null) {
   }
 }
 async function loadReviewData() {
+  if (previewViewerVisible.value) return
   const request = ++reviewRequest
   try {
     const [pagesResult, assetsResult] = await Promise.all([
@@ -436,6 +437,7 @@ async function loadReviewData() {
   }
 }
 async function reloadVisibleAssets() {
+  if (previewViewerVisible.value) return
   if (activeTab.value === 'review' && !taskDrawerVisible.value) await loadReviewData()
   else await loadJobDetail()
 }
@@ -664,9 +666,44 @@ function revokePreviewViewerObjectUrl() {
   previewViewerUrl.value = ''
 }
 
+let previewSession = 0
+const previewPageRequests = new Map<number, Promise<CrawlAsset[]>>()
+const previewRemovedIndices = new Set<number>()
+async function ensurePreviewPage(page: number): Promise<CrawlAsset[]> {
+  if (previewViewerPages[page]) return previewViewerPages[page]
+  const pending = previewPageRequests.get(page)
+  if (pending) return pending
+  const session = previewSession
+  const size = assetPageSize.value
+  const removed = [...previewRemovedIndices].filter(index => index < page * size).length
+  const offset = Math.max(0, page * size - removed)
+  const firstPage = Math.floor(offset / size)
+  const skip = offset % size
+  const fetchPage = async (number: number) => (taskDrawerVisible.value && activeJobId.value
+    ? await crawlApi.assets(activeJobId.value, number, size)
+    : await crawlApi.reviewAssets(number, size, assetStatus.value, exactDuplicateOnly.value,
+      similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)).data.content
+  const promise = (async () => {
+    const first = await fetchPage(firstPage)
+    const items = skip ? [...first, ...await fetchPage(firstPage + 1)].slice(skip, skip + size) : first
+    if (session === previewSession && previewViewerVisible.value) previewViewerPages[page] = items
+    return items
+  })()
+  previewPageRequests.set(page, promise)
+  try { return await promise }
+  finally { if (session === previewSession) previewPageRequests.delete(page) }
+}
+function prefetchPreviewPage(index: number) {
+  const size = assetPageSize.value
+  if (index % size < Math.max(0, size - 10)) return
+  const next = Math.floor(index / size) + 1
+  if (next * size < assetTotal.value) void ensurePreviewPage(next).catch(() => { /* Navigation retries failed prefetch. */ })
+}
+
 async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
   if (!showCrawlerImages.value) return
   previewViewerIndex.value = index
+  prefetchPreviewPage(index)
   previewViewerAsset.value = asset
   previewViewerRequest += 1
   const request = previewViewerRequest
@@ -705,6 +742,10 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
 function openAssetPreview(asset: CrawlAsset) {
   const indexInPage = assets.value.findIndex(item => item.id === asset.id)
   if (!showCrawlerImages.value || indexInPage < 0 || !previewImages[asset.id]) return
+  reviewRequest++
+  previewSession++
+  previewPageRequests.clear()
+  previewRemovedIndices.clear()
   Object.keys(previewViewerPages).forEach(key => delete previewViewerPages[Number(key)])
   previewViewerPages[assetPage.value] = assets.value.slice()
   previewViewerVisible.value = true
@@ -715,7 +756,10 @@ async function importPreviewAsset() {
   const asset = previewViewerAsset.value
   if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
   previewViewerAction.value = 'import'
-  try { await importSelected([asset.id], asset) }
+  try {
+    await Promise.all([...previewPageRequests.values()])
+    await importSelected([asset.id], asset)
+  }
   finally { previewViewerAction.value = '' }
 }
 
@@ -732,13 +776,10 @@ async function deletePreviewAsset(ignore: boolean) {
   if (!asset || asset.status !== 'DOWNLOADED' || pendingImportAssetIds.value.has(asset.id) || previewViewerAction.value) return
   previewViewerAction.value = ignore ? 'delete-ignore' : 'delete'
   try {
+    await Promise.all([...previewPageRequests.values()])
     const nextIndex = previewViewerIndex.value + 1
     const nextPage = Math.floor(nextIndex / assetPageSize.value)
-    if (nextIndex < assetTotal.value && !previewViewerPages[nextPage]) {
-      const { data } = await crawlApi.reviewAssets(nextPage, assetPageSize.value, assetStatus.value,
-        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
-      previewViewerPages[nextPage] = data.content
-    }
+    if (nextIndex < assetTotal.value) await ensurePreviewPage(nextPage)
     if (ignore) {
       const { data } = await crawlApi.skipAssets(asset.jobId, [asset.id], '用户选择删除并忽略')
       if (!data.success) throw new Error('加入忽略清单失败')
@@ -746,6 +787,7 @@ async function deletePreviewAsset(ignore: boolean) {
     }
     const { data } = await crawlApi.deleteAssets(asset.jobId, [asset.id])
     if (!data.success) throw new Error(ignore ? '已加入忽略清单，但删除失败，请重试' : '删除图片失败')
+    previewRemovedIndices.add(previewViewerIndex.value)
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => id !== asset.id))
     if (previewViewerIndex.value + 1 < assetTotal.value) void stepPreviewViewer(1).catch(() => { ElMessage.warning('下一张预览加载失败，请手动切换') })
     else closePreviewViewer()
@@ -763,12 +805,7 @@ async function stepPreviewViewer(direction: -1 | 1) {
   let pageAssets = previewViewerPages[targetPage]
   if (!pageAssets) {
     try {
-      const { data } = taskDrawerVisible.value && activeJobId.value
-        ? await crawlApi.assets(activeJobId.value, targetPage, assetPageSize.value)
-        : await crawlApi.reviewAssets(targetPage, assetPageSize.value, assetStatus.value,
-          exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
-      pageAssets = data.content
-      previewViewerPages[targetPage] = pageAssets
+      pageAssets = await ensurePreviewPage(targetPage)
     } catch {
       ElMessage.error('无法加载相邻页面的图片列表')
       return
@@ -780,12 +817,16 @@ async function stepPreviewViewer(direction: -1 | 1) {
 }
 
 function closePreviewViewer() {
+  const wasVisible = previewViewerVisible.value
+  previewSession++
+  previewPageRequests.clear()
   previewViewerController?.abort()
   previewViewerVisible.value = false
   previewViewerRequest += 1
   previewViewerLoading.value = false
   previewViewerAsset.value = null
   revokePreviewViewerObjectUrl()
+  if (wasVisible) void reloadVisibleAssets()
 }
 
 function handlePreviewViewerKeydown(event: KeyboardEvent) {
@@ -1116,7 +1157,8 @@ async function deleteSelected() {
 
 async function skipSelectedNextTime(assetIds?: number[]) {
   const ids = new Set(assetIds ?? selectedAssets.value)
-  const groups = selectedAssetGroups(ids)
+  const preview = assetIds && previewViewerVisible.value ? previewViewerAsset.value : null
+  const groups = preview && ids.has(preview.id) ? [{ jobId: preview.jobId, ids: [preview.id] }] : selectedAssetGroups(ids)
   if (!groups.length) return
   let reason = '重复图片'
   try {
@@ -1426,7 +1468,8 @@ function startAutoRefresh() {
     polling = true
     try {
       await loadJobs()
-      if (taskDrawerVisible.value) await loadJobDetail()
+      if (previewViewerVisible.value) return
+      else if (taskDrawerVisible.value) await loadJobDetail()
       else if (activeTab.value === 'review') await loadReviewData()
     } catch { /* A transient polling failure is retried on the next interval. */ }
     finally { polling = false }
