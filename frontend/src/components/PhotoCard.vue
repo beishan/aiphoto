@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Photo } from '@/types'
 
 const props = defineProps<{
@@ -14,9 +14,18 @@ const emit = defineEmits<{
   'toggle-select': []
 }>()
 
-const thumbnailSrc = computed(() => {
-  return props.photo.thumbnailUrl || '/placeholder.png'
+const failedSources = ref<string[]>([])
+watch(() => [props.photo.id, props.photo.thumbnailUrl, props.photo.originalUrl], () => {
+  failedSources.value = []
 })
+const thumbnailSrc = computed(() => {
+  const sources = [props.photo.thumbnailUrl]
+  if (props.photo.mediaType !== 'VIDEO') sources.push(props.photo.originalUrl)
+  return sources.find((source): source is string => Boolean(source) && !failedSources.value.includes(source!))
+})
+function handleImageError() {
+  if (thumbnailSrc.value) failedSources.value = [...failedSources.value, thumbnailSrc.value]
+}
 
 const isVideo = computed(() => {
   return props.photo.mediaType === 'VIDEO'
@@ -38,7 +47,8 @@ function handleClick() {
 
 <template>
   <div class="photo-cell" :class="{ selected }" @click="handleClick">
-    <img :src="thumbnailSrc" :alt="photo.note || ''" loading="lazy" class="photo-img" />
+    <img v-if="thumbnailSrc" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" loading="lazy" decoding="async" class="photo-img" @error="handleImageError" />
+    <span v-else class="photo-unavailable" role="status">{{ isVideo ? '视频封面不可用' : '图片加载失败，点击预览' }}</span>
     <div v-if="isVideo" class="badge video-badge">
       <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
         <path d="M8 5v14l11-7z" />
@@ -67,6 +77,7 @@ function handleClick() {
 </template>
 
 <style scoped>
+.photo-unavailable { display: grid; place-items: center; width: 100%; height: 100%; padding: 12px; box-sizing: border-box; color: var(--text-secondary); font-size: 12px; text-align: center; }
 .photo-cell {
   position: relative;
   aspect-ratio: 1;
