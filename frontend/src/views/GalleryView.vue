@@ -289,7 +289,7 @@ async function fillViewport() {
     await nextTick()
     const container = scrollContainer.value
     while (galleryActive && container && container.clientHeight > 0
-      && container.scrollHeight - container.scrollTop - container.clientHeight < 300) {
+      && container.scrollHeight - container.scrollTop - container.clientHeight < container.clientHeight * 2) {
       if (!await loadMore()) break
       await nextTick()
     }
@@ -354,7 +354,7 @@ async function handleUploaded() {
 function handleScroll(e: Event) {
   updateViewport()
   const target = e.target as HTMLElement
-  if (target.scrollHeight - target.scrollTop - target.clientHeight < 300) {
+  if (target.scrollHeight - target.scrollTop - target.clientHeight < target.clientHeight * 2) {
     void loadMore().then(() => fillViewport())
   }
 }

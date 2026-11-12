@@ -41,12 +41,12 @@ const layout = computed(() => {
   })
 })
 const visibleBoxes = computed(() => {
-  // Parent updates once per animation frame. Keep two screens ready on either side.
+  // Parent updates once per animation frame. Keep four screens decoded on either side.
   void props.viewportVersion
   const root = props.scrollRoot
   if (!root || !container.value) return layout.value.boxes.map((box, index) => ({ box, index }))
   const top = container.value.getBoundingClientRect().top - root.getBoundingClientRect().top
-  const overscan = Math.max(600, root.clientHeight * 2)
+  const overscan = Math.max(1200, root.clientHeight * 4)
   const lower = -top - overscan
   const upper = -top + root.clientHeight + overscan
   const boxes = layout.value.boxes
@@ -63,6 +63,7 @@ const visibleBoxes = computed(() => {
       v-for="{ box, index } in visibleBoxes"
       :key="items[index].id"
       class="justified-photo"
+      eager-preview
       :style="{ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` }"
       :photo="items[index]"
       :select-mode="selectMode"

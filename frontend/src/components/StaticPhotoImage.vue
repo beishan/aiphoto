@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { getStaticFrame, cacheStaticFrame } from '@/utils/staticFrameCache'
 import { queueStaticFrame } from '@/utils/staticFrameQueue'
-const props = defineProps<{ src: string; alt: string; remote?: boolean }>()
+const props = defineProps<{ src: string; alt: string; remote?: boolean; eager?: boolean }>()
 const emit = defineEmits<{ error: [] }>()
 const canvas = ref<HTMLCanvasElement | null>(null)
 let observer: IntersectionObserver | undefined
@@ -14,6 +15,13 @@ function load() {
   const current = new AbortController()
   controller = current
   const src = props.src
+  const cacheKey = (props.remote ? 'remote:' : 'local:') + src
+  const cached = getStaticFrame(cacheKey)
+  if (cached && canvas.value) {
+    canvas.value.width = cached.width; canvas.value.height = cached.height
+    canvas.value.getContext('2d')?.drawImage(cached, 0, 0)
+    return
+  }
   void queueStaticFrame(async () => {
     if (current.signal.aborted) return
     try {
@@ -37,6 +45,7 @@ function load() {
           const context = target.getContext('2d')
           if (!context) throw new Error('Canvas unavailable')
           context.drawImage(image, 0, 0, target.width, target.height)
+          cacheStaticFrame(cacheKey, target)
         } finally { image.onload = null; image.onerror = null; image.src = '' }
         return
       }
@@ -54,6 +63,7 @@ function load() {
         const context = target.getContext('2d')
         if (!context) throw new Error('Canvas unavailable')
         context.drawImage(bitmap, 0, 0, target.width, target.height)
+        cacheStaticFrame(cacheKey, target)
       } finally { bitmap.close() }
     } catch {
       if (!current.signal.aborted && request === generation) emit('error')
@@ -62,6 +72,7 @@ function load() {
 }
 watch(() => props.src, () => { if (visible) load() })
 onMounted(() => {
+  if (props.eager) { visible = true; load(); return }
   observer = new IntersectionObserver(entries => {
     if (entries.some(entry => entry.isIntersecting)) {
       visible = true
