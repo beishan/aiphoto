@@ -1715,8 +1715,20 @@ onUnmounted(() => {
               <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
               <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :disabled="pendingImportAssetIds.has(asset.id)" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
               <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
+
+              <div class="review-card-overlay">
+                <div class="review-card-caption">
+                  <strong class="review-card-label review-card-name" :title="asset.originalFilename">{{ asset.originalFilename || ('图片 #' + asset.id) }}</strong>
+                  <span class="review-card-label">{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</span>
+                </div>
+                <div class="review-card-states">
+                  <span class="review-card-label">{{ pendingImportAssetIds.has(asset.id) ? '入库中' : assetStatusLabel(asset) }}</span>
+                  <span v-if="asset.libraryDuplicate" class="review-card-label">图库已有</span>
+                  <span v-if="asset.libraryTrashDuplicate" class="review-card-label review-card-warning">回收站已有</span>
+                  <span v-if="asset.errorMessage" class="review-card-label review-card-warning review-card-error" :title="asset.errorMessage">{{ asset.errorMessage }}</span>
+                </div>
+              </div>
             </div>
-            <div class="asset-copy"><strong :title="asset.originalFilename">{{ asset.originalFilename || `图片 #${asset.id}` }}</strong><small>{{ asset.width || '?' }} × {{ asset.height || '?' }} · {{ formatBytes(asset.fileSize) }}</small><small>{{ assetStatusLabel(asset) }}</small><small v-if="asset.errorMessage" :title="asset.errorMessage">{{ asset.errorMessage }}</small><div class="asset-status"><el-tag v-if="asset.libraryDuplicate" size="small" type="info">图库已有</el-tag><el-tag v-if="asset.libraryTrashDuplicate" size="small" type="danger">回收站已有</el-tag><el-tag v-if="asset.status === 'IMPORTED'" size="small" type="success">已入库</el-tag><el-tag v-if="asset.status === 'DUPLICATE'" size="small" type="info">已跳过重复</el-tag></div></div>
           </el-card>
         </div>
         <el-pagination class="pagination" layout="total, sizes, prev, pager, next, jumper" :page-sizes="reviewPageSizes" :current-page="assetPage + 1" :page-size="reviewPageSize" @size-change="changeReviewPageSize" :total="assetTotal" @current-change="changeAssetPage" />

@@ -1553,3 +1553,12 @@
 
 .collection-preview-dialog:has(.preview-filmstrip) { grid-template-rows: 72px minmax(0, 1fr) 76px 64px; }
 @media(max-width:640px) { .collection-preview-dialog:has(.preview-filmstrip) { grid-template-rows: 68px minmax(0, 1fr) 76px auto; } }
+
+/* Review cards keep metadata inside the image, without a separate footer. */
+.review-workspace .review-card-overlay { position:absolute;inset:auto 8px 8px;display:flex;align-items:flex-end;justify-content:space-between;gap:6px;pointer-events:none; }
+.review-card-caption { display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;flex:1; }
+.review-card-states { display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:43%;min-width:0; }
+.review-card-label { display:block;max-width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(15,20,28,.65);color:#fff;font-size:10px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.35); }
+.review-card-name { font-weight:600;font-size:11px;pointer-events:auto; }
+.review-card-warning { color:#ffd8a8; }
+.review-card-error { pointer-events:auto; }
