@@ -2,10 +2,13 @@
 import { computed, ref } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import justifiedLayout from 'justified-layout'
+import { visiblePhotoRange } from '@/utils/visiblePhotoRange'
 import PhotoCard from './PhotoCard.vue'
 import type { Photo } from '@/types'
 
 const props = defineProps<{
+  scrollRoot?: HTMLElement | null
+  viewportVersion?: number
   photos: Photo[]
   startIndex: number
   count: number
@@ -21,7 +24,10 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null)
 const width = ref(0)
 useResizeObserver(container, entries => { width.value = entries[0]?.contentRect.width || 0 })
-const items = computed(() => props.photos.slice(props.startIndex, props.startIndex + props.count))
+const items = computed<Photo[]>((previous) => {
+  const next = props.photos.slice(props.startIndex, props.startIndex + props.count)
+  return previous && previous.length === next.length && next.every((photo, index) => photo === previous[index]) ? previous : next
+})
 const layout = computed(() => {
   if (width.value <= 0) return { boxes: [], containerHeight: 0 }
   return justifiedLayout(items.value.map(photo =>
@@ -34,12 +40,27 @@ const layout = computed(() => {
     showWidows: true,
   })
 })
+const visibleBoxes = computed(() => {
+  // Parent updates once per animation frame. Keep two screens ready on either side.
+  void props.viewportVersion
+  const root = props.scrollRoot
+  if (!root || !container.value) return layout.value.boxes.map((box, index) => ({ box, index }))
+  const top = container.value.getBoundingClientRect().top - root.getBoundingClientRect().top
+  const overscan = Math.max(600, root.clientHeight * 2)
+  const lower = -top - overscan
+  const upper = -top + root.clientHeight + overscan
+  const boxes = layout.value.boxes
+  const { start, end } = visiblePhotoRange(boxes, lower, upper)
+  const visible = []
+  for (let index = start; index < end; index++) visible.push({ box: boxes[index], index })
+  return visible
+})
 </script>
 
 <template>
   <div ref="container" class="justified-photo-grid" :style="{ height: `${layout.containerHeight}px` }">
     <PhotoCard
-      v-for="(box, index) in layout.boxes"
+      v-for="{ box, index } in visibleBoxes"
       :key="items[index].id"
       class="justified-photo"
       :style="{ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` }"

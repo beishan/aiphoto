@@ -14,14 +14,18 @@ export const usePhotoStore = defineStore('photo', () => {
 
   const browseHasMore = ref(true)
   let browseCursor: number | undefined
-  async function browsePhotos(reset = false, replace = false) {
+  async function browsePhotos(reset = false) {
     const request = reset ? ++listRequest : listRequest
     const cursor = reset ? undefined : browseCursor
     if (reset) loading.value = true
     try {
       const { data } = await photoApi.browse(cursor)
       if (request !== listRequest) return false
-      photos.value = reset || replace ? data.content : [...photos.value, ...data.content]
+      if (reset) photos.value = data.content
+      else {
+        const existing = new Set(photos.value.map(photo => photo.id))
+        photos.value.push(...data.content.filter(photo => !existing.has(photo.id)))
+      }
       browseCursor = data.nextCursor ?? undefined
       browseHasMore.value = data.hasMore
       return data.content.length > 0

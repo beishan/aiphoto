@@ -245,6 +245,12 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
 const activeMonthKey = ref('')
 const scrollContainer = ref<HTMLElement | null>(null)
+const viewportVersion = ref(0)
+let viewportFrame = 0
+function updateViewport() {
+  if (viewportFrame) return
+  viewportFrame = requestAnimationFrame(() => { viewportFrame = 0; viewportVersion.value++ })
+}
 let observer: IntersectionObserver | null = null
 
 function setupObserver() {
@@ -299,7 +305,7 @@ async function refreshGallery() {
 }
 
 watch(zoomLevel, () => { void fillViewport() })
-useResizeObserver(scrollContainer, () => { void fillViewport() })
+useResizeObserver(scrollContainer, () => { updateViewport(); void fillViewport() })
 onMounted(() => {
   galleryActive = true
   void initZoom()
@@ -309,6 +315,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(viewportFrame)
   galleryActive = false
   window.removeEventListener('photos-changed', refreshGallery)
   if (observer) observer.disconnect()
@@ -321,7 +328,7 @@ function scrollToMonth(item: TimelineItem) {
 
 async function loadMore(): Promise<boolean> {
   if (!galleryActive || photoStore.loading || loadingMore.value) return false
-  if (!photoStore.browseHasMore || photoStore.photos.length >= 1000 || viewerVisible.value) return false
+  if (!photoStore.browseHasMore || viewerVisible.value) return false
   loadingMore.value = true
   try {
     const nextPage = page.value + 1
@@ -332,19 +339,6 @@ async function loadMore(): Promise<boolean> {
     message.error('更多照片加载失败，请再次滚动重试')
     return false
   } finally { loadingMore.value = false }
-}
-
-async function continueBrowsing() {
-  if (loadingMore.value || viewerVisible.value || selectMode.value) return
-  loadingMore.value = true
-  try {
-    if (await photoStore.browsePhotos(false, true)) {
-      selectedIds.value = new Set()
-      await nextTick()
-      scrollContainer.value?.scrollTo({ top: 0 })
-    }
-  } catch { message.error('照片加载失败，请重试') }
-  finally { loadingMore.value = false }
 }
 
 function openViewer(index: number) {
@@ -358,6 +352,7 @@ async function handleUploaded() {
 }
 
 function handleScroll(e: Event) {
+  updateViewport()
   const target = e.target as HTMLElement
   if (target.scrollHeight - target.scrollTop - target.clientHeight < 300) {
     void loadMore().then(() => fillViewport())
@@ -439,6 +434,8 @@ async function handleToggleFavorite(photoId: number) {
         >
           <div class="month-label">{{ item.label }}</div>
           <JustifiedPhotoGrid
+            :scroll-root="scrollContainer"
+            :viewport-version="viewportVersion"
             :photos="photoStore.photos"
             :start-index="item.startIndex"
             :count="item.count"
@@ -452,9 +449,6 @@ async function handleToggleFavorite(photoId: number) {
         </div>
       </template>
 
-      <div v-if="photoStore.photos.length >= 1000 && photoStore.browseHasMore" class="loading-indicator">
-        <el-button :loading="loadingMore" :disabled="selectMode || viewerVisible" @click="continueBrowsing">继续浏览更早的照片</el-button>
-      </div>
       <!-- Loading indicator -->
       <div v-if="photoStore.loading || loadingMore" class="loading-indicator">
         <div class="loading-spinner"></div>
