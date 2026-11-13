@@ -752,3 +752,9 @@ CREATE INDEX IF NOT EXISTS idx_photos_phash_band_5 ON photos ((substring(lower(f
 CREATE INDEX IF NOT EXISTS idx_photos_phash_band_6 ON photos ((substring(lower(file_hash_phash), 13, 2)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
 CREATE INDEX IF NOT EXISTS idx_photos_phash_band_7 ON photos ((substring(lower(file_hash_phash), 15, 1)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
 CREATE INDEX IF NOT EXISTS idx_photos_phash_band_8 ON photos ((substring(lower(file_hash_phash), 16, 1)), id) WHERE deleted_at IS NULL AND file_hash_phash ~ '^[0-9a-fA-F]{16}$';
+
+ALTER TABLE crawl_assets ADD COLUMN IF NOT EXISTS cleanup_at TIMESTAMP;
+ALTER TABLE crawl_image_skips ADD COLUMN IF NOT EXISTS thumbnail_path VARCHAR(1024);
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_cleanup ON crawl_assets(cleanup_at) WHERE status = 'DELETED' AND local_path IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_crawl_assets_skip_thumbnail ON crawl_assets(url_hash, id DESC) WHERE thumbnail_path IS NOT NULL;

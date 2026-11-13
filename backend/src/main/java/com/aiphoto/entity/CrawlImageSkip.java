@@ -21,6 +21,7 @@ public class CrawlImageSkip {
     private Long ownerId;
     @Column(nullable = false, length = 4096)
     private String imageUrl;
+    private String thumbnailPath;
     @Column(nullable = false, length = 4096)
     private String normalizedUrl;
     @Column(nullable = false, length = 64)

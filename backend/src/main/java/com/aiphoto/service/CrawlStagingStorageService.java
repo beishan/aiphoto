@@ -38,6 +38,14 @@ public class CrawlStagingStorageService {
         return basePath().relativize(target).toString();
     }
 
+    public String writeSkipThumbnail(Long skipId, byte[] bytes) throws Exception {
+        Path directory = basePath().resolve("skip-thumbnails");
+        Files.createDirectories(directory);
+        Path target = directory.resolve(skipId + ".jpg");
+        Files.write(target, bytes);
+        return basePath().relativize(target).toString();
+    }
+
     public byte[] read(String relativePath) throws Exception {
         Path target = basePath().resolve(relativePath).normalize();
         requireManaged(target);

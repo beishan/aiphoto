@@ -275,6 +275,12 @@ public class CrawlController {
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
     }
 
+    @GetMapping("/image-skips/{id}/thumbnail")
+    public ResponseEntity<byte[]> skipThumbnail(@PathVariable Long id, Authentication authentication) throws Exception {
+        return ResponseEntity.ok().contentType(org.springframework.http.MediaType.IMAGE_JPEG)
+                .body(imageSkipService.thumbnail(id, userId(authentication)));
+    }
+
     @DeleteMapping("/image-skips/{id}")
     public Map<String, Integer> deleteImageSkip(
             @PathVariable Long id, Authentication authentication) {

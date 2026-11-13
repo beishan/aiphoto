@@ -26,6 +26,7 @@ public class CrawlAsset {
     private String urlHash;
     @Column(length = 1024)
     private String localPath;
+    private LocalDateTime cleanupAt;
     @Column(length = 1024)
     private String thumbnailPath;
     @Column(length = 255)

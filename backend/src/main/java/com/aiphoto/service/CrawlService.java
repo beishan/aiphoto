@@ -31,6 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class CrawlService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CrawlDeletedCleanupService deletedCleanup;
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager cleanupEntityManager;
 
     private static final long MAX_HTML_BYTES = 5L * 1024 * 1024;
     private final CrawlRuleRepository ruleRepository;
@@ -639,6 +643,12 @@ public class CrawlService {
         for (CrawlAsset asset : assetRepository.findByIdInAndJobId(ids, jobId)) {
             if (deleted && asset.getStatus() != CrawlAsset.Status.DOWNLOADED) continue;
             if (!deleted && asset.getStatus() != CrawlAsset.Status.DELETED) continue;
+            asset = assetRepository.lockCleanupAsset(asset.getId()).orElse(asset);
+            cleanupEntityManager.refresh(asset, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            if (deleted && asset.getStatus() != CrawlAsset.Status.DOWNLOADED) continue;
+            if (!deleted && asset.getStatus() != CrawlAsset.Status.DELETED) continue;
+            if (!deleted && asset.getLocalPath() == null) throw new IllegalStateException("原文件已自动清理，无法恢复，请重新采集");
+            asset.setCleanupAt(deleted ? deletedCleanup.deadline(ownerId) : null);
             asset.setStatus(deleted ? CrawlAsset.Status.DELETED : CrawlAsset.Status.DOWNLOADED);
             changed++;
         }

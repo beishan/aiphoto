@@ -14,6 +14,24 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class CrawlImageSkipService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CrawlStagingStorageService thumbnailStorage;
+
+    @Transactional
+    public byte[] thumbnail(Long id, Long ownerId) throws Exception {
+        var skip = skipRepository.findByIdAndOwnerId(id, ownerId).orElseThrow();
+        if (skip.getThumbnailPath() == null) {
+            for (String source : assetRepository.skipThumbnailSources(ownerId, skip.getUrlHash(), org.springframework.data.domain.PageRequest.of(0, 5))) {
+                try {
+                    skip.setThumbnailPath(thumbnailStorage.writeSkipThumbnail(skip.getId(), thumbnailStorage.read(source)));
+                    skipRepository.save(skip);
+                    break;
+                } catch (Exception ignored) { /* Try another existing local thumbnail; never fetch an original. */ }
+            }
+        }
+        if (skip.getThumbnailPath() == null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND);
+        return thumbnailStorage.read(skip.getThumbnailPath());
+    }
 
     private final CrawlService crawlService;
     private final CrawlAssetRepository assetRepository;
@@ -49,6 +67,20 @@ public class CrawlImageSkipService {
             skip.setSourcePageUrl(asset.getSourcePageUrl());
             skip.setReason(reason == null || reason.isBlank() ? "用户标记为以后跳过" : reason.trim());
             skipRepository.save(skip);
+            if (skip.getThumbnailPath() == null && (asset.getThumbnailPath() != null || asset.getLocalPath() != null)) {
+                try {
+                    byte[] thumbnail;
+                    if (asset.getThumbnailPath() != null) thumbnail = thumbnailStorage.read(asset.getThumbnailPath());
+                    else {
+                        var output = new java.io.ByteArrayOutputStream();
+                        net.coobird.thumbnailator.Thumbnails.of(new java.io.ByteArrayInputStream(thumbnailStorage.read(asset.getLocalPath())))
+                                .size(400, 400).outputFormat("jpg").toOutputStream(output);
+                        thumbnail = output.toByteArray();
+                    }
+                    skip.setThumbnailPath(thumbnailStorage.writeSkipThumbnail(skip.getId(), thumbnail));
+                    skipRepository.save(skip);
+                } catch (Exception e) { throw new IllegalStateException("保存跳过图片缩略图失败", e); }
+            }
             changed++;
         }
         return changed;

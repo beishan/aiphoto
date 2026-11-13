@@ -11,6 +11,16 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
+    @Query("SELECT a.thumbnailPath FROM CrawlAsset a, CrawlJob j WHERE a.jobId = j.id AND j.ownerId = :ownerId AND a.urlHash = :hash AND a.thumbnailPath IS NOT NULL ORDER BY a.id DESC")
+    List<String> skipThumbnailSources(@Param("ownerId") Long ownerId, @Param("hash") String hash, Pageable pageable);
+
+    @Query("SELECT a.id FROM CrawlAsset a WHERE a.status = 'DELETED' AND a.cleanupAt <= :now AND a.localPath IS NOT NULL ORDER BY a.cleanupAt")
+    List<Long> expiredDeleted(@Param("now") java.time.LocalDateTime now, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM CrawlAsset a WHERE a.id = :id")
+    Optional<CrawlAsset> lockCleanupAsset(@Param("id") Long id);
+
     List<CrawlAsset> findByJobIdOrderByIdDesc(Long jobId);
     Page<CrawlAsset> findByJobIdOrderByIdDesc(Long jobId, Pageable pageable);
     Page<CrawlAsset> findByJobIdAndStatusOrderByIdDesc(
