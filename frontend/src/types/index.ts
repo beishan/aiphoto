@@ -220,6 +220,7 @@ export interface CrawlAsset {
   id: number
   jobId: number
   sourcePageUrl: string
+  normalizedUrl: string
   imageUrl: string
   originalFilename: string
   contentType: string

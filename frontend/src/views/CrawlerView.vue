@@ -642,6 +642,7 @@ watch(showCrawlerImages, visible => {
 
 watch([assetStatus, reviewImportStatus, reviewSourcePageId, exactDuplicateOnly, similarOnly, activeJobId], () => thumbnailQueue.cancel())
 
+const previewSkippedUrls = reactive(new Set<string>())
 const previewFilmstrip = ref<HTMLElement | null>(null)
 const previewNearbyImages = computed(() => {
   if (!previewViewerVisible.value) return []
@@ -650,7 +651,7 @@ const previewNearbyImages = computed(() => {
   const end = Math.min(assetTotal.value - 1, previewViewerIndex.value + 8)
   for (let index = start; index <= end; index++) {
     const asset = previewViewerPages[Math.floor(index / assetPageSize.value)]?.[index % assetPageSize.value]
-    if (asset) items.push({ asset, index })
+    if (asset && !previewSkippedUrls.has(asset.normalizedUrl)) items.push({ asset, index })
   }
   return items
 })
@@ -801,6 +802,7 @@ function openAssetPreview(asset: CrawlAsset) {
   previewSession++
   previewPageRequests.clear()
   previewRemovedIndices.clear()
+  previewSkippedUrls.clear()
   Object.keys(previewViewerPages).forEach(key => delete previewViewerPages[Number(key)])
   previewViewerPages[assetPage.value] = assets.value.slice()
   previewViewerVisible.value = true
@@ -838,6 +840,7 @@ async function deletePreviewAsset(ignore: boolean) {
     if (ignore) {
       const { data } = await crawlApi.skipAssets(asset.jobId, [asset.id], '用户选择删除并忽略')
       if (!data.success) throw new Error('加入忽略清单失败')
+      previewSkippedUrls.add(asset.normalizedUrl)
       void loadImageSkips()
     }
     const { data } = await crawlApi.deleteAssets(asset.jobId, [asset.id])
@@ -854,7 +857,12 @@ async function deletePreviewAsset(ignore: boolean) {
 }
 async function stepPreviewViewer(direction: -1 | 1) {
   if (!previewViewerVisible.value) return
-  const targetIndex = previewViewerIndex.value + direction
+  let targetIndex = previewViewerIndex.value + direction
+  while (targetIndex >= 0 && targetIndex < assetTotal.value) {
+    const cached = previewViewerPages[Math.floor(targetIndex / assetPageSize.value)]?.[targetIndex % assetPageSize.value]
+    if (!cached || !previewSkippedUrls.has(cached.normalizedUrl)) break
+    targetIndex += direction
+  }
   if (targetIndex < 0 || targetIndex >= assetTotal.value) return
   const targetPage = Math.floor(targetIndex / assetPageSize.value)
   let pageAssets = previewViewerPages[targetPage]
@@ -1218,15 +1226,25 @@ async function skipSelectedNextTime(assetIds?: number[]) {
   let reason = '重复图片'
   try {
     const { value } = await ElMessageBox.prompt(
-      '这些图片当前仍保留，但以后再次遇到相同图片 URL 时将直接记录为跳过。',
+      '这些图片将从待整理区隐藏，以后遇到相同图片 URL 不再下载；当前本地文件保留。',
       '以后不再采集',
       { inputValue: '重复图片', confirmButtonText: '加入跳过清单', cancelButtonText: '取消', modalClass: assetIds ? 'collection-preview-message-box' : '' },
     )
     reason = value
   } catch { return }
   try {
+    if (preview) {
+      await Promise.all([...previewPageRequests.values()])
+      if (previewViewerIndex.value + 1 < assetTotal.value) await ensurePreviewPage(Math.floor((previewViewerIndex.value + 1) / assetPageSize.value))
+    }
     const results = await Promise.all(groups.map(group => crawlApi.skipAssets(group.jobId, group.ids, reason)))
     const skipped = results.reduce((total, result) => total + result.data.success, 0)
+    if (preview && skipped) {
+      previewSkippedUrls.add(preview.normalizedUrl)
+      previewRemovedIndices.add(previewViewerIndex.value)
+      if (previewViewerIndex.value + 1 < assetTotal.value) await stepPreviewViewer(1)
+      else closePreviewViewer()
+    }
     ElMessage.success(`已加入跳过清单：${skipped} 张`)
     selectedAssets.value = new Set([...selectedAssets.value].filter(id => !ids.has(id)))
     await loadImageSkips()

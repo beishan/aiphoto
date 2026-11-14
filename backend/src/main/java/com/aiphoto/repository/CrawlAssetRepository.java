@@ -36,7 +36,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             @Param("jobId") Long jobId, @Param("pageId") Long pageId,
             @Param("status") CrawlAsset.Status status, Pageable pageable);
     @Query(value = "SELECT a.* FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
-            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
+            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND NOT EXISTS (SELECT 1 FROM crawl_image_skips sk WHERE sk.owner_id = j.owner_id AND sk.url_hash = a.url_hash AND sk.normalized_url = a.normalized_url) "
             + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
             + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
             + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
@@ -47,7 +47,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "AND b.file_hash_md5 = a.file_hash_md5 GROUP BY b.job_id, b.file_hash_md5 HAVING COUNT(*) > 1))) "
             + "ORDER BY a.id DESC",
             countQuery = "SELECT COUNT(*) FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
-                    + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' "
+                    + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND NOT EXISTS (SELECT 1 FROM crawl_image_skips sk WHERE sk.owner_id = j.owner_id AND sk.url_hash = a.url_hash AND sk.normalized_url = a.normalized_url) "
                     + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
                     + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
                     + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
@@ -66,7 +66,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     @Query(value = "SELECT p.id AS id, p.name AS name, p.url AS url, COUNT(a.id) AS \"assetCount\" "
             + "FROM crawl_jobs j JOIN crawl_pages p ON p.id = j.source_page_id "
             + "JOIN crawl_assets a ON a.job_id = j.id "
-            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND j.source_page_id IS NOT NULL "
+            + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND NOT EXISTS (SELECT 1 FROM crawl_image_skips sk WHERE sk.owner_id = j.owner_id AND sk.url_hash = a.url_hash AND sk.normalized_url = a.normalized_url) AND j.source_page_id IS NOT NULL "
             + "AND a.status NOT IN ('DELETED', 'FAILED') GROUP BY p.id, p.name, p.url "
             + "ORDER BY MAX(j.created_at) DESC, p.id DESC",
             nativeQuery = true)
