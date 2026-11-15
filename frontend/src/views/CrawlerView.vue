@@ -252,6 +252,7 @@ let polling = false
 
 type TabKey = 'statistics' | 'overview' | 'sites' | 'pages' | 'collected-pages' | 'tasks' | 'review' | 'skips'
 const activeTab = ref<TabKey>('overview')
+const statisticsVisited = ref(false)
 
 const siteForm = reactive<CrawlSite>({
   discoveryUrls: '', inspectionProxyMode: 'DEFAULT', inspectionProxyId: null,
@@ -1504,6 +1505,10 @@ watch([taskPage, taskPageSize, taskKind, taskSiteId, taskStatus, taskPageNameApp
 watch([taskKind, taskSiteId, taskStatus], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   thumbnailQueue.cancel()
+  if (tab === 'statistics') {
+    if (statisticsVisited.value) void statisticsPanel.value?.refresh()
+    else statisticsVisited.value = true
+  }
   if (tab === 'review') {
     detailRequest++
     void loadReviewData()
@@ -1607,6 +1612,8 @@ onUnmounted(() => {
       <el-segmented v-model="activeTab" :options="tabOptions" block aria-label="图片采集中心栏目" />
     </div>
 
+    <CrawlStatisticsPanel v-if="statisticsVisited" v-show="activeTab === 'statistics'" ref="statisticsPanel" />
+
     <section v-if="activeTab === 'overview'" class="overview-workspace" role="tabpanel">
       <div class="metric-grid">
         <el-card v-for="metric in metrics" :key="metric.label" class="metric-card surface-card" shadow="never">
@@ -1649,8 +1656,6 @@ onUnmounted(() => {
         <el-empty v-else description="暂无采集任务"><el-button type="primary" link @click="activeTab = 'sites'">前往配置网站</el-button></el-empty>
       </el-card>
     </section>
-
-    <CrawlStatisticsPanel v-else-if="activeTab === 'statistics'" ref="statisticsPanel" />
 
     <section v-else-if="activeTab === 'sites'" class="site-catalog surface-card" role="tabpanel">
       <div class="card-heading"><div><p class="eyebrow">SOURCES</p><h2>采集网站</h2><p>按网站管理采集入口、访问配置与解析规则。</p></div><el-button type="primary" :icon="Plus" round @click="openNewSiteDialog">新增网站</el-button></div>
