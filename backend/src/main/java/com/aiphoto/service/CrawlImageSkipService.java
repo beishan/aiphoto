@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@lombok.extern.slf4j.Slf4j
 @RequiredArgsConstructor
 public class CrawlImageSkipService {
     @org.springframework.beans.factory.annotation.Autowired
@@ -79,7 +80,7 @@ public class CrawlImageSkipService {
                     }
                     skip.setThumbnailPath(thumbnailStorage.writeSkipThumbnail(skip.getId(), thumbnail));
                     skipRepository.save(skip);
-                } catch (Exception e) { throw new IllegalStateException("保存跳过图片缩略图失败", e); }
+                } catch (Exception e) { log.warn("保存跳过图片缩略图失败，跳过规则仍将保存: assetId={}", asset.getId(), e); }
             }
             changed++;
         }
