@@ -413,21 +413,25 @@ async function updateJobPriority(job: CrawlJob, priority: number | null) {
     prioritySaving.value = new Set([...prioritySaving.value].filter(id => id !== job.id))
   }
 }
+let reviewPagesLoading = false
 async function loadReviewData() {
   if (previewViewerVisible.value) return
   const request = ++reviewRequest
   try {
-    const [pagesResult, assetsResult] = await Promise.all([
-      crawlApi.reviewPages(),
-      crawlApi.reviewAssets(assetPage.value, assetPageSize.value, assetStatus.value,
-        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value),
-    ])
-    if (request !== reviewRequest) return
-    reviewSourcePages.value = pagesResult.data
-    if (reviewSourcePageId.value && !reviewSourcePages.value.some(page => page.id === reviewSourcePageId.value)) {
-      reviewSourcePageId.value = null
-      return
+    if (!reviewPagesLoading) {
+      reviewPagesLoading = true
+      void crawlApi.reviewPages().then(({ data }) => {
+      if (activeTab.value !== 'review') return
+      reviewSourcePages.value = data
+      if (reviewSourcePageId.value && !data.some(page => page.id === reviewSourcePageId.value)) {
+        reviewSourcePageId.value = null
+      }
+      }).catch(() => { /* Keep the existing page options if the statistics request fails. */ })
+        .finally(() => { reviewPagesLoading = false })
     }
+    const assetsResult = await crawlApi.reviewAssets(assetPage.value, assetPageSize.value, assetStatus.value,
+      exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
+    if (request !== reviewRequest) return
     const lastPage = Math.max(0, assetsResult.data.totalPages - 1)
     if (assetPage.value > lastPage) {
       assetPage.value = lastPage
