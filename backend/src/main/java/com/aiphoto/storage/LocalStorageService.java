@@ -26,6 +26,19 @@ public class LocalStorageService {
     @Value("${app.storage.thumbs-dir:./data/thumbs}")
     private String thumbsDir;
 
+    public String getInstanceId() throws IOException {
+        Path path = photoBasePath().resolve(".aiphoto-instance-id");
+        if (!Files.exists(path)) {
+            try {
+                Files.writeString(path, java.util.UUID.randomUUID().toString(),
+                        java.nio.file.StandardOpenOption.CREATE_NEW);
+            } catch (java.nio.file.FileAlreadyExistsException ignored) {
+                // Another request initialized this persistent instance first.
+            }
+        }
+        return Files.readString(path).trim();
+    }
+
     private static final String PHOTO_BUCKET = "photos";
     private static final String THUMB_BUCKET = "thumbs";
     private static final Pattern MD5_DIRECTORY = Pattern.compile("^[0-9a-fA-F]{32}$");

@@ -32,6 +32,13 @@ public class AlbumController {
         return ResponseEntity.ok(albumService.getAlbumPhotos(id));
     }
 
+    @GetMapping("/{id}/photos/page")
+    public org.springframework.data.domain.Page<PhotoDTO> photoPage(
+            @PathVariable Long id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "40") int size) {
+        return albumService.getAlbumPhotoPage(id, page, size);
+    }
+
     @PostMapping
     public ResponseEntity<AlbumDTO> createAlbum(@RequestBody AlbumDTO albumDTO) {
         return ResponseEntity.ok(albumService.createAlbum(albumDTO));

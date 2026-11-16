@@ -10,6 +10,9 @@ export function isSessionTokenValid(token: string | null, now = Date.now()): boo
 }
 
 export function clearSession() {
+  if (typeof fetch !== 'undefined') {
+    void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', keepalive: true }).catch(() => {})
+  }
   localStorage.removeItem('token')
   sessionStorage.removeItem('user')
 }

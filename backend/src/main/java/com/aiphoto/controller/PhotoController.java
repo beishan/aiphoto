@@ -148,6 +148,7 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("restored", photoService.restoreTrashByIds(ids)));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/trash/batch")
     public ResponseEntity<Map<String, Integer>> permanentDeleteTrashByIds(@RequestBody List<Long> ids) {
         int success = 0;
@@ -163,12 +164,14 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("success", success, "fail", fail));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/trash/{id}")
     public ResponseEntity<Void> permanentDeletePhoto(@PathVariable Long id) {
         photoService.permanentDeletePhoto(id);
         return ResponseEntity.noContent().build();
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/trash")
     public ResponseEntity<Map<String, Integer>> clearTrash() {
         TrashCleanupService.TrashCleanupResult result = trashCleanupService.clearTrash();

@@ -76,13 +76,23 @@ public class AlbumService {
         return album.getPhotos().stream().filter(photo -> photo.getDeletedAt() == null).map(this::toPhotoDTO).toList();
     }
 
+    public org.springframework.data.domain.Page<PhotoDTO> getAlbumPhotoPage(Long id, int page, int size) {
+        if (!albumRepository.existsById(id)) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND);
+        }
+        return photoRepository.albumPhotos(id, org.springframework.data.domain.PageRequest.of(
+                Math.max(0, page), Math.clamp(size, 1, 100))).map(this::toPhotoDTO);
+    }
+
     @Transactional
     public void addPhotoToAlbum(Long albumId, Long photoId) {
         Album album = albumRepository.findById(albumId)
                 .orElseThrow(() -> new RuntimeException("Album not found"));
         Photo photo = photoRepository.findById(photoId)
                 .orElseThrow(() -> new RuntimeException("Photo not found"));
-        album.getPhotos().add(photo);
+        if (album.getPhotos().stream().noneMatch(p -> p.getId().equals(photoId))) {
+            album.getPhotos().add(photo);
+        }
         // 自动设置封面：如果相册没有封面，将第一张添加的照片设为封面
         if (album.getCoverPhoto() == null) {
             album.setCoverPhoto(photo);
@@ -132,7 +142,8 @@ public class AlbumService {
         if (album.getCoverPhoto() != null && album.getCoverPhoto().getDeletedAt() == null) {
             dto.setCoverPhotoId(album.getCoverPhoto().getId());
             try {
-                dto.setCoverPhotoUrl(storageService.getPhotoUrl(album.getCoverPhoto().getFilePath()));
+                dto.setCoverPhotoUrl(storageService.getThumbnailUrl(album.getCoverPhoto().getFileHashMd5()
+                        + (isWebPFilename(album.getCoverPhoto().getOriginalFilename()) ? "/thumb.webp" : "/thumb.jpg")));
             } catch (Exception e) {
                 log.error("Failed to get cover photo URL", e);
             }

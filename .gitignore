@@ -51,3 +51,13 @@ ai-models/
 .pnpm-store/
 .ai-test-deps/
 .pip-cache/
+
+# Android
+android/.gradle/
+android/.gradle-home/
+android/local.properties
+android/**/build/
+android/.kotlin/
+*.jks
+*.keystore
+!android/gradle/wrapper/gradle-wrapper.jar

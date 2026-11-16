@@ -267,7 +267,8 @@ public class FaceService {
             if (person.getCoverFace().getPhoto() != null) {
                 Photo photo = person.getCoverFace().getPhoto();
                 try {
-                    dto.setCoverPhotoUrl(storageService.getPhotoUrl(photo.getFilePath()));
+                    dto.setCoverPhotoUrl(storageService.getThumbnailUrl(photo.getFileHashMd5()
+                            + (photo.getOriginalFilename() != null && photo.getOriginalFilename().toLowerCase().endsWith(".webp") ? "/thumb.webp" : "/thumb.jpg")));
                 } catch (Exception e) {
                     log.warn("Failed to resolve cover photo URL for person {}", person.getId());
                 }

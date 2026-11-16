@@ -27,6 +27,9 @@ class SecurityConfigTest {
 
     @RestController
     static class ProtectedController {
+        @GetMapping("/media/session-test")
+        String mediaEndpoint() { return "media"; }
+
         @GetMapping("/api/session-test")
         String protectedEndpoint() { return "ok"; }
 
@@ -58,4 +61,22 @@ class SecurityConfigTest {
         mvc.perform(get("/api/session-test/admin").header("Authorization", "Bearer valid"))
                 .andExpect(status().isForbidden());
     }
+    @Test
+    void mediaRequiresAuthenticationAndCookieCannotAuthorizeApi() throws Exception {
+        mvc.perform(get("/media/session-test").servletPath("/media/session-test"))
+                .andExpect(status().isUnauthorized());
+        var user = User.withUsername("member").password("unused").roles("USER").build();
+        when(jwtService.extractUsername("valid")).thenReturn("member");
+        when(userDetailsService.loadUserByUsername("member")).thenReturn(user);
+        when(jwtService.isTokenValid("valid", user)).thenReturn(true);
+        var cookie = new jakarta.servlet.http.Cookie("aiphoto_media", "valid");
+        mvc.perform(get("/media/session-test").servletPath("/media/session-test").cookie(cookie))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/session-test").servletPath("/api/session-test").cookie(cookie))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/media/session-test").servletPath("/media/session-test")
+                .cookie(new jakarta.servlet.http.Cookie("aiphoto_media", "expired")))
+                .andExpect(status().isUnauthorized());
+    }
+
 }

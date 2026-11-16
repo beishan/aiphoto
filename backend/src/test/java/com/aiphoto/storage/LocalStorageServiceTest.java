@@ -30,6 +30,18 @@ class LocalStorageServiceTest {
     }
 
     @Test
+    void instanceIdentitySurvivesServiceRestart() throws Exception {
+        storageService.init();
+        String first = storageService.getInstanceId();
+        assertThat(java.util.UUID.fromString(first).toString()).isEqualTo(first);
+        var restarted = new LocalStorageService();
+        ReflectionTestUtils.setField(restarted, "photosDir", photosDirectory.toString());
+        ReflectionTestUtils.setField(restarted, "thumbsDir", thumbsDirectory.toString());
+        restarted.init();
+        assertThat(restarted.getInstanceId()).isEqualTo(first);
+    }
+
+    @Test
     void shardsMd5ObjectNamesButKeepsOtherManagedPathsUnchanged() {
         assertThat(LocalStorageService.shardObjectName(HASH + "/original.jpg"))
             .isEqualTo("ab/cd/" + HASH + "/original.jpg");

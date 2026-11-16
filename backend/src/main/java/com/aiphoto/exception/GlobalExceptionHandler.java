@@ -34,6 +34,21 @@ public class GlobalExceptionHandler {
                 .body(Map.of("message", message.isEmpty() ? "参数校验失败" : message));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleStatus(
+            org.springframework.web.server.ResponseStatusException e) {
+        return ResponseEntity.status(e.getStatusCode()).body(Map.of(
+                "code", "HTTP_" + e.getStatusCode().value(),
+                "message", e.getReason() == null ? "请求无法完成" : e.getReason()));
+    }
+
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleForbidden(
+            org.springframework.security.access.AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", "FORBIDDEN", "message", "没有执行此操作的权限"));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

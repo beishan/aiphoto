@@ -43,12 +43,12 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/logout", "/api/mobile/server-info").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/site/favicon", "/api/site/favicon/status").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers("/api-docs/**", "/swagger-ui/**").permitAll()
                 .requestMatchers("/ws/**").permitAll()
-                .requestMatchers("/media/**").permitAll()
+                .requestMatchers("/media/**").authenticated()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

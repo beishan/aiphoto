@@ -29,7 +29,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        final String authHeader = request.getHeader("Authorization");
+        String authHeader = request.getHeader("Authorization");
+        // Cookies authenticate read-only media only. API writes always require Bearer auth.
+        if (authHeader == null && request.getServletPath().startsWith("/media/")
+                && ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
+                && request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("aiphoto_media".equals(cookie.getName())) {
+                    authHeader = "Bearer " + cookie.getValue();
+                    break;
+                }
+            }
+        }
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -41,7 +52,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-                if (jwtService.isTokenValid(jwt, userDetails)) {
+                if (userDetails.isEnabled() && jwtService.isTokenValid(jwt, userDetails)) {
+                    if (request.getServletPath().startsWith("/api/")) {
+                        MediaSessionCookie.write(response, request, jwt);
+                    }
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

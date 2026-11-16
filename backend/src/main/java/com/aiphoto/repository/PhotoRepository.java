@@ -19,6 +19,9 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.id < :beforeId ORDER BY p.id DESC")
     List<Photo> findBeforeId(@Param("beforeId") long beforeId, Pageable pageable);
 
+    @Query("SELECT DISTINCT p FROM Album a JOIN a.photos p WHERE a.id = :albumId AND p.deletedAt IS NULL ORDER BY p.id DESC")
+    Page<Photo> albumPhotos(@Param("albumId") Long albumId, Pageable pageable);
+
     @Query("SELECT COALESCE(MAX(p.id), 0) FROM Photo p")
     long maxPhotoId();
 

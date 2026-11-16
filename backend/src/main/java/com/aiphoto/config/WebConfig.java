@@ -25,16 +25,18 @@ public class WebConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler("/media/photos/avatars/**")
                 .addResourceLocations(photosPath + "avatars/")
-                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic().immutable());
+                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate());
 
         registry.addResourceHandler("/media/photos/dock-icons/**")
                 .addResourceLocations(photosPath + "dock-icons/")
-                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePublic().immutable());
+                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate());
 
         registry.addResourceHandler("/media/photos/**")
-                .addResourceLocations(photosPath);
+                .addResourceLocations(photosPath)
+                .setCacheControl(CacheControl.noStore());
 
         registry.addResourceHandler("/media/thumbs/**")
-                .addResourceLocations(thumbsPath);
+                .addResourceLocations(thumbsPath)
+                .setCacheControl(CacheControl.noStore());
     }
 }
