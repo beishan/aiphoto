@@ -455,6 +455,20 @@ public class CrawlService {
     }
 
     @Transactional
+    public boolean autoRetry(Long jobId, com.aiphoto.entity.CrawlerSetting settings) {
+        CrawlJob job = jobRepository.lockForRetry(jobId).orElse(null);
+        if (!Boolean.TRUE.equals(settings.getTaskAutoRetryEnabled()) || job == null
+                || (job.getStatus() != CrawlJob.Status.FAILED && job.getStatus() != CrawlJob.Status.PARTIAL)
+                || (job.getPhase() != CrawlJob.Phase.DOWNLOAD && job.getPhase() != CrawlJob.Phase.REVIEW)
+                || job.getFinishedAt() == null || job.getAutoRetryCount() >= settings.getTaskMaxRetries()
+                || job.getFinishedAt().plusSeconds(settings.getTaskRetryIntervalSeconds())
+                        .isAfter(java.time.LocalDateTime.now())) return false;
+        prepareResumeOrRetry(jobId, job.getOwnerId());
+        job.setAutoRetryCount(job.getAutoRetryCount() + 1);
+        return true;
+    }
+
+    @Transactional
     public CrawlJob prepareResumeOrRetry(Long jobId, Long ownerId) {
         CrawlJob job = getJob(jobId, ownerId);
         boolean emptyCompletedDownload = job.getPhase() == CrawlJob.Phase.REVIEW

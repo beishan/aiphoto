@@ -131,6 +131,9 @@ export interface CrawlerProxy {
 }
 
 export interface CrawlerSettings {
+  taskAutoRetryEnabled: boolean
+  taskRetryIntervalSeconds: number
+  taskMaxRetries: number
   directFallback: boolean
   connectTimeoutSeconds: number
   requestTimeoutSeconds: number

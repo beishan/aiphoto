@@ -758,3 +758,8 @@ ALTER TABLE crawl_image_skips ADD COLUMN IF NOT EXISTS thumbnail_path VARCHAR(10
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_cleanup ON crawl_assets(cleanup_at) WHERE status = 'DELETED' AND local_path IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_crawl_assets_skip_thumbnail ON crawl_assets(url_hash, id DESC) WHERE thumbnail_path IS NOT NULL;
+
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_auto_retry_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_retry_interval_seconds INTEGER NOT NULL DEFAULT 300;
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_max_retries INTEGER NOT NULL DEFAULT 3;
+ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS auto_retry_count INTEGER NOT NULL DEFAULT 0;

@@ -35,6 +35,9 @@ public class CrawlerSetting {
     private Integer scanTaskDefaultPriority = 100;
     @Column(nullable = false)
     private Integer collectionTaskDefaultPriority = 75;
+    private Boolean taskAutoRetryEnabled = false;
+    private Integer taskRetryIntervalSeconds = 300;
+    private Integer taskMaxRetries = 3;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 }

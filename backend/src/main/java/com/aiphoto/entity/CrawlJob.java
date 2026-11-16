@@ -60,6 +60,7 @@ public class CrawlJob {
     private LocalDateTime leaseUntil;
     @Column(nullable = false)
     private Integer attemptCount = 0;
+    private Integer autoRetryCount = 0;
     @CreationTimestamp
     private LocalDateTime createdAt;
     private LocalDateTime finishedAt;

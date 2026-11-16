@@ -11,6 +11,10 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select j from CrawlJob j where j.id = :id")
+    Optional<CrawlJob> lockForRetry(@Param("id") Long id);
+
     List<CrawlJob> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
     @Query("select distinct j from CrawlJob j where j.ownerId = :ownerId and exists "
             + "(select p.id from CrawlPage p where p.jobId = j.id "

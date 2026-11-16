@@ -25,6 +25,7 @@ public class CrawlerSettingsService {
     public SettingsView getSettings() {
         CrawlerSetting setting = currentSetting();
         return new SettingsView(
+                setting.getTaskAutoRetryEnabled(), setting.getTaskRetryIntervalSeconds(), setting.getTaskMaxRetries(),
                 setting.getDirectFallback(),
                 setting.getConnectTimeoutSeconds(),
                 setting.getRequestTimeoutSeconds(),
@@ -41,6 +42,9 @@ public class CrawlerSettingsService {
     @Transactional
     public SettingsView updateSettings(SettingsRequest request) {
         CrawlerSetting setting = currentSetting();
+        if (request.taskAutoRetryEnabled() != null) setting.setTaskAutoRetryEnabled(request.taskAutoRetryEnabled());
+        if (request.taskRetryIntervalSeconds() != null) setting.setTaskRetryIntervalSeconds(clamp(request.taskRetryIntervalSeconds(), 10, 604800));
+        if (request.taskMaxRetries() != null) setting.setTaskMaxRetries(clamp(request.taskMaxRetries(), 0, 100));
         setting.setDirectFallback(request.directFallback());
         setting.setConnectTimeoutSeconds(clamp(request.connectTimeoutSeconds(), 1, 60));
         setting.setRequestTimeoutSeconds(clamp(request.requestTimeoutSeconds(), 1, 300));
@@ -302,6 +306,7 @@ public class CrawlerSettingsService {
     private synchronized void invalidateSnapshot() { cachedSnapshot = null; }
 
     public record SettingsRequest(
+            Boolean taskAutoRetryEnabled, Integer taskRetryIntervalSeconds, Integer taskMaxRetries,
             boolean directFallback, Integer connectTimeoutSeconds,
             Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
             Long minRequestIntervalMillis,
@@ -310,7 +315,7 @@ public class CrawlerSettingsService {
         public SettingsRequest(boolean directFallback, Integer connectTimeoutSeconds,
                 Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
                 Long minRequestIntervalMillis, Integer maxRetries, Long retryBaseDelayMillis) {
-            this(directFallback, connectTimeoutSeconds, requestTimeoutSeconds,
+            this(null, null, null, directFallback, connectTimeoutSeconds, requestTimeoutSeconds,
                     imageDownloadTimeoutSeconds, minRequestIntervalMillis,
                     maxRetries, retryBaseDelayMillis, 100, 75);
         }
@@ -329,6 +334,7 @@ public class CrawlerSettingsService {
             boolean hasPassword, boolean enabled, Integer priority, String proxyType,
             String controllerUrl, boolean secretConfigured) {}
     public record SettingsView(
+            Boolean taskAutoRetryEnabled, Integer taskRetryIntervalSeconds, Integer taskMaxRetries,
             boolean directFallback, Integer connectTimeoutSeconds,
             Integer requestTimeoutSeconds, Integer imageDownloadTimeoutSeconds,
             Long minRequestIntervalMillis,

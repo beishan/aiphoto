@@ -632,4 +632,30 @@ class CrawlServiceTest {
         asset.setThumbnailPath(thumbnailPath);
         return asset;
     }
+
+    @Test
+    void autoRetryHonorsIntervalLimitAndTaskState() {
+        var settings = new com.aiphoto.entity.CrawlerSetting();
+        settings.setTaskAutoRetryEnabled(true);
+        CrawlJob job = new CrawlJob();
+        job.setId(99L);
+        job.setOwnerId(1L);
+        job.setPhase(CrawlJob.Phase.REVIEW);
+        job.setStatus(CrawlJob.Status.PARTIAL);
+        job.setFinishedAt(java.time.LocalDateTime.now());
+        when(jobRepository.lockForRetry(99L)).thenReturn(Optional.of(job));
+        assertThat(crawlService.autoRetry(99L, settings)).isFalse();
+        job.setFinishedAt(java.time.LocalDateTime.now().minusHours(1));
+        job.setAutoRetryCount(3);
+        assertThat(crawlService.autoRetry(99L, settings)).isFalse();
+        job.setAutoRetryCount(0);
+        job.setStatus(CrawlJob.Status.PAUSED);
+        assertThat(crawlService.autoRetry(99L, settings)).isFalse();
+        job.setStatus(CrawlJob.Status.PARTIAL);
+        when(jobRepository.findByIdAndOwnerId(99L, 1L)).thenReturn(Optional.of(job));
+        assertThat(crawlService.autoRetry(99L, settings)).isTrue();
+        assertThat(job.getAutoRetryCount()).isEqualTo(1);
+        assertThat(job.getStatus()).isEqualTo(CrawlJob.Status.QUEUED);
+        assertThat(crawlService.autoRetry(99L, settings)).isFalse();
+    }
 }

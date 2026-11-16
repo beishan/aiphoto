@@ -20,6 +20,9 @@ const mergedProxy = computed(() => {
   return editor.proxyType === 'MIHOMO' && saved?.proxyType === 'MIHOMO' ? saved : null
 })
 const settings = reactive({
+  taskAutoRetryEnabled: false,
+  taskRetryIntervalSeconds: 300,
+  taskMaxRetries: 3,
   directFallback: true,
   connectTimeoutSeconds: 10,
   requestTimeoutSeconds: 30,
@@ -239,7 +242,7 @@ onMounted(load)
         <label><span>单次请求超时</span><el-input-number v-model="settings.requestTimeoutSeconds" :min="1" :max="300" /><small>秒</small></label>
         <label><span>单张图片下载超时</span><el-input-number v-model="settings.imageDownloadTimeoutSeconds" :min="1" :max="600" /><small>秒，包含重试与代理切换；缩短后对当前下载生效</small></label>
         <label><span>同域名最小间隔</span><el-input-number v-model="settings.minRequestIntervalMillis" :min="0" :max="60000" :step="100" /><small>毫秒</small></label>
-        <label><span>失败自动重试</span><el-input-number v-model="settings.maxRetries" :min="0" :max="5" /><small>次</small></label>
+        <label><span>请求失败重试次数</span><el-input-number v-model="settings.maxRetries" :min="0" :max="5" /><small>次</small></label>
         <label><span>重试基础等待</span><el-input-number v-model="settings.retryBaseDelayMillis" :min="0" :max="60000" :step="100" /><small>毫秒，指数退避</small></label>
       </div>
       <div class="fallback-row"><div><strong>代理失败后允许直连</strong><small>按优先级尝试全部启用代理后，再使用 NAS 的直接网络连接。</small></div><el-switch v-model="settings.directFallback" /></div>
@@ -251,6 +254,15 @@ onMounted(load)
       <div class="setting-grid">
         <label><span>扫描任务</span><el-select v-model="settings.scanTaskDefaultPriority" aria-label="扫描任务默认优先级"><el-option v-for="option in taskPriorityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small>新建扫描任务及恢复默认时使用</small></label>
         <label><span>采集任务</span><el-select v-model="settings.collectionTaskDefaultPriority" aria-label="采集任务默认优先级"><el-option v-for="option in taskPriorityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><small>新建单页采集任务及恢复默认时使用</small></label>
+      </div>
+    </section>
+
+    <section v-if="!props.proxiesOnly" class="settings-card">
+      <h3>采集任务自动重试</h3>
+      <div class="fallback-row"><div><strong>启用任务自动重试</strong><small>采集任务失败或部分成功后按间隔重试，已成功图片保留。暂停、取消及扫描任务不参与。</small></div><el-switch v-model="settings.taskAutoRetryEnabled" /></div>
+      <div class="setting-grid">
+        <label><span>重试间隔（秒）</span><el-input-number v-model="settings.taskRetryIntervalSeconds" :min="10" :max="604800" /></label>
+        <label><span>最大自动重试次数</span><el-input-number v-model="settings.taskMaxRetries" :min="0" :max="100" /><small>默认 3 次，达到上限停止；手动重试不重置累计次数。设置为 0 停止自动重试。</small></label>
       </div>
     </section>
 
