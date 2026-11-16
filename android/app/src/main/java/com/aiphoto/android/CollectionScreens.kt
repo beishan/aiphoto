@@ -45,12 +45,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 }
 @Composable fun AlbumScreen(vm: AppViewModel, nav: NavHostController, id: Long) {
     val album = vm.albums.find { it.id == id }
+    val editable = album?.type == "VIRTUAL" || (album?.type == "BABY" && vm.supports("baby-timeline-page"))
+    val source = if (album?.type == "BABY" && vm.supports("baby-timeline-page")) "baby:$id" else "album:$id"
     var menu by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
-    PhotoFeedScreen(vm, nav, "album:$id", album?.name ?: "相册", header = {
+    PhotoFeedScreen(vm, nav, source, album?.name ?: "相册", header = {
         BackBar(album?.name ?: "相册", nav) {
-            IconButton({ vm.loadFeed("album:$id", true) }) { Icon(Icons.Outlined.Refresh, "刷新") }
-            if (album?.type == "VIRTUAL") {
+            IconButton({ vm.loadFeed(source, true) }) { Icon(Icons.Outlined.Refresh, "刷新") }
+            if (editable) {
                 IconButton({ menu = true }) { Icon(Icons.Outlined.MoreVert, "相册操作") }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(text = { Text("编辑相册") }, onClick = { menu = false; nav.navigate("album-edit/$id") })
@@ -60,8 +62,9 @@ import androidx.activity.result.contract.ActivityResultContracts
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!album?.description.isNullOrBlank()) Text(album!!.description!!, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (album?.type == "VIRTUAL") OutlinedButton({ nav.navigate("pick/$id") }, enabled = !vm.catalogOffline) { Icon(Icons.Outlined.Add, null); Text("从 NAS 图库添加照片") }
-            else Text("此类型首版仅浏览；宝宝成长时间线属于后续阶段。", style = MaterialTheme.typography.bodySmall)
+            if (album?.type == "BABY") Text("出生于 ${album.birthDate ?: "未设置"} · 按 NAS 拍摄日期计算月龄", style = MaterialTheme.typography.bodySmall)
+            if (editable) OutlinedButton({ nav.navigate("pick/$id") }, enabled = !vm.catalogOffline) { Icon(Icons.Outlined.Add, null); Text("从 NAS 图库添加照片") }
+            else Text("此相册只读；宝宝时间线需要升级 NAS 服务端。", style = MaterialTheme.typography.bodySmall)
         }
     })
     if (deleting) ConfirmDialog("删除相册？", "仅删除相册与照片的关联，图库原件仍保留。", { deleting = false }) {
@@ -73,14 +76,36 @@ import androidx.activity.result.contract.ActivityResultContracts
     val album = vm.albums.find { it.id == id }
     var name by rememberSaveable { mutableStateOf(album?.name.orEmpty()) }
     var description by rememberSaveable { mutableStateOf(album?.description.orEmpty()) }
+    var type by rememberSaveable { mutableStateOf(album?.type ?: "VIRTUAL") }
+    var birth by rememberSaveable { mutableStateOf(album?.birthDate.orEmpty()) }
+    var validation by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().imePadding()) {
         BackBar(if (id == 0L) "新建相册" else "编辑相册", nav)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Icon(Icons.Outlined.PhotoAlbum, null, Modifier.size(100.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(24.dp), tint = MaterialTheme.colorScheme.primary)
+            if (id == 0L && vm.supports("baby-timeline-page")) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(type == "VIRTUAL", { type = "VIRTUAL" }, { Text("普通相册") })
+                FilterChip(type == "BABY", { type = "BABY" }, { Text("宝宝相册") })
+            }
+            if (type == "BABY") BirthDateField(birth, { birth = it })
+            if (validation != null) Text(validation!!, color = MaterialTheme.colorScheme.error)
             OutlinedTextField(name, { if (it.length <= 100) name = it }, label = { Text("相册名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(description, { if (it.length <= 1000) description = it }, label = { Text("相册描述（选填）") }, minLines = 3, modifier = Modifier.fillMaxWidth())
             Text("创建后可从 NAS 图库选择照片，不读取手机相册。", style = MaterialTheme.typography.bodySmall)
-            Button({ vm.mutate({ it.write(if (id == 0L) "albums" else "albums/$id", if (id == 0L) "POST" else "PUT", mapOf("name" to name.trim(), "description" to description, "type" to "VIRTUAL", "shared" to (album?.shared ?: false))) }, "相册已保存") { vm.loadCatalog(); nav.popBackStack() } }, enabled = name.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("保存相册") }
+            Button({
+                val date = runCatching { java.time.LocalDate.parse(birth) }.getOrNull()
+                if (type == "BABY" && (date == null || date.year < 1 || date.isAfter(java.time.LocalDate.now()))) validation = "请选择有效的出生日期，不能晚于今天"
+                else vm.mutate({ client ->
+                    client.write(if (id == 0L) "albums" else "albums/$id", if (id == 0L) "POST" else "PUT", buildMap<String, Any> {
+                        put("name", name.trim()); put("description", description); put("type", type); put("shared", album?.shared ?: false)
+                        if (type == "BABY") put("birthDate", birth)
+                    })
+                    if (id != 0L && type == "BABY") vm.invalidateFeed("baby:$id")
+                }, "相册已保存") {
+                    if (id != 0L && type == "BABY") vm.loadFeed("baby:$id", true)
+                    vm.loadCatalog(); nav.popBackStack()
+                }
+            }, enabled = name.isNotBlank() && !vm.busy && !vm.catalogOffline, modifier = Modifier.fillMaxWidth()) { Text("保存相册") }
         }
     }
 }
@@ -90,10 +115,12 @@ import androidx.activity.result.contract.ActivityResultContracts
         item { TopAppBar(title = { Text("发现", fontWeight = FontWeight.Bold) }, actions = { IconButton({ vm.loadCatalog() }) { Icon(Icons.Outlined.Refresh, "刷新") } }) }
         item { Text("那些人，那些时光", Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (vm.catalogOffline) item { Text("离线缓存", Modifier.padding(20.dp)) }
+        if (vm.supports("family-timeline")) item { MenuRow("精选时间线", Icons.Outlined.History, "你选入的照片，按年月珍藏") { nav.navigate("timeline") } }
+        if (vm.supports("baby-timeline-page")) item { MenuRow("宝宝相册", Icons.Outlined.ChildCare, "在相册页创建宝宝相册并设置出生日期") { nav.navigate("albums") } }
         item { Text("人物", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge) }
         if (vm.people.isEmpty()) item { Text("尚未识别到人物，请在 NAS 完成人脸索引。", Modifier.padding(horizontal = 20.dp)) }
         items(vm.people.chunked(3)) { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            row.forEach { person -> Column(Modifier.weight(1f).clickable { nav.feed("person:${person.id}", person.name ?: "未命名人物") }, horizontalAlignment = Alignment.CenterHorizontally) {
+            row.forEach { person -> Column(Modifier.weight(1f).clickable { nav.navigate("person/${person.id}") }, horizontalAlignment = Alignment.CenterHorizontally) {
                 PhotoImage(vm, person.coverPhotoUrl, Modifier.size(82.dp).clip(CircleShape))
                 Text(person.name ?: "未命名", Modifier.padding(top = 6.dp)); Text("${person.photoCount} 张", style = MaterialTheme.typography.labelSmall)
             } }

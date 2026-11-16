@@ -44,6 +44,7 @@ public class PeopleController {
         return ResponseEntity.ok(faceService.updatePersonName(id, body.get("name")));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/merge")
     public ResponseEntity<Void> mergePeople(@RequestBody Map<String, Long> body) {
         faceService.mergePeople(body.get("targetId"), body.get("sourceId"));
@@ -64,6 +65,12 @@ public class PeopleController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/faces/page")
+    public Page<FaceDTO> facePage(@PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "40") int size) {
+        return faceService.facePage(id, page, size);
+    }
+
     @GetMapping("/{id}/faces")
     public ResponseEntity<List<FaceDTO>> getPersonFaces(@PathVariable Long id) {
         return ResponseEntity.ok(faceService.getPersonFaces(id));
@@ -74,6 +81,7 @@ public class PeopleController {
         return ResponseEntity.ok(faceService.getUnnamedFaces());
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/faces/{faceId}/assign")
     public ResponseEntity<Void> assignFace(
             @PathVariable Long faceId,

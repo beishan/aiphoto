@@ -18,6 +18,9 @@ public interface FaceClusterRepository extends JpaRepository<FaceCluster, Long> 
 
     List<FaceCluster> findByPerson(Person person);
 
+    org.springframework.data.domain.Page<FaceCluster> findByPersonIdAndPhotoDeletedAtIsNull(
+            Long personId, org.springframework.data.domain.Pageable pageable);
+
     @Query(value = "SELECT * FROM face_clusters WHERE person_id IS NULL", nativeQuery = true)
     List<FaceCluster> findUnassigned();
 

@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 public class PhotoDTO {
     private Long id;
+    private String ageLabel;
     private String filePath;
     private LocalDateTime exifDate;
     private Double gpsLat;

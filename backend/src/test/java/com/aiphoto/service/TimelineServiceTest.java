@@ -19,4 +19,15 @@ class TimelineServiceTest {
         argThat(page -> page.getPageSize() == 200 && page.getPageNumber() == 0));
     verify(photos, never()).findTimelinePhotos();
   }
+  @Test void unknownDatePhotosHaveTheirOwnBoundedPage() {
+    var photos = mock(PhotoRepository.class);
+    when(photos.undatedTimeline(any())).thenReturn(Page.empty());
+    when(photos.countByInTimelineTrueAndExifDateIsNullAndDeletedAtIsNull()).thenReturn(3L);
+    var service = new TimelineService(photos, mock(LocalStorageService.class));
+    assertEquals(3L, service.undatedCount());
+    assertTrue(service.undated(-1, 999).isEmpty());
+    verify(photos).undatedTimeline(argThat(page -> page.getPageNumber() == 0 && page.getPageSize() == 100));
+    verify(photos, never()).getTimelineGrouped();
+  }
+
 }

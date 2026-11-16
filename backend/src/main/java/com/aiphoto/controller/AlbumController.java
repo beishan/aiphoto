@@ -16,6 +16,7 @@ import java.util.Map;
 public class AlbumController {
 
     private final AlbumService albumService;
+    private final com.aiphoto.service.BabyAlbumService babyAlbumService;
 
     @GetMapping
     public ResponseEntity<List<AlbumDTO>> listAlbums() {
@@ -37,6 +38,18 @@ public class AlbumController {
             @PathVariable Long id, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "40") int size) {
         return albumService.getAlbumPhotoPage(id, page, size);
+    }
+
+    @GetMapping("/{id}/baby-timeline")
+    public Map<String, List<PhotoDTO>> babyTimeline(@PathVariable Long id) {
+        return babyAlbumService.getBabyAlbumTimeline(id);
+    }
+
+    @GetMapping("/{id}/baby-timeline/page")
+    public org.springframework.data.domain.Page<PhotoDTO> babyPage(
+            @PathVariable Long id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "40") int size) {
+        return babyAlbumService.page(id, page, size);
     }
 
     @PostMapping

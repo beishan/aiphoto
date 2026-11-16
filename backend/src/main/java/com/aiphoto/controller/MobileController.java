@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class MobileController {
     private final PhotoRepository photos;
     private final LocalStorageService storage;
+    private final com.aiphoto.service.FacePreviewService facePreviews;
     @Value("${app.version}")
     private String version;
 
@@ -27,7 +28,12 @@ public class MobileController {
     public Map<String, Object> info() throws java.io.IOException {
         return Map.of("product", "aiphoto", "version", version, "apiVersion", 1, "instanceId", storage.getInstanceId(),
                 "libraryMode", "SHARED", "capabilities", java.util.List.of(
-                        "album-pagination", "authenticated-media", "preview", "shared-library-edit"));
+                        "album-pagination", "authenticated-media", "preview", "shared-library-edit", "family-timeline", "baby-timeline-page", "people-edit"));
+    }
+
+    @GetMapping(value = "/faces/{id}/preview", produces = MediaType.IMAGE_JPEG_VALUE)
+    public ResponseEntity<byte[]> facePreview(@PathVariable Long id) throws Exception {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(facePreviews.preview(id));
     }
 
     @GetMapping(value = "/photos/{id}/preview", produces = MediaType.IMAGE_JPEG_VALUE)

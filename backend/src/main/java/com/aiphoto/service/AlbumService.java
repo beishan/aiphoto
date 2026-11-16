@@ -39,10 +39,12 @@ public class AlbumService {
     @Transactional
     public AlbumDTO createAlbum(AlbumDTO albumDTO) {
         Album album = new Album();
-        album.setName(albumDTO.getName());
+        validateName(albumDTO.getName());
+        album.setName(albumDTO.getName().trim());
         album.setDescription(albumDTO.getDescription());
         album.setType(Album.AlbumType.valueOf(albumDTO.getType()));
         album.setShared(albumDTO.getShared() != null ? albumDTO.getShared() : false);
+        if (album.getType() == Album.AlbumType.BABY) validateBirthDate(albumDTO.getBirthDate());
         album.setBirthDate(albumDTO.getBirthDate());
         album = albumRepository.save(album);
         return toDTO(album);
@@ -52,9 +54,19 @@ public class AlbumService {
     public AlbumDTO updateAlbum(Long id, AlbumDTO albumDTO) {
         Album album = albumRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Album not found"));
-        album.setName(albumDTO.getName());
-        album.setDescription(albumDTO.getDescription());
-        album.setShared(albumDTO.getShared());
+        if (albumDTO.getType() != null && !album.getType().name().equals(albumDTO.getType())) {
+            throw new IllegalArgumentException("不支持更改相册类型");
+        }
+        if (albumDTO.getName() != null) {
+            validateName(albumDTO.getName());
+            album.setName(albumDTO.getName().trim());
+        }
+        if (albumDTO.getDescription() != null) album.setDescription(albumDTO.getDescription());
+        if (albumDTO.getShared() != null) album.setShared(albumDTO.getShared());
+        if (album.getType() == Album.AlbumType.BABY && albumDTO.getBirthDate() != null) {
+            validateBirthDate(albumDTO.getBirthDate());
+            album.setBirthDate(albumDTO.getBirthDate());
+        }
         album = albumRepository.save(album);
         return toDTO(album);
     }
@@ -152,7 +164,7 @@ public class AlbumService {
         return dto;
     }
 
-    private PhotoDTO toPhotoDTO(Photo photo) {
+    PhotoDTO toPhotoDTO(Photo photo) {
         PhotoDTO dto = new PhotoDTO();
         dto.setId(photo.getId());
         dto.setFilePath(photo.getFilePath());
@@ -174,10 +186,23 @@ public class AlbumService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setInTimeline(photo.getInTimeline());
         dto.setLikeCount(photo.getLikeCount());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
         return dto;
+    }
+
+    private static void validateName(String name) {
+        if (name == null || name.isBlank() || name.trim().length() > 100) {
+            throw new IllegalArgumentException("相册名称需要 1—100 个字符");
+        }
+    }
+
+    private static void validateBirthDate(java.time.LocalDate birthDate) {
+        if (birthDate == null || birthDate.getYear() < 1 || birthDate.isAfter(java.time.LocalDate.now())) {
+            throw new IllegalArgumentException("宝宝出生日期不能为空或晚于今天");
+        }
     }
 
     private boolean isWebPFilename(String filename) {

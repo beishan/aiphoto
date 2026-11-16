@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class FaceDTO {
     private Long id;
+    private String previewUrl;
     private Long photoId;
     private String photoUrl;
     private String bboxJson;

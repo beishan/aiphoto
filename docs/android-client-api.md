@@ -54,3 +54,35 @@
 不存在资源、无权限及不支持格式分别保留 404/403/415。API 错误包含 `message`；新增状态异常带 `code: HTTP_404` 等，权限异常带 `code: FORBIDDEN`。认证失效为 401，客户端集中回到登录；403 不作为会话失效处理。
 
 永久删除及清空回收站要求 ADMIN，安卓无对应入口。共享图库中收藏、备注等不是个人私有字段；恢复照片不会自动恢复此前清除的收藏/时间线标记及封面引用。
+
+
+## 0.23.0 家庭功能扩展（仍为 API 1）
+
+新增 capability：`family-timeline`、`baby-timeline-page`、`people-edit`。旧版安卓可继续使用原有接口；新版安卓连接 0.22.0 时隐藏或禁用家庭功能。
+
+### 宝宝时间线
+
+- `POST /api/albums`：`type: BABY` 时必须提供有效 `birthDate`（YYYY-MM-DD，不晚于服务端当天），名称 1—100 字符。
+- `PUT /api/albums/{id}`：可更新宝宝出生日期；未传的名称/描述/共享字段保留，不允许更改相册类型。
+- `GET /api/albums/{id}/baby-timeline/page?page=0&size=40`：Spring Page，按 EXIF 日期升序、ID 升序，未知日期在末尾；排除回收站照片，size 限制 1—100。
+- `content` 仍为 PhotoDTO，增加 `ageLabel`，其他媒体地址、尺寸、收藏和精选字段保留。相册不匹配或缺少出生日期为 400，不存在为 404。
+- `GET /api/albums/{id}/baby-timeline`：补齐原 Web 调用，保留年龄标签到照片数组的映射格式；同样排除回收站并保留日期未知照片。
+
+年龄规则：按 NAS 保存的 EXIF 本地日期，不进行手机时区转换。出生前单独分组；未满一个日历月按出生后经过天数显示（出生当天第 0 天），满月后按整月显示，一岁后按年和余月显示。月末周年截断到对应月份最后一天；未知日期显示“拍摄日期未知”。修改生日只改变分组，不改原文件、EXIF 或相册关联。
+
+### 精选时间线
+
+复用 `GET /api/timeline/months` 和 `GET /api/timeline/photos?year=2026&month=11&page=0&size=40`。增加 `GET /api/timeline/undated/count` → `{count}`，以及 `GET /api/timeline/undated?page=0&size=40`；后者排除软删除并按 ID 倒序，size 限制 1—100。
+
+加入或移出精选使用 `PUT /api/photos/{id}`，只传 `inTimeline`，表示明确设置目标状态，不调用非幂等 toggle。照片的 `inTimeline` 已补齐到相册、人物和分类结果；移出后同步更新已加载列表及本机缓存。
+
+### 人物整理
+
+- `PUT /api/people/{id}`：改名，空白恢复未命名，最多 100 字符。
+- `GET /api/people/{id}/faces/page?page=0&size=40`：新增分页，排除回收站照片中的人脸，ID 升序，size 1—100。FaceDTO 新增 `previewUrl`，旧 `photoUrl` 保持兼容。
+- `GET /api/mobile/faces/{id}/preview`：Bearer 认证，生成最长边 256 像素 JPEG 裁剪，no-store；失效/回收站资源 404，无效或越界区域 422。复用 Thumbnailator，最多并发生成 2 张，5 秒内不能取得执行名额返回 429。
+- `PUT /api/people/{id}/cover-face`：封面必须属于该人物且照片未在回收站。
+- `POST /api/people/merge`、`POST /api/people/faces/{id}/assign`：仅 ADMIN；自我合并拒绝，操作与聚类采用同一事务锁；归属修正清除失效的原人物封面并刷新双方去重后的照片数。
+- 合并保留目标人物，删除源人物；尽可能保留封面，合并首次/末次出现时间。当前无一键撤销接口。
+
+当前图库仍为家庭共享模式；登录成员可改名和设置封面，管理员执行合并和归属修正。人物照片列表改为数据库去重分页，避免全量加载人脸后在内存分页。修改生日及人物合并/归属修正后清除相关本机列表缓存。

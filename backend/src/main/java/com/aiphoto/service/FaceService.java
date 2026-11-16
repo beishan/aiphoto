@@ -52,13 +52,20 @@ public class FaceService {
     public PersonDTO updatePersonName(Long id, String name) {
         Person person = personRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Person not found"));
-        person.setName(name);
+        if (name != null && name.trim().length() > 100) {
+            throw new IllegalArgumentException("人物名称不能超过 100 个字符");
+        }
+        person.setName(name == null || name.isBlank() ? null : name.trim());
         person = personRepository.save(person);
         return toDTO(person);
     }
 
     @Transactional
     public void mergePeople(Long targetId, Long sourceId) {
+        if (targetId == null || sourceId == null || targetId.equals(sourceId)) {
+            throw new IllegalArgumentException("请选择两个不同的人物");
+        }
+        faceClusterRepository.lockClustering();
         Person target = personRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("Target person not found"));
         Person source = personRepository.findById(sourceId)
@@ -71,6 +78,17 @@ public class FaceService {
         }
         faceClusterRepository.saveAll(sourceFaces);
 
+        if (target.getCoverFace() == null && source.getCoverFace() != null) {
+            target.setCoverFace(source.getCoverFace());
+            personRepository.save(target);
+        }
+        if (source.getFirstSeen() != null && (target.getFirstSeen() == null || source.getFirstSeen().isBefore(target.getFirstSeen()))) {
+            target.setFirstSeen(source.getFirstSeen());
+        }
+        if (source.getLastSeen() != null && (target.getLastSeen() == null || source.getLastSeen().isAfter(target.getLastSeen()))) {
+            target.setLastSeen(source.getLastSeen());
+        }
+        personRepository.save(target);
         // Update photo count
         faceClusterRepository.flush();
         personRepository.refreshPhotoCount(targetId);
@@ -99,7 +117,7 @@ public class FaceService {
         Person person = personRepository.findById(personId)
                 .orElseThrow(() -> new RuntimeException("Person not found"));
         List<FaceCluster> faces = faceClusterRepository.findByPerson(person);
-        return faces.stream().map(this::toFaceDTO).toList();
+        return faces.stream().filter(f -> f.getPhoto() != null && f.getPhoto().getDeletedAt() == null).map(this::toFaceDTO).toList();
     }
 
     public List<FaceDTO> getUnnamedFaces() {
@@ -109,11 +127,21 @@ public class FaceService {
 
     @Transactional
     public void assignFaceToPerson(Long faceId, Long personId) {
+        faceClusterRepository.lockClustering();
         FaceCluster face = faceClusterRepository.findById(faceId)
                 .orElseThrow(() -> new RuntimeException("Face not found"));
         Person person = personRepository.findById(personId)
                 .orElseThrow(() -> new RuntimeException("Person not found"));
-        Long previousPersonId = face.getPerson() == null ? null : face.getPerson().getId();
+        if (face.getPhoto() != null && face.getPhoto().getDeletedAt() != null) {
+            throw new IllegalArgumentException("回收站照片中的人脸不能修改归属");
+        }
+        Person previous = face.getPerson();
+        Long previousPersonId = previous == null ? null : previous.getId();
+        if (previous != null && !previousPersonId.equals(personId)
+                && previous.getCoverFace() != null && previous.getCoverFace().getId().equals(faceId)) {
+            previous.setCoverFace(null);
+            personRepository.save(previous);
+        }
         face.setPerson(person);
         faceClusterRepository.saveAndFlush(face);
         personRepository.refreshPhotoCount(personId);
@@ -124,10 +152,15 @@ public class FaceService {
 
     @Transactional
     public void setCoverFace(Long personId, Long faceId) {
+        faceClusterRepository.lockClustering();
         Person person = personRepository.findById(personId)
                 .orElseThrow(() -> new RuntimeException("Person not found"));
         FaceCluster face = faceClusterRepository.findById(faceId)
                 .orElseThrow(() -> new RuntimeException("Face not found"));
+        if (face.getPerson() == null || !personId.equals(face.getPerson().getId())
+                || (face.getPhoto() != null && face.getPhoto().getDeletedAt() != null)) {
+            throw new IllegalArgumentException("封面必须选择该人物的有效人脸");
+        }
         person.setCoverFace(face);
         personRepository.save(person);
     }
@@ -235,24 +268,19 @@ public class FaceService {
     }
 
     public Page<PhotoDTO> getPersonPhotos(Long personId, Pageable pageable) {
-        Person person = personRepository.findById(personId)
-                .orElseThrow(() -> new RuntimeException("Person not found"));
+        personRepository.findById(personId).orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND, "人物不存在"));
+        return photoRepository.personPhotos(personId, org.springframework.data.domain.PageRequest.of(
+                Math.max(0, pageable.getPageNumber()), Math.clamp(pageable.getPageSize(), 1, 100)))
+                .map(this::toPhotoDTO);
+    }
 
-        // Get all face clusters for this person, extract unique photos
-        List<FaceCluster> faces = faceClusterRepository.findByPerson(person);
-        List<Photo> photos = faces.stream()
-                .map(FaceCluster::getPhoto)
-                .distinct()
-                .collect(Collectors.toList());
-
-        // Manual pagination
-        int start = (int) pageable.getOffset();
-        int end = Math.min(start + pageable.getPageSize(), photos.size());
-        List<PhotoDTO> pageContent = photos.subList(start, end).stream()
-                .map(this::toPhotoDTO)
-                .toList();
-
-        return new PageImpl<>(pageContent, pageable, photos.size());
+    public Page<FaceDTO> facePage(Long id, int page, int size) {
+        if (!personRepository.existsById(id)) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.NOT_FOUND, "人物不存在");
+        return faceClusterRepository.findByPersonIdAndPhotoDeletedAtIsNull(id,
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page), Math.clamp(size, 1, 100),
+                        org.springframework.data.domain.Sort.by("id"))).map(this::toFaceDTO);
     }
 
     private PersonDTO toDTO(Person person) {
@@ -292,6 +320,7 @@ public class FaceService {
         dto.setFileSize(photo.getFileSize());
         dto.setMediaType(photo.getMediaType().name());
         dto.setFavorite(photo.getFavorite());
+        dto.setInTimeline(photo.getInTimeline());
         dto.setLikeCount(photo.getLikeCount());
         dto.setOriginalFilename(photo.getOriginalFilename());
         dto.setCreatedAt(photo.getCreatedAt());
@@ -310,6 +339,7 @@ public class FaceService {
     private FaceDTO toFaceDTO(FaceCluster face) {
         FaceDTO dto = new FaceDTO();
         dto.setId(face.getId());
+        dto.setPreviewUrl("/api/mobile/faces/" + face.getId() + "/preview");
         dto.setBboxJson(face.getBboxJson());
         dto.setConfidence(face.getConfidence());
         if (face.getPerson() != null) {

@@ -22,6 +22,13 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
     @Query("SELECT DISTINCT p FROM Album a JOIN a.photos p WHERE a.id = :albumId AND p.deletedAt IS NULL ORDER BY p.id DESC")
     Page<Photo> albumPhotos(@Param("albumId") Long albumId, Pageable pageable);
 
+    @Query("SELECT p FROM Album a JOIN a.photos p WHERE a.id = :albumId AND p.deletedAt IS NULL "
+            + "ORDER BY CASE WHEN p.exifDate IS NULL THEN 1 ELSE 0 END, p.exifDate ASC, p.id ASC")
+    Page<Photo> babyPhotos(@Param("albumId") Long albumId, Pageable pageable);
+
+    @Query("SELECT DISTINCT p FROM FaceCluster f JOIN f.photo p WHERE f.person.id = :personId AND p.deletedAt IS NULL ORDER BY p.id DESC")
+    Page<Photo> personPhotos(@Param("personId") Long personId, Pageable pageable);
+
     @Query("SELECT COALESCE(MAX(p.id), 0) FROM Photo p")
     long maxPhotoId();
 
@@ -37,6 +44,11 @@ public interface PhotoRepository extends JpaRepository<Photo, Long>, org.springf
 
     @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.inTimeline = true AND p.exifDate >= :start AND p.exifDate < :end ORDER BY p.exifDate DESC, p.id DESC")
     Page<Photo> timelineMonth(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end, Pageable pageable);
+
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL AND p.inTimeline = true AND p.exifDate IS NULL ORDER BY p.id DESC")
+    Page<Photo> undatedTimeline(Pageable pageable);
+
+    long countByInTimelineTrueAndExifDateIsNullAndDeletedAtIsNull();
 
     @Query(value = "SELECT file_hash_md5 FROM photos WHERE deleted_at IS NULL AND file_hash_md5 IS NOT NULL GROUP BY file_hash_md5 HAVING COUNT(*) > 1 ORDER BY file_hash_md5", nativeQuery = true)
     List<String> duplicateHashes(Pageable pageable);

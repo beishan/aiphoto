@@ -16,6 +16,9 @@ class SessionStore(context: Context) {
     var address: String
         get() = prefs.getString("address", "") ?: ""
         set(value) { prefs.edit().putString("address", value).apply() }
+    var info: ServerInfo?
+        get() = runCatching { Gson().fromJson(prefs.getString("serverInfo", null), ServerInfo::class.java) }.getOrNull()
+        set(value) { prefs.edit().putString("serverInfo", value?.let { Gson().toJson(it) }).apply() }
     var instanceId: String
         get() = prefs.getString("instanceId", "") ?: ""
         set(value) { prefs.edit().putString("instanceId", value).apply() }

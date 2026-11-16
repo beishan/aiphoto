@@ -27,7 +27,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val db = Room.databaseBuilder(application, CacheDatabase::class.java, "browse-cache.db").build()
     private val gson = Gson()
     var session by mutableStateOf(store.load()); private set
-    var serverInfo by mutableStateOf<ServerInfo?>(null); private set
+    var serverInfo by mutableStateOf<ServerInfo?>(store.info?.takeIf { it.instanceId == store.instanceId }); private set
     var connected by mutableStateOf(session != null); private set
     var busy by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null)
@@ -51,6 +51,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     var history by mutableStateOf<List<String>>(emptyList()); private set
     var cacheLimit by mutableIntStateOf(512); private set
     var cacheBytes by mutableLongStateOf(0); private set
+    var months by mutableStateOf<List<MonthSummary>>(emptyList()); private set
+    var monthsLoading by mutableStateOf(false); private set
+    var monthsOffline by mutableStateOf(false); private set
+    var monthsError by mutableStateOf<String?>(null); private set
+    private var monthsJob: Job? = null
     private var epoch = 0
     private var feedJobs = mutableMapOf<String, Job>()
     private var transferJobs = mutableMapOf<String, Job>()
@@ -100,7 +105,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val info = api!!.get<ServerInfo>("mobile/server-info")
                 if (generation != epoch) return@launch
                 if (info.instanceId != store.instanceId) { logout("服务器实例已变更，请重新连接并登录"); connected = false; return@launch }
-                serverInfo = info
+                serverInfo = info; store.info = info
                 val user = api!!.get<User>("users/me")
                 if (generation == epoch) { session = session?.copy(user = user); session?.let(store::save) }
             } catch (e: Exception) { if (e !is CancellationException && generation == epoch && e !is ApiFailure) notice = "网络不可达，可查看已缓存内容" }
@@ -115,7 +120,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val info = ApiClient(server, null).get<ServerInfo>("mobile/server-info")
                 require(info.product == "aiphoto" && !info.instanceId.isNullOrBlank() && info.apiVersion == 1 && info.capabilities.containsAll(listOf("album-pagination", "authenticated-media"))) { "服务端不兼容，请先升级到支持安卓客户端的版本" }
                 store.address = server.base.toString(); store.allowHttp = http; store.instanceId = info.instanceId
-                serverInfo = info; connected = true
+                serverInfo = info; store.info = info; connected = true
             } catch (e: Exception) { if (e !is CancellationException) error = readable(e) }
             finally { busy = false }
         }
@@ -135,7 +140,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun logout(message: String? = null) {
-        epoch++; authJob?.cancel(); feedJobs.values.forEach { it.cancel() }; feedJobs.clear()
+        epoch++; monthsJob?.cancel(); months = emptyList(); monthsLoading = false; monthsOffline = false; monthsError = null; authJob?.cancel(); feedJobs.values.forEach { it.cancel() }; feedJobs.clear()
         catalogJob?.cancel(); mutationJob?.cancel(); transferJobs.values.forEach { it.cancel() }; transferJobs.clear()
         api?.http?.dispatcher?.cancelAll(); api?.http?.connectionPool?.evictAll()
         imageLoader?.shutdown(); imageLoader = null
@@ -218,12 +223,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         source == "favorites" -> "photos/favorites"
                         source == "trash" -> "photos/trash"
                         source == "search" -> "search"
+                        source.startsWith("timeline:") -> if (source == "timeline:0:0") "timeline/undated" else "timeline/photos"
+                        source.startsWith("baby:") -> "albums/${source.substringAfter(':')}/baby-timeline/page"
                         source.startsWith("album:") -> "albums/${source.substringAfter(':')}/photos/page"
                         source.startsWith("person:") -> "people/${source.substringAfter(':')}/photos"
                         source.startsWith("category:") -> "categories/${source.substringAfter(':')}/photos"
                         else -> "search"
                     }
                     val params = when {
+                        source.startsWith("timeline:") -> mapOf("year" to source.split(':')[1], "month" to source.split(':')[2], "page" to "$pageNumber", "size" to "40")
                         source == "search" -> query.parameters(pageNumber)
                         source.startsWith("tag:") -> mapOf("tagId" to source.substringAfter(':'), "page" to "$pageNumber", "size" to "40")
                         else -> mapOf("page" to "$pageNumber", "size" to "40")
@@ -258,11 +266,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         check(api === client) { "会话已切换" }
         feeds.keys.toList().forEach { source ->
             val updatedPhotos = feeds.getValue(source).photos.mapNotNull {
-                if (it.id != id) it else if (source == "favorites" && !updated.favorite) null else updated
+                if (it.id != id) it
+                else if ((source == "favorites" && !updated.favorite) || (source.startsWith("timeline:") && !updated.inTimeline)) null
+                else updated.copy(ageLabel = it.ageLabel)
             }
             feeds[source] = feeds.getValue(source).copy(photos = updatedPhotos)
         }
         persistFeeds()
+        if ("inTimeline" in values) loadMonths()
     }, done = done)
     fun batch(ids: Set<Long>, operation: String, album: Long? = null, done: () -> Unit = {}) = mutate({ client ->
         failedBatchIds = emptySet()
@@ -270,6 +281,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         for (id in ids) {
             try {
                 when (operation) {
+                    "timelineOn", "timelineOff" -> client.write("photos/$id", "PUT", mapOf("inTimeline" to (operation == "timelineOn")))
                     "favorite" -> client.write("photos/$id", "PUT", mapOf("favorite" to true))
                     "trash" -> client.write("photos/$id", "DELETE", null)
                     "restore" -> client.write("photos/trash/$id/restore")
@@ -288,16 +300,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val feed = feeds.getValue(key)
             feeds[key] = feed.copy(photos = feed.photos.mapNotNull { p ->
                 if (p.id !in ids || p.id in failed) p else when (operation) {
+                    "timelineOn" -> p.copy(inTimeline = true)
+                    "timelineOff" -> if (key.startsWith("timeline:")) null else p.copy(inTimeline = false)
                     "favorite" -> p.copy(favorite = true)
                     "trash" -> null
                     "restore" -> if (key == "trash") null else p
-                    "remove" -> if (key == "album:$album") null else p
+                    "remove" -> if (key == "album:$album" || key == "baby:$album") null else p
                     else -> p
                 }
             })
         }
         failedBatchIds = failed.toSet()
         persistFeeds()
+        if (operation.startsWith("timeline") || operation == "trash" || operation == "restore") loadMonths()
         if (failed.isNotEmpty()) throw IllegalStateException("成功 $success 项；失败 ID：${failed.joinToString()}。请保留失败项重试。")
     }, success = "已处理 ${ids.size} 项", done = done)
     private suspend fun persistFeeds() {
@@ -305,6 +320,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             cache("feed:$source", feed.copy(photos = feed.photos.take(160), page = 0, cursor = null, more = true))
         }
     }
+    suspend fun invalidateFeed(source: String) {
+        currentCoroutineContext().ensureActive()
+        feedJobs.remove(source)?.cancel()
+        feeds.remove(source)
+        val key = "$cacheScope:feed:$source"
+        withContext(Dispatchers.IO) { db.entries().clearPrefix(key) }
+    }
+    fun supports(feature: String) = serverInfo?.capabilities?.contains(feature) == true
+    fun loadMonths() {
+        if (!supports("family-timeline")) return
+        monthsJob?.cancel()
+        val client = api ?: return; val generation = epoch
+        monthsJob = viewModelScope.launch {
+            monthsLoading = true; monthsError = null
+            try {
+                cached<List<MonthSummary>>("timeline-months")?.let { if (generation == epoch) months = it }
+                val dated = client.get<List<MonthSummary>>("timeline/months")
+                val undated = client.get<Map<String, Long>>("timeline/undated/count")["count"] ?: 0L
+                if (generation == epoch) {
+                    months = dated + if (undated > 0) listOf(MonthSummary(0, 0, undated)) else emptyList()
+                    monthsOffline = false; cache("timeline-months", months)
+                }
+            } catch (e: Exception) {
+                if (e !is CancellationException && generation == epoch) { monthsError = readable(e); monthsOffline = true }
+            } finally { if (generation == epoch) monthsLoading = false }
+        }
+    }
+    suspend fun faces(id: Long, page: Int): FacePage = api!!.get("people/$id/faces/page", mapOf("page" to "$page", "size" to "40"))
     suspend fun detail(id: Long): Photo = api!!.get("photos/$id/detail")
     fun mediaUrl(path: String?): String? = path?.let { runCatching { api?.address?.media(it)?.toString() }.getOrNull() }
     fun preview(photo: Photo): String? = if (photo.mediaType == "PHOTO") api?.address?.api("mobile/photos/${photo.id}/preview")?.toString() else mediaUrl(photo.thumbnailUrl)

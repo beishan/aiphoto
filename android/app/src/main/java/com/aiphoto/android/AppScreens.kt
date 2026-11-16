@@ -60,6 +60,8 @@ fun AiphotoApp(vm: AppViewModel) {
                 NavHost(nav, "gallery", Modifier.weight(1f)) {
                     composable("gallery") { PhotoFeedScreen(vm, nav, "gallery", "照片", root = true) }
                     composable("albums") { AlbumsScreen(vm, nav) }
+                    composable("timeline") { TimelineScreen(vm, nav) }
+                    composable("person/{id}") { e -> PersonScreen(vm, nav, e.arguments!!.getString("id")!!.toLong()) }
                     composable("discover") { DiscoverScreen(vm, nav) }
                     composable("mine") { MineScreen(vm, nav) }
                     composable("settings") { SettingsScreen(vm, nav) }
@@ -96,12 +98,12 @@ fun NavHostController.viewer(source: String, id: Long) { navigate("viewer/${Uri.
         if (retry != null) OutlinedButton(retry) { Text("重新加载") }
     }
 }
-@Composable fun PhotoImage(vm: AppViewModel, path: String?, modifier: Modifier = Modifier, scale: ContentScale = ContentScale.Crop) {
+@Composable fun PhotoImage(vm: AppViewModel, path: String?, modifier: Modifier = Modifier, scale: ContentScale = ContentScale.Crop, onLoad: ((Boolean) -> Unit)? = null) {
     val context = LocalContext.current
     val url = vm.mediaUrl(path)
     Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.outline)
-        vm.imageLoader?.let { loader -> AsyncImage(model = ImageRequest.Builder(context).data(url).crossfade(true).build(), imageLoader = loader, contentDescription = null, contentScale = scale, modifier = Modifier.fillMaxSize()) }
+        vm.imageLoader?.let { loader -> AsyncImage(model = ImageRequest.Builder(context).data(url).crossfade(true).build(), imageLoader = loader, contentDescription = null, contentScale = scale, onSuccess = { onLoad?.invoke(true) }, onError = { onLoad?.invoke(false) }, modifier = Modifier.fillMaxSize()) }
     }
 }
 
@@ -141,14 +143,15 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
     var albumPicker by remember { mutableStateOf(false) }
     var confirmTrash by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
+    val cells = remember(feed.photos, source) { feedCells(feed.photos, source) }
     LaunchedEffect(vm.failedBatchIds) {
         if (selecting && vm.failedBatchIds.isNotEmpty()) selected = selected.filter { it in vm.failedBatchIds }.toLongArray()
     }
     LaunchedEffect(source) { if (vm.feeds[source] == null) vm.loadFeed(source, true) }
     LaunchedEffect(gridState, source) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }.collect { last ->
+        snapshotFlow { (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) to gridState.layoutInfo.totalItemsCount }.collect { (last, total) ->
             val current = vm.feeds[source] ?: return@collect
-            if (last >= current.photos.size - 9 && current.photos.isNotEmpty() && !current.loading && current.more && current.error == null && !current.offline) vm.loadFeed(source)
+            if (last >= total - 9 && current.photos.isNotEmpty() && !current.loading && current.more && current.error == null && !current.offline) vm.loadFeed(source)
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -173,7 +176,11 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
         }
         if (feed.photos.isEmpty() && !feed.loading) EmptyState(if (feed.error == null) "这里还没有照片" else "暂时无法加载", if (root) "请先通过 Web 管理端向 NAS 导入照片" else "换个条件再看看", { vm.loadFeed(source, true) })
         LazyVerticalGrid(GridCells.Fixed(vm.columns), state = gridState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            items(feed.photos, key = { it.id }) { photo ->
+            items(cells, key = { it.key }, span = { if (it.photo == null) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { cell ->
+                if (cell.photo == null) {
+                    Text(cell.label.orEmpty(), Modifier.padding(horizontal = 12.dp, vertical = 14.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    val photo = cell.photo
                 Box(Modifier.aspectRatio(1f).semantics { contentDescription = photo.name }.clip(RoundedCornerShape(5.dp)).combinedClickable(onClick = {
                     if (selecting) selected = if (photo.id in selected) selected.filter { it != photo.id }.toLongArray() else selected + photo.id
                     else if (source != "trash") nav.viewer(source, photo.id)
@@ -183,18 +190,20 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
                     if (photo.favorite || photo.isVideo) Icon(if (photo.isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Favorite, if (photo.isVideo) "视频" else "已收藏", Modifier.align(Alignment.BottomStart).padding(6.dp).size(20.dp), tint = Color.White)
                     if (selecting) Icon(if (photo.id in selected) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, if (photo.id in selected) "已选择" else "未选择", Modifier.align(Alignment.TopEnd).padding(6.dp).background(if (photo.id in selected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = .3f), CircleShape).size(24.dp), tint = Color.White)
                 }
+                }
             }
             if (feed.loading) item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             else if (feed.more && feed.photos.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { TextButton({ vm.loadFeed(source) }, Modifier.fillMaxWidth()) { Text("加载更多") } }
         }
         if (selecting && selected.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val enabled = !vm.busy && !feed.offline
-            if (pickAlbum != null) Button({ vm.batch(selected.toSet(), "add", pickAlbum) { nav.popBackStack(); vm.loadFeed("album:$pickAlbum", true) } }, enabled = enabled) { Text("添加到相册（${selected.size}）") }
+            if (pickAlbum != null) Button({ vm.batch(selected.toSet(), "add", pickAlbum) { nav.popBackStack(); vm.loadFeed(if (vm.albums.find { it.id == pickAlbum }?.type == "BABY") "baby:$pickAlbum" else "album:$pickAlbum", true) } }, enabled = enabled) { Text("添加到相册（${selected.size}）") }
             else if (source == "trash") Button({ vm.batch(selected.toSet(), "restore") { selected = longArrayOf() } }, enabled = enabled) { Text("恢复已选照片") }
             else {
                 Button({ vm.batch(selected.toSet(), "favorite") { selected = longArrayOf(); selecting = false } }, enabled = enabled) { Text("收藏") }
                 OutlinedButton({ vm.loadCatalog(); albumPicker = true }, enabled = enabled) { Text("加入相册") }
-                if (source.startsWith("album:")) OutlinedButton({ vm.batch(selected.toSet(), "remove", source.substringAfter(':').toLong()) { selected = longArrayOf() } }, enabled = enabled) { Text("移出相册") }
+                if (source.startsWith("album:") || source.startsWith("baby:")) OutlinedButton({ vm.batch(selected.toSet(), "remove", source.substringAfter(':').toLong()) { selected = longArrayOf() } }, enabled = enabled) { Text("移出相册") }
+                if (vm.supports("family-timeline")) OutlinedButton({ vm.batch(selected.toSet(), if (source.startsWith("timeline:")) "timelineOff" else "timelineOn") { selected = longArrayOf(); selecting = false } }, enabled = enabled) { Text(if (source.startsWith("timeline:")) "移出精选" else "加入精选") }
                 TextButton({ confirmTrash = true }, enabled = enabled) { Text("移入回收站") }
             }
         }
@@ -206,7 +215,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
     AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = { Text(text) }, confirmButton = { TextButton(confirm) { Text("确认") } }, dismissButton = { TextButton(dismiss) { Text("取消") } })
 }
 @Composable fun AlbumPicker(vm: AppViewModel, dismiss: () -> Unit, selected: (Album) -> Unit) {
-    AlertDialog(onDismissRequest = dismiss, title = { Text("加入普通相册") }, text = {
-        LazyColumn { if (vm.albums.none { it.type == "VIRTUAL" }) item { Text("暂无普通相册，请先在相册页创建") }; items(vm.albums.filter { it.type == "VIRTUAL" }) { album -> TextButton({ selected(album) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text(album.name) } } }
+    AlertDialog(onDismissRequest = dismiss, title = { Text("加入相册") }, text = {
+        LazyColumn { if (vm.albums.none { it.type == "VIRTUAL" || (it.type == "BABY" && vm.supports("baby-timeline-page")) }) item { Text("暂无可编辑相册，请先在相册页创建") }; items(vm.albums.filter { it.type == "VIRTUAL" || (it.type == "BABY" && vm.supports("baby-timeline-page")) }) { album -> TextButton({ selected(album) }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) { Text(album.name) } } }
     }, confirmButton = { TextButton(dismiss) { Text("关闭") } })
 }

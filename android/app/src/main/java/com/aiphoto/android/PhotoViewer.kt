@@ -85,7 +85,10 @@ import java.util.Locale
             ViewerAction("加入相册", Icons.Outlined.CreateNewFolder, !vm.busy && !feed.offline) { vm.loadCatalog(); albumPicker = true }
             ViewerAction("下载", Icons.Outlined.Download, !feed.offline) { guard("") { pending = photo; export.launch(photo.name) } }
             ViewerAction("分享", Icons.Outlined.Share, !feed.offline) { guard("分享原文件可能包含拍摄位置等元数据。文件将交给你选择的应用处理。") { vm.download(photo, share = true) } }
-            if (source.startsWith("album:") && vm.albums.find { it.id == source.substringAfter(':').toLongOrNull() }?.type == "VIRTUAL") {
+            if (vm.supports("family-timeline")) ViewerAction(if (photo.inTimeline) "移出精选" else "加入精选", Icons.Outlined.History, !vm.busy && !feed.offline) {
+                vm.updatePhoto(photo.id, mapOf("inTimeline" to !photo.inTimeline))
+            }
+            if ((source.startsWith("album:") || source.startsWith("baby:")) && vm.albums.find { it.id == source.substringAfter(':').toLongOrNull() }?.type in listOf("VIRTUAL", "BABY")) {
                 ViewerAction("设为封面", Icons.Outlined.PhotoAlbum, !vm.busy && !feed.offline) {
                     vm.mutate({ it.write("albums/${source.substringAfter(':')}/cover", "PUT", mapOf("photoId" to photo.id)) }, "已设为封面") { vm.loadCatalog() }
                 }

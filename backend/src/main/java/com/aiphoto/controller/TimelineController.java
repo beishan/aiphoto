@@ -21,6 +21,17 @@ public class TimelineController {
         return ResponseEntity.ok(timelineService.months());
     }
 
+    @GetMapping("/undated/count")
+    public Map<String, Long> undatedCount() {
+        return Map.of("count", timelineService.undatedCount());
+    }
+
+    @GetMapping("/undated")
+    public org.springframework.data.domain.Page<PhotoDTO> undated(
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "40") int size) {
+        return timelineService.undated(page, size);
+    }
+
     @GetMapping("/photos")
     public ResponseEntity<org.springframework.data.domain.Page<PhotoDTO>> month(
             @RequestParam int year, @RequestParam int month,
