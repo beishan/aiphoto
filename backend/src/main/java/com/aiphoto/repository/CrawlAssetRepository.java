@@ -17,6 +17,10 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
     @Query("SELECT a.id FROM CrawlAsset a WHERE a.status = 'DELETED' AND a.cleanupAt <= :now AND a.localPath IS NOT NULL ORDER BY a.cleanupAt")
     List<Long> expiredDeleted(@Param("now") java.time.LocalDateTime now, Pageable pageable);
 
+    @Query("SELECT a.id FROM CrawlAsset a WHERE a.status IN ('IMPORTED', 'DUPLICATE') "
+            + "AND a.importedPhotoId IS NOT NULL AND a.cleanupAt <= :now ORDER BY a.cleanupAt, a.id")
+    List<Long> pendingImportedCleanup(@Param("now") java.time.LocalDateTime now, Pageable pageable);
+
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM CrawlAsset a WHERE a.id = :id")
     Optional<CrawlAsset> lockCleanupAsset(@Param("id") Long id);

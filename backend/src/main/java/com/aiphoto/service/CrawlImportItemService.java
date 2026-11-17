@@ -30,6 +30,22 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 @RequiredArgsConstructor
 public class CrawlImportItemService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CrawlImportedCleanupService importedCleanup;
+
+    private void cleanupAfterCommit(CrawlAsset asset) {
+        asset.setCleanupAt(java.time.LocalDateTime.now());
+        assetRepository.save(asset);
+        Long id = asset.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try { importedCleanup.cleanup(id); }
+                catch (Exception exception) { /* Persisted cleanup marker is retried by scheduler. */ }
+            }
+        });
+    }
+
 
     private final CrawlAssetRepository assetRepository;
     private final PhotoRepository photoRepository;
@@ -42,12 +58,13 @@ public class CrawlImportItemService {
     private final TagRepository tagRepository;
     private final PhotoTagRepository photoTagRepository;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public ImportOutcome importOne(
             Long assetId, Long jobId, Long ownerId, Long albumId, java.util.List<Long> tagIds) throws Exception {
         CrawlAsset asset = assetRepository.findByIdAndJobId(assetId, jobId)
                 .orElseThrow(() -> new IllegalArgumentException("采集图片不存在"));
         if (asset.getStatus() == CrawlAsset.Status.IMPORTED) {
+            cleanupAfterCommit(asset);
             return new ImportOutcome(Result.SUCCESS, asset.getImportedPhotoId());
         }
         if (asset.getStatus() != CrawlAsset.Status.DOWNLOADED) {
@@ -61,6 +78,7 @@ public class CrawlImportItemService {
             assetRepository.save(asset);
             if (duplicate.get().getDeletedAt() == null) {
                 organize(duplicate.get(), ownerId, albumId, tagIds, asset.getNote());
+                cleanupAfterCommit(asset);
             }
             return new ImportOutcome(Result.SKIPPED, duplicate.get().getId());
         }
@@ -101,6 +119,8 @@ public class CrawlImportItemService {
         asset.setStatus(CrawlAsset.Status.IMPORTED);
         asset.setImportedPhotoId(photo.getId());
         assetRepository.save(asset);
+
+        cleanupAfterCommit(asset);
 
         AiTask task = new AiTask();
         task.setType(AiTask.TaskType.INDEX);

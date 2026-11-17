@@ -84,6 +84,10 @@ public class LocalStorageService {
         return Files.newInputStream(source);
     }
 
+    public byte[] downloadThumbnailBytes(String objectName) throws Exception {
+        return Files.readAllBytes(resolveForRead(thumbBasePath(), objectName));
+    }
+
     public byte[] downloadBytes(String objectName) throws Exception {
         Path source = resolveForRead(photoBasePath(), objectName);
         return Files.readAllBytes(source);

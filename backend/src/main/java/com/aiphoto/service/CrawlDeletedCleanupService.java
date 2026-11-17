@@ -14,6 +14,17 @@ import org.springframework.data.domain.PageRequest;
 @RequiredArgsConstructor
 @Slf4j
 public class CrawlDeletedCleanupService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CrawlImportedCleanupService importedCleanup;
+
+    @Scheduled(fixedDelay = 60000, initialDelay = 60000)
+    public void cleanupImportedCopies() {
+        for (Long id : assets.pendingImportedCleanup(LocalDateTime.now(), PageRequest.of(0, 100))) {
+            try { importedCleanup.cleanup(id); }
+            catch (Exception exception) { log.warn("Could not clean imported asset {}: {}", id, exception.getMessage()); }
+        }
+    }
+
     private final CrawlAssetRepository assets;
     private final CrawlStagingStorageService storage;
     private final SettingService settings;

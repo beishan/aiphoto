@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 public class CrawlController {
 
     private final CrawlService crawlService;
+    private final com.aiphoto.service.CrawlAssetMediaService assetMediaService;
     private final CrawlWorker crawlWorker;
     private final CrawlImportWorker importWorker;
     private final CrawlImportService importService;
@@ -392,21 +393,16 @@ public class CrawlController {
     public ResponseEntity<byte[]> assetContent(
             @PathVariable Long assetId, Authentication authentication) throws Exception {
         CrawlAsset asset = crawlService.getAsset(assetId, userId(authentication));
-        if (asset.getLocalPath() == null) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(asset.getContentType()))
-                .body(stagingStorage.read(asset.getLocalPath()));
+        var content = assetMediaService.read(asset, false);
+        return ResponseEntity.ok().contentType(content.type()).body(content.bytes());
     }
 
     @GetMapping("/assets/{assetId}/thumbnail")
     public ResponseEntity<byte[]> assetThumbnail(
             @PathVariable Long assetId, Authentication authentication) throws Exception {
         CrawlAsset asset = crawlService.getAsset(assetId, userId(authentication));
-        String path = asset.getThumbnailPath() == null ? asset.getLocalPath() : asset.getThumbnailPath();
-        if (path == null) return ResponseEntity.notFound().build();
-        MediaType type = asset.getThumbnailPath() == null
-                ? MediaType.parseMediaType(asset.getContentType()) : MediaType.IMAGE_JPEG;
-        return ResponseEntity.ok().contentType(type).body(stagingStorage.read(path));
+        var content = assetMediaService.read(asset, true);
+        return ResponseEntity.ok().contentType(content.type()).body(content.bytes());
     }
 
     private Long userId(Authentication authentication) {
