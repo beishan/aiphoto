@@ -35,6 +35,19 @@ const inspectionBusy = ref<'edit' | 'create' | ''>('')
 const siteInfo = ref<CrawlSiteInfo | null>(null)
 const createSiteInfo = ref<CrawlSiteInfo | null>(null)
 const sites = ref<CrawlSite[]>([])
+const importedCopiesCleaning = ref(false)
+async function cleanupImportedCopies() {
+  if (importedCopiesCleaning.value) return
+  importedCopiesCleaning.value = true
+  try {
+    const { data } = await crawlApi.cleanupImportedCopies()
+    const message = '已清理 ' + data.cleaned + ' 张图片的采集副本，跳过 ' + data.skipped + ' 张，失败 ' + data.failed + ' 张'
+    if (data.failed || data.skipped) ElMessage.warning(message)
+    else ElMessage.success(message)
+    await refresh()
+  } catch (error: any) { ElMessage.error(error?.response?.data?.message || '清理请求失败，可再次点击继续清理') }
+  finally { importedCopiesCleaning.value = false }
+}
 const newCollectionVisible = ref(false)
 const newCollectionSaving = ref(false)
 const newCollectionSiteId = ref<number | null>(null)
@@ -1652,6 +1665,7 @@ onUnmounted(() => {
             <el-option v-for="option in autoRefreshOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
           <el-button :icon="Refresh" circle aria-label="刷新采集数据" @click="refresh" />
+          <el-button :icon="Delete" :loading="importedCopiesCleaning" round title="清理当前账户已入库图片的采集原图及缩略图，图库文件保留" @click="cleanupImportedCopies">一键清理已入库副本</el-button>
           <el-button :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">新增网站</el-button>
           <el-button type="primary" :icon="Plus" round @click="openNewCollection">新建采集任务</el-button>
         </el-space>

@@ -21,6 +21,15 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "AND a.importedPhotoId IS NOT NULL AND a.cleanupAt <= :now ORDER BY a.cleanupAt, a.id")
     List<Long> pendingImportedCleanup(@Param("now") java.time.LocalDateTime now, Pageable pageable);
 
+    @Query("SELECT a.id FROM CrawlAsset a, CrawlJob j WHERE a.jobId = j.id AND j.ownerId = :ownerId "
+            + "AND a.id > :afterId AND a.status IN ('IMPORTED', 'DUPLICATE') "
+            + "AND a.importedPhotoId IS NOT NULL AND (a.localPath IS NOT NULL OR a.thumbnailPath IS NOT NULL) ORDER BY a.id")
+    List<Long> importedCopies(@Param("ownerId") Long ownerId, @Param("afterId") Long afterId, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM CrawlAsset a, CrawlJob j WHERE a.jobId = j.id AND j.ownerId = :ownerId AND a.id = :id")
+    Optional<CrawlAsset> lockOwnedCopy(@Param("id") Long id, @Param("ownerId") Long ownerId);
+
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT a FROM CrawlAsset a WHERE a.id = :id")
     Optional<CrawlAsset> lockCleanupAsset(@Param("id") Long id);

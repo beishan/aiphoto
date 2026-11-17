@@ -90,6 +90,7 @@ export const crawlApi = {
     params: { inspectionProxyMode: site.inspectionProxyMode, inspectionProxyId: site.inspectionProxyId ?? undefined },
     timeout: 120000,
   }),
+  cleanupImportedCopies: () => http.post<{ cleaned: number; skipped: number; failed: number }>('/crawl/imported-copies/cleanup', null, { timeout: 0 }),
   jobs: (pageName?: string) => http.get<CrawlJob[]>('/crawl/jobs', { params: pageName ? { pageName } : {} }),
   createJob: (ruleId: number) => http.post<{ jobId: number }>('/crawl/jobs', { ruleId }),
   retries: (id: number) => http.get<Array<{ id: number; retryType: string; queuedAt: string; startedAt: string | null; finishedAt: string | null; result: string; message: string | null }>>('/crawl/jobs/' + id + '/retries'),

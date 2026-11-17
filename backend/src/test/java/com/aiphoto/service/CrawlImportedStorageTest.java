@@ -84,6 +84,40 @@ class CrawlImportedStorageTest {
         } finally { TransactionSynchronizationManager.clearSynchronization(); }
     }
 
+
+    @Test
+    void manualCleanupIncludesHistoricalCopiesWithoutMarkerAndChecksOwner() throws Exception {
+        var assets = mock(CrawlAssetRepository.class);
+        var photos = mock(PhotoRepository.class);
+        var staging = mock(CrawlStagingStorageService.class);
+        var storage = mock(LocalStorageService.class);
+        var asset = imported(); asset.setCleanupAt(null);
+        when(assets.lockOwnedCopy(1L, 9L)).thenReturn(Optional.of(asset));
+        when(photos.findById(2L)).thenReturn(Optional.of(photo()));
+        when(storage.downloadPhoto("hash/a.jpg")).thenReturn(new ByteArrayInputStream(new byte[]{1}));
+        when(storage.downloadThumbnailBytes("hash/thumb.jpg")).thenReturn(new byte[]{2});
+        var service = new CrawlImportedCleanupService(assets, photos, staging, storage);
+        assertThat(service.cleanupOwned(1L, 9L)).isEqualTo(CrawlImportedCleanupService.CleanupResult.CLEANED);
+        assertThat(service.cleanupOwned(1L, 10L)).isEqualTo(CrawlImportedCleanupService.CleanupResult.SKIPPED);
+        verify(staging, times(1)).delete("1/original.jpg");
+    }
+
+    @Test
+    void batchCleanupAdvancesPastSkippedAndFailedItemsAndCountsResults() {
+        var assets = mock(CrawlAssetRepository.class);
+        var cleanup = mock(CrawlImportedCleanupService.class);
+        when(assets.importedCopies(eq(9L), eq(0L), any())).thenReturn(java.util.List.of(1L, 2L, 3L));
+        when(assets.importedCopies(eq(9L), eq(3L), any())).thenReturn(java.util.List.of());
+        when(cleanup.cleanupOwned(1L, 9L)).thenReturn(CrawlImportedCleanupService.CleanupResult.CLEANED);
+        when(cleanup.cleanupOwned(2L, 9L)).thenReturn(CrawlImportedCleanupService.CleanupResult.SKIPPED);
+        when(cleanup.cleanupOwned(3L, 9L)).thenReturn(CrawlImportedCleanupService.CleanupResult.FAILED);
+        var result = new CrawlImportedCopiesService(assets, cleanup).cleanup(9L);
+        assertThat(result.cleaned()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(1);
+        assertThat(result.failed()).isEqualTo(1);
+        verify(assets).importedCopies(eq(9L), eq(3L), any());
+    }
+
     private CrawlAsset imported() {
         CrawlAsset asset = new CrawlAsset();
         asset.setId(1L); asset.setImportedPhotoId(2L); asset.setStatus(CrawlAsset.Status.IMPORTED);

@@ -31,6 +31,13 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class CrawlController {
 
+    private final com.aiphoto.service.CrawlImportedCopiesService importedCopies;
+
+    @PostMapping("/imported-copies/cleanup")
+    public com.aiphoto.service.CrawlImportedCopiesService.Summary cleanupImportedCopies(Authentication authentication) {
+        return importedCopies.cleanup(userId(authentication));
+    }
+
     private final CrawlService crawlService;
     private final com.aiphoto.service.CrawlAssetMediaService assetMediaService;
     private final CrawlWorker crawlWorker;

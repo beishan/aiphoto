@@ -26,13 +26,26 @@ public class CrawlImportedCleanupService {
         return photo.getFileHashMd5() + "/thumb." + (webp ? "webp" : "jpg");
     }
 
+    public enum CleanupResult { CLEANED, SKIPPED, FAILED }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public CleanupResult cleanupOwned(Long id, Long ownerId) {
+        return cleanupAsset(assets.lockOwnedCopy(id, ownerId).orElse(null), true);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cleanup(Long id) {
         CrawlAsset asset = assets.lockCleanupAsset(id).orElse(null);
-        if (asset == null || asset.getCleanupAt() == null || asset.getImportedPhotoId() == null
-                || (asset.getStatus() != CrawlAsset.Status.IMPORTED && asset.getStatus() != CrawlAsset.Status.DUPLICATE)) return;
+        cleanupAsset(asset, false);
+    }
+
+    private CleanupResult cleanupAsset(CrawlAsset asset, boolean manual) {
+        if (asset == null || !manual && asset.getCleanupAt() == null || asset.getImportedPhotoId() == null
+                || (asset.getStatus() != CrawlAsset.Status.IMPORTED && asset.getStatus() != CrawlAsset.Status.DUPLICATE)) return CleanupResult.SKIPPED;
+        if (asset.getLocalPath() == null && asset.getThumbnailPath() == null) return CleanupResult.SKIPPED;
         Photo photo = photos.findById(asset.getImportedPhotoId()).orElse(null);
-        if (photo == null || photo.getDeletedAt() != null) return;
+        if (photo == null || photo.getDeletedAt() != null) return CleanupResult.SKIPPED;
+        if (manual) asset.setCleanupAt(java.time.LocalDateTime.now());
         try {
             // Confirm both library files are readable before removing the staging copy.
             try (var input = storage.downloadPhoto(photo.getFilePath())) {
@@ -47,8 +60,11 @@ public class CrawlImportedCleanupService {
             asset.setThumbnailPath(null);
             asset.setCleanupAt(null);
             assets.save(asset);
+            return CleanupResult.CLEANED;
         } catch (Exception exception) {
-            log.warn("Imported staging cleanup {} will retry: {}", id, exception.getMessage());
+            log.warn("Imported staging cleanup {} will retry: {}", asset.getId(), exception.getMessage());
+            assets.save(asset);
+            return CleanupResult.FAILED;
         }
     }
 }
