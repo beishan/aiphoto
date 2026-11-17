@@ -16,6 +16,7 @@ import { queueStaticFrame } from '@/utils/staticFrameQueue'
 import StaticPhotoImage from '@/components/StaticPhotoImage.vue'
 import SiteInspectionNetwork from '@/components/SiteInspectionNetwork.vue'
 import CrawlWorkflowPanel from '@/components/CrawlWorkflowPanel.vue'
+import CrawlTaskGallery from '@/components/CrawlTaskGallery.vue'
 import '@/assets/crawler-actions.css'
 import '@/assets/crawler-macos.css'
 import type { InspectionProxy, CrawlImageProgress, CrawlSiteInfo, CrawlScanResults } from '@/api/crawlApi'
@@ -236,6 +237,16 @@ function changeReviewPageSize(size: number) {
     try { localStorage.setItem(reviewPageSizeCacheKey, String(size)) } catch { /* Keep the current selection in memory. */ }
   }
   void loadReviewData()
+}
+const taskGalleryJobId = ref<number | null>(null)
+function openTaskGallery() {
+  if (!previewViewerAsset.value || busy.value || previewViewerAction.value) return
+  taskGalleryJobId.value = previewViewerAsset.value.jobId
+}
+function taskGallerySubmitted(batchId: number, ids: number[]) {
+  pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...ids])
+  void loadImportBatch(batchId, '').catch(() => {})
+  void monitorImportBatches([batchId], new Map([[batchId, ids]]))
 }
 const previewViewerVisible = ref(false)
 const previewViewerAsset = ref<CrawlAsset | null>(null)
@@ -668,6 +679,7 @@ async function loadJobDetail() {
 
 watch(showCrawlerImages, visible => {
   if (!visible) {
+    taskGalleryJobId.value = null
     thumbnailQueue.cancel()
     closePreviewViewer()
     for (const key of Object.keys(previewImages)) {
@@ -933,7 +945,7 @@ function closePreviewViewer() {
 }
 
 function handlePreviewViewerKeydown(event: KeyboardEvent) {
-  if (!previewViewerVisible.value || event.defaultPrevented || event.isComposing
+  if (taskGalleryJobId.value || !previewViewerVisible.value || event.defaultPrevented || event.isComposing
     || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable
@@ -961,6 +973,7 @@ function handlePreviewViewerKeydown(event: KeyboardEvent) {
 }
 
 onBeforeRouteLeave(() => {
+  taskGalleryJobId.value = null
   taskDrawerVisible.value = false
   siteConfigurationVisible.value = false
   siteDialogVisible.value = false
@@ -2101,6 +2114,7 @@ onUnmounted(() => {
         <el-empty v-else description="从左侧选择一个任务查看详情" :image-size="92" />
       </el-card>
     </el-drawer>
+    <CrawlTaskGallery v-if="taskGalleryJobId && showCrawlerImages" :key="taskGalleryJobId" :job-id="taskGalleryJobId" :album-id="targetAlbumId" :tag-ids="targetTagIds" :pending-ids="pendingImportAssetIds" @close="taskGalleryJobId = null" @submitted="taskGallerySubmitted" />
     <Teleport to="body">
       <Transition name="collection-preview">
         <div v-if="showCrawlerImages && previewViewerVisible" class="collection-preview-overlay" @click.self="closePreviewViewer">
@@ -2111,6 +2125,7 @@ onUnmounted(() => {
                 <strong :title="previewViewerSourcePageName">{{ previewViewerSourcePageName }}</strong>
                 <small :title="previewViewerAsset?.originalFilename || ''">{{ previewViewerAsset?.originalFilename || '图片预览' }}</small>
               </div>
+              <el-button v-if="activeTab === 'review' && !taskDrawerVisible" :disabled="!!busy || !!previewViewerAction" @click="openTaskGallery">查看当前任务图片</el-button>
               <span>{{ previewViewerIndex + 1 }} / {{ assetTotal }}</span>
               <el-button class="collection-preview-close" circle :icon="Close" aria-label="关闭预览" @click="closePreviewViewer" />
             </header>
