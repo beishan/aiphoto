@@ -34,6 +34,33 @@ const inspectionBusy = ref<'edit' | 'create' | ''>('')
 const siteInfo = ref<CrawlSiteInfo | null>(null)
 const createSiteInfo = ref<CrawlSiteInfo | null>(null)
 const sites = ref<CrawlSite[]>([])
+const newCollectionVisible = ref(false)
+const newCollectionSaving = ref(false)
+const newCollectionSiteId = ref<number | null>(null)
+const newCollectionUrl = ref('')
+function openNewCollection() {
+  newCollectionSiteId.value = activeSiteId.value || sites.value[0]?.id || null
+  newCollectionUrl.value = ''
+  newCollectionVisible.value = true
+}
+async function createCollection() {
+  if (newCollectionSaving.value) return
+  if (!newCollectionSiteId.value) { ElMessage.warning('请选择采集网站'); return }
+  const url = newCollectionUrl.value.trim()
+  try {
+    const parsed = new URL(url)
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || url.length > 2048 || (parsed.port && !['80', '443'].includes(parsed.port))) throw new Error()
+  } catch { ElMessage.warning('请输入标准端口的 HTTP/HTTPS 网页地址'); return }
+  newCollectionSaving.value = true
+  try {
+    const { data } = await crawlApi.createCollection(newCollectionSiteId.value, url)
+    newCollectionVisible.value = false
+    openWorkflowJob(data)
+    activeTab.value = 'tasks'
+    ElMessage.success('采集任务已创建，等待执行')
+  } catch (error: any) { ElMessage.error(error?.response?.data?.message || '创建采集任务失败') }
+  finally { newCollectionSaving.value = false }
+}
 const rules = ref<CrawlRule[]>([])
 const activeSiteId = ref<number | null>(null)
 const jobs = ref<CrawlJob[]>([])
@@ -1611,10 +1638,21 @@ onUnmounted(() => {
             <el-option v-for="option in autoRefreshOptions" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
           <el-button :icon="Refresh" circle aria-label="刷新采集数据" @click="refresh" />
-          <el-button type="primary" :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">新增网站</el-button>
+          <el-button :icon="Plus" round @click="activeTab = 'sites'; openNewSiteDialog()">新增网站</el-button>
+          <el-button type="primary" :icon="Plus" round @click="openNewCollection">新建采集任务</el-button>
         </el-space>
       </div>
     </el-card>
+
+    <el-dialog v-model="newCollectionVisible" title="新建采集任务" width="min(520px, 94vw)" :close-on-click-modal="!newCollectionSaving" :close-on-press-escape="!newCollectionSaving" :show-close="!newCollectionSaving">
+      <el-form label-position="top" @submit.prevent="createCollection">
+        <el-form-item label="采集网站" required><el-select v-model="newCollectionSiteId" placeholder="选择已配置的网站" filterable aria-label="采集网站" style="width: 100%"><el-option v-for="site in sites" :key="site.id" :label="site.name" :value="site.id" /></el-select></el-form-item>
+        <el-form-item label="网页地址" required><el-input v-model="newCollectionUrl" placeholder="https://example.com/photos/123" :maxlength="2048" clearable aria-label="要采集的网页地址" /></el-form-item>
+        <p>使用所选网站当前生效的规则解析该页面，创建后自动进入采集队列。</p>
+        <el-alert v-if="!sites.length" title="请先新增网站并配置生效的解析规则" type="info" :closable="false" />
+      </el-form>
+      <template #footer><el-button :disabled="newCollectionSaving" @click="newCollectionVisible = false">取消</el-button><el-button type="primary" :loading="newCollectionSaving" :disabled="!sites.length" @click="createCollection">创建采集任务</el-button></template>
+    </el-dialog>
 
     <div class="workspace-switcher surface-card">
       <el-segmented v-model="activeTab" :options="tabOptions" block aria-label="图片采集中心栏目" />

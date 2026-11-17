@@ -70,6 +70,7 @@ export const crawlApi = {
           ? { content: response.data.content, ...response.data.page }
           : response.data,
       })),
+  createCollection: (siteId: number, url: string) => http.post<CrawlJob>('/crawl/collection-tasks', { siteId, url }),
   collectPage: (id: number) => http.post<CrawlJob>(`/crawl/collection-pages/${id}/collect`),
   deleteCollectionPage: (id: number) => http.delete(`/crawl/collection-pages/${id}`),
   deleteCollectionPages: (ids: number[]) => http.delete('/crawl/collection-pages', { data: ids }),

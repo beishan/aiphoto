@@ -156,6 +156,40 @@ public class CrawlWorkflowService {
     }
 
     @Transactional
+    public CrawlJob createCollection(Long siteId, String inputUrl, Long ownerId) {
+        if (siteId == null) throw new IllegalArgumentException("请选择采集网站");
+        CrawlSite site = crawlService.getSite(siteId, ownerId);
+        String url = inputUrl == null ? "" : inputUrl.trim();
+        URI uri;
+        try { uri = URI.create(url); }
+        catch (IllegalArgumentException exception) { throw new IllegalArgumentException("请输入有效的网页地址"); }
+        if (url.length() > 2048 || uri.getHost() == null || uri.getUserInfo() != null
+                || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                || (uri.getPort() != -1 && uri.getPort() != 80 && uri.getPort() != 443)) {
+            throw new IllegalArgumentException("网页地址必须是标准端口的 HTTP/HTTPS 地址");
+        }
+        CrawlHostPolicy.requireNotBlocked(uri, site.getBlockedHosts());
+        CrawlRule active = ruleRepository.findBySiteIdAndOwnerIdAndEnabledTrue(siteId, ownerId)
+                .orElseThrow(() -> new IllegalStateException("请先为所选网站配置生效的解析规则"));
+        String normalized = SafeHttpFetcher.normalize(url);
+        CrawlJob job = crawlService.createJob(active.getId(), ownerId);
+        job.setPhase(CrawlJob.Phase.DOWNLOAD);
+        job.setPriority(crawlService.getCollectionTaskDefaultPriority());
+        job.setPriorityCustomized(false);
+        job.setPagesFound(1);
+        String name = "采集 · " + url;
+        job.setName(name.substring(0, name.offsetByCodePoints(0, Math.min(name.codePointCount(0, name.length()), 200))));
+        job = jobRepository.save(job);
+        CrawlPage page = new CrawlPage();
+        page.setJobId(job.getId());
+        page.setUrl(url);
+        page.setNormalizedUrl(normalized);
+        page.setUrlHash(SafeHttpFetcher.urlHash(normalized));
+        pageRepository.save(page);
+        return job;
+    }
+
+    @Transactional
     public CrawlJob collect(Long pageId, Long ownerId) {
         CrawlPage page = pageRepository.lockById(pageId)
                 .orElseThrow(() -> new IllegalArgumentException("待处理页面不存在"));

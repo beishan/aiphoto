@@ -53,6 +53,13 @@ public class CrawlWorkflowController {
         return workflow.scan(id, owner(auth), false);
     }
 
+    public record CreateCollectionRequest(Long siteId, String url) {}
+
+    @PostMapping("/collection-tasks")
+    public CrawlJob createCollection(@RequestBody CreateCollectionRequest request, Authentication auth) {
+        return workflow.createCollection(request.siteId(), request.url(), owner(auth));
+    }
+
     @GetMapping("/collection-pages")
     public Page<CrawlWorkflowService.DiscoveredPage> pages(Authentication auth,
             @RequestParam(required = false) Long siteId,

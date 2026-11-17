@@ -167,4 +167,32 @@ class CrawlWorkflowServiceTest {
         assertThatThrownBy(() -> workflow.saveScan(null, input, 9L)).hasMessageContaining("周期");
         verify(scans, never()).save(any());
     }
+
+    @Test void createsDirectCollectionWithOnePageAndActiveSiteRule() throws Exception {
+        CrawlSite site = new CrawlSite(); site.setId(2L);
+        when(crawl.getSite(2L, 9L)).thenReturn(site);
+        when(rules.findBySiteIdAndOwnerIdAndEnabledTrue(2L, 9L)).thenReturn(Optional.of(activeRule()));
+        when(crawl.createJob(3L, 9L)).thenReturn(newJob());
+        when(crawl.getCollectionTaskDefaultPriority()).thenReturn(75);
+        when(jobs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        CrawlJob job = workflow.createCollection(2L, " https://example.com/photos/1 ", 9L);
+        assertThat(job.getPhase()).isEqualTo(CrawlJob.Phase.DOWNLOAD);
+        assertThat(job.getPagesFound()).isEqualTo(1);
+        assertThat(job.getPriority()).isEqualTo(75);
+        ArgumentCaptor<CrawlPage> captor = ArgumentCaptor.forClass(CrawlPage.class);
+        verify(pages).save(captor.capture());
+        assertThat(captor.getValue().getJobId()).isEqualTo(job.getId());
+        assertThat(captor.getValue().getUrl()).isEqualTo("https://example.com/photos/1");
+        assertThat(captor.getValue().getStatus()).isEqualTo(CrawlPage.Status.PENDING);
+    }
+
+    @Test void rejectsInvalidDirectCollectionBeforeCreatingTask() {
+        when(crawl.getSite(2L, 9L)).thenReturn(new CrawlSite());
+        for (String url : List.of("", "file:///tmp/photo", "https://user:pass@example.com/", "https://example.com:8080/")) {
+            assertThatThrownBy(() -> workflow.createCollection(2L, url, 9L))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        verify(crawl, never()).createJob(any(), any());
+        verify(pages, never()).save(any());
+    }
 }
