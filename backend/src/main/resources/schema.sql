@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS photo_tags (
     PRIMARY KEY (photo_id, tag_id)
 );
 
+-- Persist user removals so AI indexing cannot silently restore these tags.
+CREATE TABLE IF NOT EXISTS photo_tag_exclusions (
+    photo_id BIGINT REFERENCES photos(id) ON DELETE CASCADE,
+    tag_id BIGINT REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (photo_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_photo_tag_exclusions_tag ON photo_tag_exclusions(tag_id);
+
 -- AI Tasks table
 CREATE TABLE IF NOT EXISTS ai_tasks (
     id BIGSERIAL PRIMARY KEY,

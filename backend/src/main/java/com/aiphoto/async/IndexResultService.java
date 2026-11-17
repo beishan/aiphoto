@@ -24,6 +24,7 @@ public class IndexResultService {
     private final PhotoTagRepository photoTagRepository;
     private final CategoryRepository categoryRepository;
     private final ObjectMapper objectMapper;
+    private final PhotoTagExclusionRepository exclusions;
 
     @Transactional
     public void saveEmbedding(Long photoId, List<Float> embedding) {
@@ -110,6 +111,7 @@ public class IndexResultService {
             PhotoTagId id = new PhotoTagId();
             id.setPhotoId(photoId);
             id.setTagId(tag.getId());
+            if (exclusions.existsById(id)) continue;
             PhotoTag link = photoTagRepository.findById(id).orElse(null);
             if (link == null || link.getSource() != Tag.TagType.MANUAL) {
                 if (link == null) link = new PhotoTag();

@@ -25,7 +25,7 @@ class IndexResultServiceTest {
         when(photos.findForIndexing(1L)).thenReturn(Optional.of(photo));
         when(faces.findByPhoto(photo)).thenReturn(List.of(existing));
         var writer = new IndexResultService(photos, faces, people, mock(TagRepository.class),
-                mock(PhotoTagRepository.class), mock(CategoryRepository.class), new ObjectMapper());
+                mock(PhotoTagRepository.class), mock(CategoryRepository.class), new ObjectMapper(), mock(PhotoTagExclusionRepository.class));
         var response = new AiServiceClient.FaceDetectionResponse();
         response.setFaces(List.of());
         writer.saveFaces(1L, response, 0.5);

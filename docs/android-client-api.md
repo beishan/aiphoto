@@ -86,3 +86,24 @@
 - 合并保留目标人物，删除源人物；尽可能保留封面，合并首次/末次出现时间。当前无一键撤销接口。
 
 当前图库仍为家庭共享模式；登录成员可改名和设置封面，管理员执行合并和归属修正。人物照片列表改为数据库去重分页，避免全量加载人脸后在内存分页。修改生日及人物合并/归属修正后清除相关本机列表缓存。
+
+
+## 0.24.0 整理与本地分享副本
+
+新增 capability `label-edit`，安卓据此显示维护入口，API 版本仍为 1。
+
+### 词条与关联
+
+- 沿用 `/api/tags`、`/api/categories` 新建/更新接口。标签名称 1—50 字符、说明最多 500 字符；分类名称 1—100 字符；颜色使用 `#RRGGBB`。名称去除首尾空白。
+- AI 标签词条及系统分类元数据只读；自建分类可手工整理。删除标签、分类及合并标签须 ADMIN，删除不删除原照片。合并拒绝同一标签，且只允许人工词条。
+- 照片标签添加使用 `POST /api/tags/photos/{photoId}` 与 `{tagId}`。即使已有 AI 关联，也会转为 MANUAL/置信度 1.0；同时删除该照片/标签的排除记录。
+- 移除标签使用 `DELETE /api/tags/photos/{photoId}/{tagId}`，保存排除记录；AI 写入在相同照片行锁下检查排除表，避免并发索引悄悄恢复用户已移除的标签。词条整体删除后外键级联清除对应排除记录。
+- `photo_tag_exclusions(photo_id,tag_id)` 随 `schema.sql` 幂等创建，外键随照片/标签删除级联。现有 NAS 数据库由 Spring SQL 初始化（mode=always）执行新增 DDL，无需重新初始化存储卷。
+- 自建分类关联 `POST /api/categories/{categoryId}/photos/{photoId}` 使用 manual upsert；移除采用单项 native delete，不重写其他关联。`clearAutoAssignedPhotos` 只删除 auto，不影响手动选择。
+- 安卓多选逐项执行，展示部分失败并保留失败 ID；相关列表失效后重新加载。离线只读。
+
+### 分享副本
+
+不新增上传或服务端分享接口。手机复用认证的原图 GET，在私有缓存中由 [Android ImageDecoder](https://developer.android.com/reference/android/graphics/ImageDecoder) 解码（方向、尺寸和 sRGB）后使用 [Bitmap.compress](https://developer.android.com/reference/android/graphics/Bitmap) 生成新的 JPEG。只将新文件通过 FileProvider 精确授权 URI 交给用户选择的应用，不传 NAS 地址、令牌或原始文件名。
+
+副本最长边 2048、JPEG 质量 92、透明部分白底；新文件不拷贝源 EXIF/XMP，旋转体现在像素中。JPEG 的新尺寸/编码信息仍存在，不承诺隐藏画面内容中的身份或位置。原文件字节不修改；失败或取消时清理不完整副本，不能回退到原件分享。暂不转换视频、动图和 RAW。

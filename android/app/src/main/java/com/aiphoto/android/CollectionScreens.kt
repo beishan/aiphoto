@@ -117,6 +117,12 @@ import androidx.activity.result.contract.ActivityResultContracts
         if (vm.catalogOffline) item { Text("离线缓存", Modifier.padding(20.dp)) }
         if (vm.supports("family-timeline")) item { MenuRow("精选时间线", Icons.Outlined.History, "你选入的照片，按年月珍藏") { nav.navigate("timeline") } }
         if (vm.supports("baby-timeline-page")) item { MenuRow("宝宝相册", Icons.Outlined.ChildCare, "在相册页创建宝宝相册并设置出生日期") { nav.navigate("albums") } }
+        if (vm.supports("label-edit")) item {
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ nav.navigate("labels/tag") }) { Text("标签管理") }
+                OutlinedButton({ nav.navigate("labels/category") }) { Text("分类管理") }
+            }
+        }
         item { Text("人物", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge) }
         if (vm.people.isEmpty()) item { Text("尚未识别到人物，请在 NAS 完成人脸索引。", Modifier.padding(horizontal = 20.dp)) }
         items(vm.people.chunked(3)) { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -229,6 +235,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 }
 @Composable fun DownloadsScreen(vm: AppViewModel, nav: NavHostController) {
     var pending by remember { mutableStateOf<Photo?>(null) }
+    var retry by remember { mutableStateOf<Transfer?>(null) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) pending?.let { vm.download(it, uri) }; pending = null
     }
@@ -237,7 +244,19 @@ import androidx.activity.result.contract.ActivityResultContracts
         item { Text("仅记录你主动下载或分享的文件。重试时可重新选择保存位置。", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall) }
         if (vm.transfers.isEmpty()) item { EmptyState("暂无下载记录") }
         items(vm.transfers, key = { it.id }) { transfer ->
-            ListItem(headlineContent = { Text(transfer.name) }, supportingContent = { Column { Text(transfer.status); if (transfer.status == "下载中") LinearProgressIndicator(progress = { transfer.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) } }, leadingContent = { Icon(Icons.Outlined.Download, null) }, trailingContent = { if (transfer.status == "下载中") IconButton({ vm.cancelTransfer(transfer.id) }) { Icon(Icons.Outlined.Close, "取消下载") } else if (transfer.status != "已完成" && transfer.photo != null) TextButton({ pending = transfer.photo; export.launch(transfer.name) }) { Text("重试") } })
+            ListItem(headlineContent = { Text(transfer.name) }, supportingContent = { Column { Text((if (transfer.shareMode == "copy") "JPEG 副本 · " else if (transfer.shareMode == "original") "原文件分享 · " else "") + transfer.status); if (transfer.status == "下载中") LinearProgressIndicator(progress = { transfer.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) } }, leadingContent = { Icon(Icons.Outlined.Download, null) }, trailingContent = { if (transfer.status == "下载中") IconButton({ vm.cancelTransfer(transfer.id) }) { Icon(Icons.Outlined.Close, "取消下载") } else if (transfer.status != "已完成" && transfer.photo != null) TextButton({ retry = transfer }) { Text("重试") } })
         }
     }
+    retry?.let { transfer -> ConfirmDialog("确认重试？", "将重新从 NAS 读取原文件，可能使用移动数据。" + when (transfer.shareMode) {
+        "copy" -> "继续生成最长边 2048 的去元数据 JPEG 副本，不会回退到原件分享。"
+        "original" -> "继续分享原文件，可能包含位置等元数据。"
+        else -> "请选择原文件保存位置。"
+    }, { retry = null }) {
+        retry = null
+        transfer.photo?.let { photo ->
+            if (transfer.shareMode != null) vm.download(photo, share = true, privacyCopy = transfer.shareMode == "copy")
+            else { pending = photo; export.launch(transfer.name) }
+        }
+    } }
+
 }

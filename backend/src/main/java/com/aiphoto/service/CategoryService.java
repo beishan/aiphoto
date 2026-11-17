@@ -53,7 +53,8 @@ public class CategoryService {
     @Transactional
     public CategoryDTO createCategory(CategoryDTO dto) {
         Category category = new Category();
-        category.setName(dto.getName());
+        validate(dto.getName(), dto.getColor());
+        category.setName(dto.getName().trim());
         category.setIcon(dto.getIcon());
         category.setColor(dto.getColor());
         category.setIsSystem(false);
@@ -65,7 +66,9 @@ public class CategoryService {
     public CategoryDTO updateCategory(Long id, CategoryDTO dto) {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Category not found"));
-        if (dto.getName() != null) category.setName(dto.getName());
+        requireEditable(category);
+        if (dto.getName() != null) { validate(dto.getName(), dto.getColor()); category.setName(dto.getName().trim()); }
+        else if (dto.getColor() != null) validate(category.getName(), dto.getColor());
         if (dto.getIcon() != null) category.setIcon(dto.getIcon());
         if (dto.getColor() != null) category.setColor(dto.getColor());
         category = categoryRepository.save(category);
@@ -176,20 +179,26 @@ public class CategoryService {
                 .orElseThrow(() -> new RuntimeException("Category not found"));
         Photo photo = photoRepository.findById(photoId)
                 .orElseThrow(() -> new RuntimeException("Photo not found"));
-        if (!category.getPhotos().contains(photo)) {
-            category.getPhotos().add(photo);
-            categoryRepository.save(category);
-            categoryRepository.updatePhotoCount(categoryId);
-        }
+        requireEditable(category);
+        categoryRepository.addManualPhoto(categoryId, photoId);
+        categoryRepository.updatePhotoCount(categoryId);
     }
 
     @Transactional
     public void removePhotoFromCategory(Long categoryId, Long photoId) {
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new RuntimeException("Category not found"));
-        category.getPhotos().removeIf(p -> p.getId().equals(photoId));
-        categoryRepository.save(category);
+                .orElseThrow(() -> new IllegalArgumentException("分类不存在"));
+        requireEditable(category);
+        categoryRepository.removeManualPhoto(categoryId, photoId);
         categoryRepository.updatePhotoCount(categoryId);
+    }
+
+    private static void validate(String name, String color) {
+        if (name == null || name.isBlank() || name.trim().length() > 100) throw new IllegalArgumentException("分类名称需要 1—100 个字符");
+        if (color != null && !color.matches("#[0-9a-fA-F]{6}")) throw new IllegalArgumentException("颜色需使用 #RRGGBB");
+    }
+    private static void requireEditable(Category category) {
+        if (Boolean.TRUE.equals(category.getIsSystem())) throw new IllegalArgumentException("系统分类只读，请使用自建分类");
     }
 
     /** Repair legacy tags and assign their photos using the shared YOLO mapping. */

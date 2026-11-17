@@ -43,6 +43,8 @@ import java.util.Locale
     val initial = remember { photos.indexOfFirst { it.id == initialId }.coerceAtLeast(0) }
     val pager = rememberPagerState(initialPage = initial) { photos.size }
     var controls by rememberSaveable { mutableStateOf(true) }
+    var shareOptions by remember { mutableStateOf(false) }
+    var labels by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
     var albumPicker by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -84,7 +86,8 @@ import java.util.Locale
             ViewerAction("详情", Icons.Outlined.Info, true) { details = true }
             ViewerAction("加入相册", Icons.Outlined.CreateNewFolder, !vm.busy && !feed.offline) { vm.loadCatalog(); albumPicker = true }
             ViewerAction("下载", Icons.Outlined.Download, !feed.offline) { guard("") { pending = photo; export.launch(photo.name) } }
-            ViewerAction("分享", Icons.Outlined.Share, !feed.offline) { guard("分享原文件可能包含拍摄位置等元数据。文件将交给你选择的应用处理。") { vm.download(photo, share = true) } }
+            ViewerAction("分享", Icons.Outlined.Share, !feed.offline) { shareOptions = true }
+            if (vm.supports("label-edit")) ViewerAction("标签", Icons.Outlined.Label, !feed.offline && !vm.busy) { vm.loadCatalog(); labels = true }
             if (vm.supports("family-timeline")) ViewerAction(if (photo.inTimeline) "移出精选" else "加入精选", Icons.Outlined.History, !vm.busy && !feed.offline) {
                 vm.updatePhoto(photo.id, mapOf("inTimeline" to !photo.inTimeline))
             }
@@ -96,6 +99,15 @@ import java.util.Locale
             ViewerAction("删除", Icons.Outlined.DeleteOutline, !vm.busy && !feed.offline) { deleting = true }
         }
     }
+    if (shareOptions && photo != null) AlertDialog(onDismissRequest = { shareOptions = false }, title = { Text("分享照片") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("原文件可能含位置及设备信息。副本将重新编码为 JPEG（最长边 2048、白色背景），去除 EXIF/XMP 等原文件元数据，但画面中的文字、人脸和水印仍会保留。")
+            if (photo.mediaType == "PHOTO") Button({ shareOptions = false; guard("") { vm.download(photo, share = true, privacyCopy = true) } }, Modifier.fillMaxWidth()) { Text("分享去元数据副本") }
+            OutlinedButton({ shareOptions = false; guard("原文件可能包含拍摄位置等元数据，将交给你选择的应用处理。") { vm.download(photo, share = true) } }, Modifier.fillMaxWidth()) { Text("分享原文件") }
+            if (photo.mediaType != "PHOTO") Text("视频、GIF 和 RAW 暂不支持此副本转换。", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = { TextButton({ shareOptions = false }) { Text("取消") } })
+    if (labels && photo != null) PhotoLabels(vm, photo.id, { labels = false })
     if (details && photo != null) PhotoDetails(vm, photo, !feed.offline, { details = false })
     if (albumPicker && photo != null) AlbumPicker(vm, { albumPicker = false }) { album -> vm.batch(setOf(photo.id), "add", album.id) { albumPicker = false } }
     if (deleting && photo != null) ConfirmDialog("移入回收站？", "会影响 NAS 共享图库和其他客户端，不会删除手机文件。", { deleting = false }) { deleting = false; vm.batch(setOf(photo.id), "trash") { nav.popBackStack() } }

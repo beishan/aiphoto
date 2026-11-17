@@ -60,6 +60,8 @@ fun AiphotoApp(vm: AppViewModel) {
                 NavHost(nav, "gallery", Modifier.weight(1f)) {
                     composable("gallery") { PhotoFeedScreen(vm, nav, "gallery", "照片", root = true) }
                     composable("albums") { AlbumsScreen(vm, nav) }
+                    composable("labels/{kind}") { e -> LabelsScreen(vm, nav, e.arguments!!.getString("kind") == "category") }
+                    composable("label/{kind}/{id}") { e -> LabelScreen(vm, nav, e.arguments!!.getString("kind") == "category", e.arguments!!.getString("id")!!.toLong()) }
                     composable("timeline") { TimelineScreen(vm, nav) }
                     composable("person/{id}") { e -> PersonScreen(vm, nav, e.arguments!!.getString("id")!!.toLong()) }
                     composable("discover") { DiscoverScreen(vm, nav) }
@@ -141,6 +143,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
     var selected by rememberSaveable(source) { mutableStateOf(longArrayOf()) }
     var selecting by rememberSaveable(source) { mutableStateOf(pickAlbum != null) }
     var albumPicker by remember { mutableStateOf(false) }
+    var organize by remember { mutableStateOf(false) }
     var confirmTrash by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val cells = remember(feed.photos, source) { feedCells(feed.photos, source) }
@@ -201,6 +204,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
             else if (source == "trash") Button({ vm.batch(selected.toSet(), "restore") { selected = longArrayOf() } }, enabled = enabled) { Text("恢复已选照片") }
             else {
                 Button({ vm.batch(selected.toSet(), "favorite") { selected = longArrayOf(); selecting = false } }, enabled = enabled) { Text("收藏") }
+                if (vm.supports("label-edit")) OutlinedButton({ vm.loadCatalog(); organize = true }, enabled = enabled) { Text("标签与分类") }
                 OutlinedButton({ vm.loadCatalog(); albumPicker = true }, enabled = enabled) { Text("加入相册") }
                 if (source.startsWith("album:") || source.startsWith("baby:")) OutlinedButton({ vm.batch(selected.toSet(), "remove", source.substringAfter(':').toLong()) { selected = longArrayOf() } }, enabled = enabled) { Text("移出相册") }
                 if (vm.supports("family-timeline")) OutlinedButton({ vm.batch(selected.toSet(), if (source.startsWith("timeline:")) "timelineOff" else "timelineOn") { selected = longArrayOf(); selecting = false } }, enabled = enabled) { Text(if (source.startsWith("timeline:")) "移出精选" else "加入精选") }
@@ -208,6 +212,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
             }
         }
     }
+    if (organize) AssociationPicker(vm, selected.toSet(), { organize = false }, { selected = longArrayOf(); selecting = false; organize = false; vm.loadFeed(source, true) })
     if (albumPicker) AlbumPicker(vm, { albumPicker = false }) { album -> vm.batch(selected.toSet(), "add", album.id) { selected = longArrayOf(); selecting = false; albumPicker = false } }
     if (confirmTrash) ConfirmDialog("移入回收站？", "这会影响 NAS 共享图库和其他客户端，不会删除手机文件。", { confirmTrash = false }) { confirmTrash = false; vm.batch(selected.toSet(), "trash") { selected = longArrayOf(); selecting = false } }
 }

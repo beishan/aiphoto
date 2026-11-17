@@ -19,7 +19,9 @@ data class Photo(
 }
 data class Album(val id: Long = 0, val name: String = "", val description: String? = null, val type: String = "VIRTUAL", val birthDate: String? = null, val coverPhotoUrl: String? = null, val photoCount: Int = 0, val shared: Boolean = false)
 data class Person(val id: Long = 0, val name: String? = null, val coverFaceId: Long? = null, val coverPhotoUrl: String? = null, val photoCount: Int = 0)
-data class Label(val id: Long = 0, val name: String = "", val photoCount: Int = 0)
+data class Label(val id: Long = 0, val name: String = "", val photoCount: Int = 0, val color: String? = null, val type: String? = null, val description: String? = null, val isSystem: Boolean = false) {
+    fun editable(category: Boolean) = if (category) !isSystem else type == "MANUAL"
+}
 data class PhotoPage(val content: List<Photo> = emptyList(), val last: Boolean = true)
 data class CursorPage(val content: List<Photo> = emptyList(), val nextCursor: Long? = null, val hasMore: Boolean = false)
 data class SearchFilter(val query: String = "", val semantic: Boolean = false, val start: String = "", val end: String = "", val person: Long? = null, val tag: Long? = null, val type: String = "", val rating: Int = 0) {
@@ -34,7 +36,7 @@ data class SearchFilter(val query: String = "", val semantic: Boolean = false, v
     }
 }
 data class Feed(val photos: List<Photo> = emptyList(), val page: Int = 0, val cursor: Long? = null, val more: Boolean = true, val loading: Boolean = false, val offline: Boolean = false, val updated: Long = 0, val error: String? = null)
-data class Transfer(val id: String, val name: String, val status: String, val progress: Float = 0f, val uri: String? = null, val photo: Photo? = null)
+data class Transfer(val id: String, val name: String, val status: String, val progress: Float = 0f, val uri: String? = null, val photo: Photo? = null, val shareMode: String? = null)
 class ApiFailure(val status: Int, message: String) : Exception(message)
 
 data class MonthSummary(val year: Int, val month: Int, val count: Long) {

@@ -29,6 +29,7 @@ public class TagService {
     private final PhotoTagRepository photoTagRepository;
     private final PhotoRepository photoRepository;
     private final LocalStorageService storageService;
+    private final com.aiphoto.repository.PhotoTagExclusionRepository exclusions;
 
     // ===== Tag CRUD =====
 
@@ -58,6 +59,8 @@ public class TagService {
 
     @Transactional
     public TagDTO createTag(String name, String color, String description) {
+        name = validName(name);
+        validateFields(color, description);
         if (tagRepository.findByName(name).isPresent()) {
             throw new RuntimeException("标签名称已存在");
         }
@@ -75,6 +78,9 @@ public class TagService {
         Tag tag = tagRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("标签不存在"));
 
+        requireManual(tag);
+        validateFields(color, description);
+        if (name != null) name = validName(name);
         if (name != null && !name.equals(tag.getName())) {
             if (tagRepository.findByName(name).isPresent()) {
                 throw new RuntimeException("标签名称已存在");
@@ -93,6 +99,7 @@ public class TagService {
     public void deleteTag(Long id) {
         Tag tag = tagRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("标签不存在"));
+        requireManual(tag);
         // Remove all photo-tag associations
         photoTagRepository.deleteByTagId(id);
         tagRepository.deleteById(id);
@@ -100,18 +107,20 @@ public class TagService {
 
     @Transactional
     public void mergeTags(Long sourceId, Long targetId) {
+        if (sourceId == null || targetId == null || sourceId.equals(targetId)) throw new IllegalArgumentException("请选择两个不同的人工标签");
         Tag source = tagRepository.findById(sourceId)
                 .orElseThrow(() -> new RuntimeException("源标签不存在"));
         Tag target = tagRepository.findById(targetId)
                 .orElseThrow(() -> new RuntimeException("目标标签不存在"));
 
+        requireManual(source); requireManual(target);
         // Get all photo IDs for source tag
         List<PhotoTag> sourcePhotoTags = photoTagRepository.findByTagId(sourceId);
         for (PhotoTag pt : sourcePhotoTags) {
             PhotoTagId newId = new PhotoTagId();
             newId.setPhotoId(pt.getPhotoId());
             newId.setTagId(targetId);
-            if (!photoTagRepository.existsById(newId)) {
+            if (!exclusions.existsById(newId) && !photoTagRepository.existsById(newId)) {
                 PhotoTag newPt = new PhotoTag();
                 newPt.setPhotoId(pt.getPhotoId());
                 newPt.setTagId(targetId);
@@ -130,12 +139,13 @@ public class TagService {
 
     @Transactional
     public void addTagToPhoto(Long photoId, Long tagId) {
+        photoRepository.findForIndexing(photoId).orElseThrow(() -> new IllegalArgumentException("照片不存在或已在回收站"));
+        tagRepository.findById(tagId).orElseThrow(() -> new IllegalArgumentException("标签不存在"));
         PhotoTagId id = new PhotoTagId();
         id.setPhotoId(photoId);
         id.setTagId(tagId);
-        if (photoTagRepository.existsById(id)) return;
-
-        PhotoTag pt = new PhotoTag();
+        exclusions.deleteById(id);
+        PhotoTag pt = photoTagRepository.findById(id).orElseGet(PhotoTag::new);
         pt.setPhotoId(photoId);
         pt.setTagId(tagId);
         pt.setSource(Tag.TagType.MANUAL);
@@ -145,10 +155,11 @@ public class TagService {
 
     @Transactional
     public void addTagToPhotoByName(Long photoId, String tagName) {
-        Tag tag = tagRepository.findByName(tagName)
+        String normalized = validName(tagName);
+        Tag tag = tagRepository.findByName(normalized)
                 .orElseGet(() -> {
                     Tag t = new Tag();
-                    t.setName(tagName);
+                    t.setName(normalized);
                     t.setColor("#0a84ff");
                     t.setType(Tag.TagType.MANUAL);
                     return tagRepository.save(t);
@@ -158,6 +169,11 @@ public class TagService {
 
     @Transactional
     public void removeTagFromPhoto(Long photoId, Long tagId) {
+        photoRepository.findForIndexing(photoId).orElseThrow(() -> new IllegalArgumentException("照片不存在或已在回收站"));
+        tagRepository.findById(tagId).orElseThrow(() -> new IllegalArgumentException("标签不存在"));
+        var excluded = new com.aiphoto.entity.PhotoTagExclusion();
+        excluded.setPhotoId(photoId); excluded.setTagId(tagId);
+        exclusions.save(excluded);
         PhotoTagId id = new PhotoTagId();
         id.setPhotoId(photoId);
         id.setTagId(tagId);
@@ -176,6 +192,18 @@ public class TagService {
         for (Long photoId : photoIds) {
             removeTagFromPhoto(photoId, tagId);
         }
+    }
+
+    private static String validName(String name) {
+        if (name == null || name.isBlank() || name.trim().length() > 50) throw new IllegalArgumentException("标签名称需要 1—50 个字符");
+        return name.trim();
+    }
+    private static void validateFields(String color, String description) {
+        if (color != null && !color.matches("#[0-9a-fA-F]{6}")) throw new IllegalArgumentException("颜色需使用 #RRGGBB");
+        if (description != null && description.length() > 500) throw new IllegalArgumentException("标签说明不能超过 500 字符");
+    }
+    private static void requireManual(Tag tag) {
+        if (tag.getType() != Tag.TagType.MANUAL) throw new IllegalArgumentException("AI 标签词条只读，请创建人工标签");
     }
 
     // ===== Tag detail with photos =====

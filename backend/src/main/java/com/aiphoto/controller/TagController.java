@@ -44,12 +44,14 @@ public class TagController {
         return ResponseEntity.ok(tagService.updateTag(id, name, color, description, sortOrder));
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTag(@PathVariable Long id) {
         tagService.deleteTag(id);
         return ResponseEntity.noContent().build();
     }
 
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/merge")
     public ResponseEntity<Void> mergeTags(@RequestBody Map<String, Long> request) {
         tagService.mergeTags(request.get("sourceId"), request.get("targetId"));

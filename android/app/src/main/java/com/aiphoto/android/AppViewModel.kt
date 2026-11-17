@@ -43,7 +43,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val feeds = mutableStateMapOf<String, Feed>()
     var transfers by mutableStateOf<List<Transfer>>(emptyList()); private set
     var failedBatchIds by mutableStateOf<Set<Long>>(emptySet()); private set
-    val shareReady = MutableSharedFlow<File>(extraBufferCapacity = 1)
+    val shareReady = MutableSharedFlow<SharedAsset>(extraBufferCapacity = 1)
     var theme by mutableStateOf("system"); private set
     var columns by mutableIntStateOf(3); private set
     var cellularOriginal by mutableStateOf(false); private set
@@ -281,6 +281,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         for (id in ids) {
             try {
                 when (operation) {
+                    "tagAdd" -> client.write("tags/photos/$id", body = mapOf("tagId" to requireNotNull(album)))
+                    "tagRemove" -> client.write("tags/photos/$id/$album", "DELETE", null)
+                    "categoryAdd" -> client.write("categories/$album/photos/$id")
+                    "categoryRemove" -> client.write("categories/$album/photos/$id", "DELETE", null)
                     "timelineOn", "timelineOff" -> client.write("photos/$id", "PUT", mapOf("inTimeline" to (operation == "timelineOn")))
                     "favorite" -> client.write("photos/$id", "PUT", mapOf("favorite" to true))
                     "trash" -> client.write("photos/$id", "DELETE", null)
@@ -300,6 +304,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val feed = feeds.getValue(key)
             feeds[key] = feed.copy(photos = feed.photos.mapNotNull { p ->
                 if (p.id !in ids || p.id in failed) p else when (operation) {
+                    "tagRemove" -> if (key == "tag:$album") null else p
+                    "categoryRemove" -> if (key == "category:$album") null else p
                     "timelineOn" -> p.copy(inTimeline = true)
                     "timelineOff" -> if (key.startsWith("timeline:")) null else p.copy(inTimeline = false)
                     "favorite" -> p.copy(favorite = true)
@@ -312,6 +318,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         failedBatchIds = failed.toSet()
         persistFeeds()
+        if (operation.startsWith("tag") || operation.startsWith("category")) {
+            if (album != null) {
+                val related = (if (operation.startsWith("tag")) "tag:" else "category:") + album
+                invalidateFeed(related); loadFeed(related, true)
+            }
+            if (failed.isEmpty()) loadCatalog()
+        }
         if (operation.startsWith("timeline") || operation == "trash" || operation == "restore") loadMonths()
         if (failed.isNotEmpty()) throw IllegalStateException("成功 $success 项；失败 ID：${failed.joinToString()}。请保留失败项重试。")
     }, success = "已处理 ${ids.size} 项", done = done)
@@ -361,14 +374,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCache() {
         viewModelScope.launch { withContext(Dispatchers.IO) { db.entries().clear(); imageLoader?.diskCache?.clear(); File(getApplication<Application>().cacheDir, "shares/$cacheScope").deleteRecursively() }; imageLoader?.memoryCache?.clear(); cacheBytes = 0; notice = "浏览缓存已清理，导出的文件不受影响" }
     }
-    fun download(photo: Photo, destination: Uri? = null, share: Boolean = false) {
+    fun download(photo: Photo, destination: Uri? = null, share: Boolean = false, privacyCopy: Boolean = false) {
+        if (privacyCopy && (!share || destination != null || photo.mediaType != "PHOTO")) { error = "仅静态照片支持去除元数据的分享副本"; return }
         val client = api ?: return; val generation = epoch; val scope = cacheScope
         val url = mediaUrl(photo.originalUrl) ?: run { error = "原文件地址不可用"; return }
         val id = UUID.randomUUID().toString()
-        transfers = listOf(Transfer(id, photo.name, "下载中", photo = photo)) + transfers.take(99)
+        transfers = listOf(Transfer(id, photo.name, "下载中", photo = photo, shareMode = if (share) (if (privacyCopy) "copy" else "original") else null)) + transfers.take(99)
         transferJobs[id] = viewModelScope.launch {
-            val file = File(getApplication<Application>().cacheDir, "shares/$scope/$id/${File(photo.name).name}")
+            val file = File(getApplication<Application>().cacheDir, "shares/$scope/$id/${if (privacyCopy) "original-input.bin" else File(photo.name).name}")
+            var sharedFile = file
             try {
+                cache("transfers", transfers, scope)
                 withContext(Dispatchers.IO) {
                     file.parentFile!!.mkdirs()
                     val network = async { client.response(Request.Builder().url(url).build()) }
@@ -395,6 +411,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         } }
                     }
                     } finally { watcher.cancel() }
+                    if (privacyCopy) {
+                        ensureActive()
+                        sharedFile = File(file.parentFile, "shared-photo.jpg")
+                        require(sharedFile.canonicalPath != file.canonicalPath) { "请重试分享副本" }
+                        PrivacyCopy.write(file, sharedFile)
+                        ensureActive()
+                        file.delete()
+                    }
                     if (destination != null) {
                         getApplication<Application>().contentResolver.openOutputStream(destination, "w")!!.use { output -> file.inputStream().use { input -> input.copyTo(output) } }
                         file.delete()
@@ -403,13 +427,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (generation != epoch) return@launch
                 transfers = transfers.map { if (it.id == id) it.copy(status = "已完成", progress = 1f, uri = destination?.toString()) else it }
                 cache("transfers", transfers, scope)
-                if (share) shareReady.emit(file) else notice = "文件已保存"
+                if (share) shareReady.emit(SharedAsset(sharedFile, if (privacyCopy) "分享 JPEG 副本" else "分享原文件")) else notice = "文件已保存"
             } catch (e: Exception) {
-                file.delete()
+                file.delete(); if (sharedFile != file) sharedFile.delete()
                 if (destination != null) withContext(NonCancellable + Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(getApplication<Application>().contentResolver, destination) } }
                 if (generation == epoch) {
                     transfers = transfers.map { if (it.id == id) it.copy(status = if (e is CancellationException) "已取消" else readable(e)) else it }
-                    if (e !is CancellationException) error = readable(e)
+                    if (e !is CancellationException) { error = readable(e); cache("transfers", transfers, scope) }
                 }
             } finally { transferJobs.remove(id) }
         }

@@ -17,6 +17,9 @@ class AppFlowTest {
     private var inTimeline = false
     private var babyAdded = false
     private var personName = "小满"
+    private var tagAdded = false
+    private var categoryAdded = false
+    private var photoTagged = false
     private val image = java.io.ByteArrayOutputStream().use { stream ->
         val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(40, 99, 78))
@@ -29,7 +32,7 @@ class AppFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests.add(request)
                 val path = request.requestUrl!!.encodedPath.removePrefix("/nas/api/")
-                if (path == "mobile/server-info") return json("""{"product":"aiphoto","version":"0.23.0","apiVersion":1,"instanceId":"test-nas-instance","capabilities":["album-pagination","authenticated-media","family-timeline","baby-timeline-page","people-edit"]}""")
+                if (path == "mobile/server-info") return json("""{"product":"aiphoto","version":"0.24.0","apiVersion":1,"instanceId":"test-nas-instance","capabilities":["album-pagination","authenticated-media","family-timeline","baby-timeline-page","people-edit","label-edit"]}""")
                 if (path == "auth/login") return json("""{"token":"test-session","user":{"id":1,"username":"tester","role":"ADMIN"}}""")
                 if (request.getHeader("Authorization") != "Bearer test-session") return MockResponse().setResponseCode(401)
                 if (path == "photos/browse") return json("""{"content":[${photo()}],"nextCursor":1,"hasMore":false}""")
@@ -49,8 +52,14 @@ class AppFlowTest {
                 if (path == "timeline/months") return json("""[{"year":2026,"month":11,"count":1}]""")
                 if (path == "timeline/undated/count") return json("""{"count":1}""")
                 if (path == "albums/2/baby-timeline/page") return json("""{"content":[${photo().dropLast(1)},"ageLabel":"2 岁 8 个月"}],"last":true}""")
-                if (path == "tags" || path == "categories") return json("[]")
-                if (path == "photos/1/detail") return json(photo())
+                if (path == "tags" && request.method == "POST") { tagAdded = true; return json("""{"id":20,"name":"假日","type":"MANUAL","color":"#28634E","photoCount":0}""") }
+                if (path == "tags") return json(if (tagAdded) """[{"id":20,"name":"假日","type":"MANUAL","photoCount":0},{"id":30,"name":"识别风景","type":"AI","photoCount":1}]""" else """[{"id":30,"name":"识别风景","type":"AI","photoCount":1}]""")
+                if (path == "categories" && request.method == "POST") { categoryAdded = true; return json("""{"id":2,"name":"周末精选","isSystem":false,"photoCount":0}""") }
+                if (path == "categories") return json(if (categoryAdded) """[{"id":2,"name":"周末精选","isSystem":false,"photoCount":0}]""" else "[]")
+                if (path == "tags/photos/1" && request.method == "POST") { photoTagged = true; return json("{}") }
+                if (path == "tags/photos/1/20" && request.method == "DELETE") { photoTagged = false; return json("{}") }
+                if (path == "categories/2/photos/1") return json("{}")
+                if (path == "photos/1/detail") return json(if (photoTagged) photo().dropLast(1) + ",\"tags\":[{\"id\":20,\"name\":\"假日\",\"source\":\"MANUAL\"}]}" else photo())
                 if (path == "photos/1" && request.method == "PUT") {
                     val values = com.google.gson.JsonParser.parseString(request.body.readUtf8()).asJsonObject
                     if (values.has("favorite")) favorite = values["favorite"].asBoolean
@@ -59,7 +68,7 @@ class AppFlowTest {
                 }
                 if (path == "users/me") return json("""{"id":1,"username":"tester","role":"ADMIN"}""")
                 if (path.startsWith("mobile/photos") || path.startsWith("mobile/faces") || request.requestUrl!!.encodedPath.contains("/media/")) return MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(image))
-                if (path == "search" || path.contains("/photos/page") || path == "photos/favorites" || path == "people/1/photos" || path == "timeline/photos" || path == "timeline/undated") return json("""{"content":[${photo()}],"last":true}""")
+                if (path == "search" || path.contains("/photos/page") || path == "photos/favorites" || path == "people/1/photos" || path == "timeline/photos" || path == "timeline/undated" || path == "categories/2/photos") return json("""{"content":[${photo()}],"last":true}""")
                 return MockResponse().setResponseCode(404)
             }
         }
@@ -132,6 +141,61 @@ class AppFlowTest {
         waitText("设为人物封面？")
         compose.onNodeWithText("确认").performClick()
         compose.waitUntil(10000) { requests.any { it.requestUrl?.encodedPath == "/nas/api/people/1/cover-face" && it.method == "PUT" } }
+        compose.waitUntil(10000) { compose.onAllNodesWithText("选择人物封面").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithContentDescription("返回").performClick()
+        waitText("标签管理")
+        compose.onNodeWithText("标签管理").performClick()
+        waitText("识别风景")
+        compose.onNodeWithText("识别风景").performClick()
+        compose.onNodeWithContentDescription("编辑词条").assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("新建词条") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("新建词条").performClick()
+        waitText("名称")
+        compose.onNodeWithText("名称").performTextInput("假日")
+        compose.onNodeWithText("保存词条").performClick()
+        waitText("假日")
+        compose.onNodeWithText("假日").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("海边.jpg").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("海边.jpg").performClick()
+        compose.onNodeWithText("标签").performScrollTo().performClick()
+        waitText("照片标签")
+        compose.onNodeWithText("整理标签与分类").performClick()
+        waitText("假日 · 人工标签")
+        compose.onNodeWithText("假日 · 人工标签").performClick()
+        compose.onNodeWithText("确认").performClick()
+        waitText("人工确认")
+        compose.onNodeWithText("关闭").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("照片标签").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        waitText("分类管理")
+        compose.onNodeWithText("分类管理").performClick()
+        compose.waitUntil(10000) { compose.onAllNodes(hasContentDescription("新建词条") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("新建词条").performClick()
+        waitText("名称")
+        compose.onNodeWithText("名称").performTextInput("周末精选")
+        compose.onNodeWithText("保存词条").performClick()
+        waitText("周末精选")
+        compose.onNodeWithText("周末精选").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("海边.jpg").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("海边.jpg").performClick()
+        compose.onNodeWithText("标签").performScrollTo().performClick()
+        compose.onNodeWithText("整理标签与分类").performClick()
+        compose.onNodeWithText("分类", useUnmergedTree = true).performClick()
+        waitText("周末精选 · 自建分类")
+        compose.onNodeWithText("周末精选 · 自建分类").performClick()
+        compose.onNodeWithText("确认").performClick()
+        compose.waitUntil(10000) { requests.any { it.requestUrl?.encodedPath == "/nas/api/categories/2/photos/1" && it.method == "POST" } }
+        compose.waitUntil(10000) { compose.onAllNodesWithText("整理 1 张照片").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("关闭").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("照片标签").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("分享").performScrollTo().performClick()
+        waitText("分享去元数据副本")
+        compose.onNodeWithText("分享原文件").assertExists()
+        compose.onNodeWithText("取消").performClick()
+        Assert.assertTrue(requests.any { it.requestUrl?.encodedPath == "/nas/api/tags/photos/1" && it.method == "POST" })
         val create = requests.first { it.requestUrl?.encodedPath == "/nas/api/albums" && it.method == "POST" }.body.clone().readUtf8()
         Assert.assertTrue(create.contains("2024-02-29")); Assert.assertTrue(create.contains("BABY"))
         Assert.assertTrue(requests.any { it.requestUrl?.encodedPath == "/nas/api/albums/2/baby-timeline/page" && it.requestUrl?.queryParameter("size") == "40" })

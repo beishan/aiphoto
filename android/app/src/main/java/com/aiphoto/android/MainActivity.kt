@@ -20,14 +20,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lifecycleScope.launch {
-            model.shareReady.collect { file ->
+            model.shareReady.collect { asset ->
+                val file = asset.file
                 val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
                 val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                     type = mime; putExtra(Intent.EXTRA_STREAM, uri)
                     clipData = android.content.ClipData.newRawUri("分享照片", uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }, "分享原文件"))
+                }, asset.title))
             }
         }
         setContent {
