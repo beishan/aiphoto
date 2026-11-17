@@ -44,6 +44,14 @@ public class CrawlController {
 
     private final com.aiphoto.service.CrawlStatisticsService statisticsService;
 
+    private final com.aiphoto.repository.CrawlRetryRepository retryRepository;
+
+    @GetMapping("/jobs/{jobId}/retries")
+    public List<com.aiphoto.entity.CrawlRetry> retries(@PathVariable Long jobId, Authentication authentication) {
+        crawlService.getJob(jobId, userId(authentication));
+        return retryRepository.findByJobIdOrderByIdDesc(jobId);
+    }
+
     @GetMapping("/statistics")
     public com.aiphoto.service.CrawlStatisticsService.Statistics statistics(
             Authentication authentication,

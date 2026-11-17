@@ -45,6 +45,8 @@ import net.coobird.thumbnailator.Thumbnails;
 @Service
 @RequiredArgsConstructor
 public class CrawlWorker {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.aiphoto.service.CrawlRetryHistoryService retryHistory;
 
     private static final long MAX_HTML_BYTES = 5L * 1024 * 1024;
     private final com.aiphoto.service.CrawlerExecutorService executorService;
@@ -74,6 +76,7 @@ public class CrawlWorker {
     private void discoverWithExecutor(Long jobId) {
         String workerId = queueService.newWorkerId();
         if (!queueService.claim(jobId, workerId)) return;
+        if (retryHistory != null) retryHistory.started(jobId);
         CrawlJob job = jobRepository.findById(jobId).orElseThrow();
         CrawlRule rule = ruleSnapshot(job);
         job.setStatus(CrawlJob.Status.RUNNING);
@@ -81,6 +84,9 @@ public class CrawlWorker {
         job.setFailCount(0);
         job.setErrorMessage(null);
         jobRepository.save(job);
+
+        if (retryHistory != null) retryHistory.finish(job);
+        if (retryHistory != null) retryHistory.finish(job);
         ArrayDeque<String> queue = new ArrayDeque<>();
         Set<String> visited = new HashSet<>();
         int discoveryFailures = 0;
@@ -145,6 +151,8 @@ public class CrawlWorker {
                 job.setFailCount(discoveryFailures);
                 if (discoveryFailures > 0) job.setErrorMessage("有 " + discoveryFailures + " 个列表页处理失败");
                 jobRepository.save(job);
+
+                if (retryHistory != null) retryHistory.finish(job);
                 jobRepository.updateDiscoveryProgress(
                         jobId, visited.size(), (int) pageRepository.countByJobId(jobId));
             }
@@ -157,6 +165,8 @@ public class CrawlWorker {
             job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
+
+            if (retryHistory != null) retryHistory.finish(job);
             if (job.getScanPageId() != null) {
                 try {
                     int created = workflowService.autoCollectDiscoveredPages(jobId, job.getOwnerId());
@@ -186,12 +196,15 @@ public class CrawlWorker {
     private void downloadWithExecutor(Long jobId) {
         String workerId = queueService.newWorkerId();
         if (!queueService.claim(jobId, workerId)) return;
+        if (retryHistory != null) retryHistory.started(jobId);
         CrawlJob job = jobRepository.findById(jobId).orElseThrow();
         CrawlRule rule = ruleSnapshot(job);
         job.setPhase(CrawlJob.Phase.DOWNLOAD);
         job.setStatus(CrawlJob.Status.RUNNING);
         job.setErrorMessage(null);
         jobRepository.save(job);
+
+        if (retryHistory != null) retryHistory.finish(job);
         recoverInterruptedItems(jobId);
         try {
             for (CrawlPage page : pageRepository.findByJobIdAndStatusAndIncludedTrueOrderById(
@@ -307,6 +320,8 @@ public class CrawlWorker {
             job.setFinishedAt(LocalDateTime.now());
             clearLease(job);
             jobRepository.save(job);
+
+            if (retryHistory != null) retryHistory.finish(job);
             if (job.getStatus() == CrawlJob.Status.COMPLETED) executorService.current().taskCompleted(job.getPhase().name());
         } catch (Exception exception) {
             failJob(job, workerId, exception);
@@ -441,6 +456,8 @@ public class CrawlWorker {
         if (!paused) job.setFinishedAt(LocalDateTime.now());
         clearLease(job);
         jobRepository.save(job);
+
+        if (retryHistory != null) retryHistory.finish(job);
     }
 
     private void clearLease(CrawlJob job) {

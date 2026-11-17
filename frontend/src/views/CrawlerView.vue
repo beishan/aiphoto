@@ -72,6 +72,12 @@ async function updateSelectedTaskPriorities() {
 const prioritySaving = ref(new Set<number>())
 const pages = ref<CrawlPage[]>([])
 const assets = ref<CrawlAsset[]>([])
+const retryHistory = ref<Array<{ id: number; retryType: string; queuedAt: string; startedAt: string | null; finishedAt: string | null; result: string; message: string | null }>>([])
+function retryTime(value: string | null) { return value ? new Date(value).toLocaleString() : '—' }
+function taskDuration(created: string, finished?: string | null) {
+  const seconds = Math.max(0, Math.floor(((finished ? new Date(finished).getTime() : downloadClock.value) - new Date(created).getTime()) / 1000))
+  return Math.floor(seconds / 3600) + ' 小时 ' + Math.floor(seconds % 3600 / 60) + ' 分 ' + seconds % 60 + ' 秒'
+}
 const activeJobId = ref<number | null>(null)
 const selectedAssets = ref(new Set<number>())
 const previewUrls = ref<string[]>([])
@@ -598,15 +604,17 @@ async function loadJobDetail() {
   const jobId = activeJobId.value
   const request = ++detailRequest
   const showTaskAssets = taskDrawerVisible.value || activeTab.value !== 'review'
-  const [jobResult, pageResult, assetResult, progressResult, scanResult] = await Promise.all([
+  const [jobResult, pageResult, assetResult, progressResult, scanResult, retriesResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
     showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize.value, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
     taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
     taskDrawerVisible.value && activeJob.value && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(activeJob.value.phase)
       ? crawlApi.scanResults(jobId, scanResultPage.value) : Promise.resolve(null),
+    crawlApi.retries(jobId),
   ])
   if (request !== detailRequest || jobId !== activeJobId.value) return
+  retryHistory.value = retriesResult.data
   if (scanResult) scanResults.value = scanResult.data
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
   if (index >= 0) jobs.value[index] = jobResult.data
@@ -1965,8 +1973,18 @@ onUnmounted(() => {
             <el-descriptions-item v-if="['DOWNLOAD', 'REVIEW'].includes(activeJob.phase)" label="已解析图片链接">{{ assetTotal }}</el-descriptions-item>
             <el-descriptions-item label="已下载图片">{{ activeJob.imagesDownloaded }}</el-descriptions-item>
             <el-descriptions-item label="失败项目">{{ activeJob.failCount }}</el-descriptions-item>
+            <el-descriptions-item label="任务总耗时">{{ taskDuration(activeJob.createdAt, activeJob.finishedAt) }}（含排队与重试等待）</el-descriptions-item>
             <el-descriptions-item label="执行次数">{{ activeJob.attemptCount }}</el-descriptions-item>
           </el-descriptions>
+          <h3>重试记录</h3>
+          <el-table :data="retryHistory" empty-text="暂无重试记录，历史重试未保存明细" max-height="280">
+            <el-table-column label="方式" width="90"><template #default="{ row }">{{ row.retryType === 'AUTO' ? '自动重试' : '手动重试' }}</template></el-table-column>
+            <el-table-column label="排队时间" min-width="170"><template #default="{ row }">{{ retryTime(row.queuedAt) }}</template></el-table-column>
+            <el-table-column label="开始时间" min-width="170"><template #default="{ row }">{{ retryTime(row.startedAt) }}</template></el-table-column>
+            <el-table-column label="结束时间" min-width="170"><template #default="{ row }">{{ retryTime(row.finishedAt) }}</template></el-table-column>
+            <el-table-column label="结果" min-width="120"><template #default="{ row }">{{ ({ QUEUED: '排队中', RUNNING: '执行中', COMPLETED: '成功', PARTIAL: '部分成功', FAILED: '失败', PAUSED: '已暂停', CANCELLED: '已取消' } as Record<string, string>)[row.result] || row.result }}</template></el-table-column>
+            <el-table-column prop="message" label="结果说明" min-width="200" show-overflow-tooltip />
+          </el-table>
           <el-alert v-if="activeJob.errorMessage" type="error" show-icon :title="activeJob.errorMessage" :closable="false" />
           <el-space class="task-actions" wrap>
             <el-button v-if="['DISCOVERY','AWAITING_CONFIRMATION'].includes(activeJob.phase)" type="primary" :icon="Download" round @click="taskDrawerVisible = false; activeTab = 'pages'">前往待采集页</el-button>

@@ -181,6 +181,7 @@ export interface CrawlRule {
 }
 
 export interface CrawlJob {
+  finishedAt?: string | null
   priority: number
   id: number
   scanPageId: number | null

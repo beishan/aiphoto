@@ -32,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CrawlService {
     @org.springframework.beans.factory.annotation.Autowired
+    private CrawlRetryHistoryService retryHistory;
+    @org.springframework.beans.factory.annotation.Autowired
     private CrawlDeletedCleanupService deletedCleanup;
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager cleanupEntityManager;
@@ -436,6 +438,8 @@ public class CrawlService {
             throw new IllegalStateException("当前任务不能暂停");
         }
         job.setStatus(CrawlJob.Status.PAUSED);
+        job.setFinishedAt(java.time.LocalDateTime.now());
+        if (retryHistory != null) retryHistory.finish(job);
         job.setLeaseOwner(null);
         job.setLeaseUntil(null);
         return jobRepository.save(job);
@@ -448,6 +452,7 @@ public class CrawlService {
             throw new IllegalStateException("当前任务不能取消");
         }
         job.setStatus(CrawlJob.Status.CANCELLED);
+        if (retryHistory != null) retryHistory.finish(job);
         job.setFinishedAt(java.time.LocalDateTime.now());
         job.setLeaseOwner(null);
         job.setLeaseUntil(null);
@@ -463,13 +468,17 @@ public class CrawlService {
                 || job.getFinishedAt() == null || job.getAutoRetryCount() >= settings.getTaskMaxRetries()
                 || job.getFinishedAt().plusSeconds(settings.getTaskRetryIntervalSeconds())
                         .isAfter(java.time.LocalDateTime.now())) return false;
-        prepareResumeOrRetry(jobId, job.getOwnerId());
+        prepareRetry(jobId, job.getOwnerId(), "AUTO");
         job.setAutoRetryCount(job.getAutoRetryCount() + 1);
         return true;
     }
 
     @Transactional
     public CrawlJob prepareResumeOrRetry(Long jobId, Long ownerId) {
+        return prepareRetry(jobId, ownerId, "MANUAL");
+    }
+
+    private CrawlJob prepareRetry(Long jobId, Long ownerId, String retryType) {
         CrawlJob job = getJob(jobId, ownerId);
         boolean emptyCompletedDownload = job.getPhase() == CrawlJob.Phase.REVIEW
                 && job.getStatus() == CrawlJob.Status.COMPLETED

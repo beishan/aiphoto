@@ -48,7 +48,7 @@ public class SystemInfoService {
     @Value("${spring.datasource.url}")
     private String dbUrl;
 
-    @Value("${app.version:0.24.0}")
+    @Value("${app.version:0.24.1}")
     private String appVersion;
 
     /**

@@ -91,6 +91,7 @@ export const crawlApi = {
   }),
   jobs: (pageName?: string) => http.get<CrawlJob[]>('/crawl/jobs', { params: pageName ? { pageName } : {} }),
   createJob: (ruleId: number) => http.post<{ jobId: number }>('/crawl/jobs', { ruleId }),
+  retries: (id: number) => http.get<Array<{ id: number; retryType: string; queuedAt: string; startedAt: string | null; finishedAt: string | null; result: string; message: string | null }>>('/crawl/jobs/' + id + '/retries'),
   job: (id: number) => http.get<CrawlJob>(`/crawl/jobs/${id}`),
   updateJobPriorities: (jobIds: number[], priority: number | null) => http.patch<CrawlJob[]>('/crawl/jobs/priority', { jobIds, priority }),
   updateJobPriority: (id: number, priority: number | null) => http.patch<CrawlJob>(`/crawl/jobs/${id}/priority`, { priority }),

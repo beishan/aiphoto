@@ -772,3 +772,15 @@ ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_auto_retry_enabled BO
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_retry_interval_seconds INTEGER NOT NULL DEFAULT 300;
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS task_max_retries INTEGER NOT NULL DEFAULT 3;
 ALTER TABLE crawl_jobs ADD COLUMN IF NOT EXISTS auto_retry_count INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS crawl_retries (
+    id BIGSERIAL PRIMARY KEY,
+    job_id BIGINT NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    retry_type VARCHAR(20) NOT NULL,
+    queued_at TIMESTAMP NOT NULL,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    result VARCHAR(30) NOT NULL DEFAULT 'QUEUED',
+    message TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_crawl_retries_job ON crawl_retries(job_id, id DESC);
