@@ -18,3 +18,8 @@ export async function allTaskImportIds(
   }
   return [...ids]
 }
+
+/** Completed and pending imports leave the review cards; failed imports become selectable again. */
+export function isTaskAssetImportable(asset: Pick<CrawlAsset, 'id' | 'status' | 'importedPhotoId'>, pending: Set<number>): boolean {
+  return asset.status === 'DOWNLOADED' && !asset.importedPhotoId && !pending.has(asset.id)
+}

@@ -244,6 +244,7 @@ function openTaskGallery() {
   taskGalleryJobId.value = previewViewerAsset.value.jobId
 }
 function taskGallerySubmitted(batchId: number, ids: number[]) {
+  if (previewViewerAsset.value && ids.includes(previewViewerAsset.value.id)) closePreviewViewer()
   pendingImportAssetIds.value = new Set([...pendingImportAssetIds.value, ...ids])
   void loadImportBatch(batchId, '').catch(() => {})
   void monitorImportBatches([batchId], new Map([[batchId, ids]]))

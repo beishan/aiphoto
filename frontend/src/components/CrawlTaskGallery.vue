@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { crawlApi } from '@/api/crawlApi'
-import { allTaskImportIds } from '@/utils/taskGallery'
+import { allTaskImportIds, isTaskAssetImportable } from '@/utils/taskGallery'
 import { createThumbnailQueue } from '@/utils/thumbnailQueue'
 import type { CrawlAsset } from '@/types'
 
@@ -27,8 +27,9 @@ let generation = 0
 let previewController: AbortController | undefined
 let previewObjectUrl = ''
 let importKey: { signature: string; key: string } | null = null
-const canImport = (asset: CrawlAsset) => asset.status === 'DOWNLOADED' && !asset.importedPhotoId && !props.pendingIds.has(asset.id)
-const pageSelectable = computed(() => items.value.filter(canImport))
+const canImport = (asset: CrawlAsset) => isTaskAssetImportable(asset, props.pendingIds)
+const visibleItems = computed(() => items.value.filter(canImport))
+const pageSelectable = visibleItems
 const pageSelected = computed(() => pageSelectable.value.length > 0 && pageSelectable.value.every(asset => selected.value.has(asset.id)))
 const queue = createThumbnailQueue(async (id, signal) => {
   const { data } = await crawlApi.thumbnail(id, signal)
@@ -45,10 +46,18 @@ async function load() {
   error.value = ''
   clearThumbs()
   try {
-    const { data } = await crawlApi.assets(props.jobId, page.value, 60)
+    const { data } = await crawlApi.assets(props.jobId, page.value, 60, 'DOWNLOADED')
     if (!alive || request !== generation) return
-    items.value = data.content
     total.value = data.totalElements
+    const lastPage = Math.max(0, Math.ceil(data.totalElements / 60) - 1)
+    if (page.value > lastPage) {
+      page.value = lastPage
+      await load()
+      return
+    }
+    const refreshedIds = new Set(data.content.filter(canImport).map(asset => asset.id))
+    items.value = data.content
+    if (preview.value && !refreshedIds.has(preview.value.id)) closePreview()
     for (const asset of items.value) if (['DOWNLOADED', 'IMPORTED', 'DUPLICATE'].includes(asset.status)) void queue.enqueue(asset.id)
   } catch (e: any) { if (alive && request === generation) error.value = e?.response?.data?.message || '任务图片加载失败，请重试' }
   finally { if (alive && request === generation) loading.value = false }
@@ -82,7 +91,7 @@ async function importImages(all: boolean) {
     emit('submitted', data.batchId, ids)
     notify('success', '已提交后台入库，可继续浏览')
   } catch (e: any) { notify('error', e?.response?.data?.message || '入库失败，请重试') }
-  finally { submitting.value = false }
+  finally { submitting.value = false; if (alive) void load() }
 }
 async function openPreview(asset: CrawlAsset) {
   if (!thumbs[asset.id]) return
@@ -113,7 +122,10 @@ function status(asset: CrawlAsset) {
   if (props.pendingIds.has(asset.id)) return '后台入库中'
   return ({ DOWNLOADED: '待入库', IMPORTED: '已入库', DUPLICATE: '重复图片', PENDING: '待下载', RUNNING: '下载中', FAILED: '下载失败', SKIPPED: '已跳过', DELETED: '已删除' } as Record<string, string>)[asset.status]
 }
-watch(() => props.pendingIds, () => { if (!submitting.value) void load() })
+watch(() => props.pendingIds, () => {
+  if (preview.value && props.pendingIds.has(preview.value.id)) closePreview()
+  if (!submitting.value) void load()
+})
 onMounted(load)
 onBeforeUnmount(() => { alive = false; generation++; queue.dispose(); clearThumbs(); closePreview() })
 </script>
@@ -130,10 +142,10 @@ onBeforeUnmount(() => { alive = false; generation++; queue.dispose(); clearThumb
         <el-button type="primary" plain :loading="submitting" :disabled="loading || !total" @click="importImages(true)">全部可入库图片入库</el-button>
       </el-space>
     </div>
-    <p class="task-gallery-hint">展示该任务的全部图片；选择可跨页保留。“全部”覆盖整个任务，已入库、下载失败和正在入库的图片自动排除。沿用待整理区当前的相册与标签设置。</p>
+    <p class="task-gallery-hint">展示该任务待入库的图片；选择可跨页保留，已提交的图片暂时隐藏，失败后重新显示。“全部”覆盖整个任务，已入库、下载失败和正在入库的图片自动排除。沿用待整理区当前的相册与标签设置。</p>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div v-loading="loading" class="task-gallery-grid">
-      <article v-for="asset in items" :key="asset.id" :class="{ selected: selected.has(asset.id) }">
+      <article v-for="asset in visibleItems" :key="asset.id" :class="{ selected: selected.has(asset.id) }">
         <button class="task-gallery-image" type="button" :disabled="!thumbs[asset.id]" :aria-label="'预览 ' + asset.originalFilename" @click="openPreview(asset)">
           <img v-if="thumbs[asset.id]" :src="thumbs[asset.id]" :alt="asset.originalFilename" loading="lazy" />
           <span v-else>{{ status(asset) }}</span>
@@ -141,7 +153,7 @@ onBeforeUnmount(() => { alive = false; generation++; queue.dispose(); clearThumb
         <div class="task-gallery-copy"><el-checkbox :model-value="selected.has(asset.id)" :disabled="!canImport(asset) || submitting" :aria-label="'选择 ' + asset.originalFilename" @change="toggle(asset.id, Boolean($event))">{{ status(asset) }}</el-checkbox><strong :title="asset.originalFilename">{{ asset.originalFilename }}</strong><small>{{ asset.width || '—' }} × {{ asset.height || '—' }}</small></div>
       </article>
     </div>
-    <el-empty v-if="!loading && !items.length && !error" description="当前任务暂无图片" />
+    <el-empty v-if="!loading && !visibleItems.length && !error" :description="items.some(asset => pendingIds.has(asset.id)) ? '当前页图片正在后台入库，完成后自动刷新' : '当前任务暂无待入库图片'" />
     <el-pagination v-if="total > 60" :current-page="page + 1" :page-size="60" :total="total" :disabled="submitting || loading" layout="prev, pager, next, total" @current-change="page = $event - 1; load()" />
     <el-dialog :model-value="!!preview" :title="preview?.originalFilename || '图片预览'" width="min(1080px, 96vw)" append-to-body :z-index="5100" @close="closePreview">
       <div class="task-gallery-preview" v-loading="previewLoading"><img v-if="previewUrl" :src="previewUrl" :alt="preview?.originalFilename" /></div>

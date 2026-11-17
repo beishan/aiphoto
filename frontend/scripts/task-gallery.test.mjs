@@ -4,7 +4,7 @@ import test from 'node:test'
 import ts from 'typescript'
 const source = readFileSync(new URL('../src/utils/taskGallery.ts', import.meta.url), 'utf8')
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } })
-const { allTaskImportIds } = await import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'))
+const { allTaskImportIds, isTaskAssetImportable } = await import('data:text/javascript;base64,' + Buffer.from(outputText).toString('base64'))
 test('all import covers pages beyond visible cards and excludes ineligible items', async () => {
   const calls = []
   const ids = await allTaskImportIds(async page => {
@@ -20,4 +20,13 @@ test('closing window while fetching prevents import of stale task data', async (
   let active = true
   const ids = await allTaskImportIds(async () => { active = false; return { content: [{ id: 1 }], totalElements: 1 } }, () => true, () => active)
   assert.deepEqual(ids, [])
+})
+
+test('submitted and imported cards disappear while failed imports return', () => {
+  const asset = { id: 7, status: 'DOWNLOADED', importedPhotoId: null }
+  assert.equal(isTaskAssetImportable(asset, new Set()), true)
+  assert.equal(isTaskAssetImportable(asset, new Set([7])), false)
+  assert.equal(isTaskAssetImportable({ ...asset, status: 'IMPORTED', importedPhotoId: 9 }, new Set()), false)
+  assert.equal(isTaskAssetImportable({ ...asset, status: 'DUPLICATE', importedPhotoId: 9 }, new Set()), false)
+  assert.equal(isTaskAssetImportable(asset, new Set()), true)
 })
