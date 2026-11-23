@@ -18,10 +18,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CrawlImportBatchQueueServiceTest {
 
     @Mock private CrawlImportBatchRepository batchRepository;
+    @Mock private CrawlDiskGuard diskGuard;
 
     @Test
     void onlyOneWorkerCanWinTheAtomicBatchClaim() {
-        CrawlImportBatchQueueService queue = new CrawlImportBatchQueueService(batchRepository);
+        CrawlImportBatchQueueService queue = new CrawlImportBatchQueueService(batchRepository, diskGuard);
         when(batchRepository.claim(eq(12L), eq("worker-1"), any(), any())).thenReturn(1);
         when(batchRepository.claim(eq(12L), eq("worker-2"), any(), any())).thenReturn(0);
 
@@ -31,7 +32,7 @@ class CrawlImportBatchQueueServiceTest {
 
     @Test
     void batchLeaseRenewalUsesARecoverableTenMinuteWindow() {
-        CrawlImportBatchQueueService queue = new CrawlImportBatchQueueService(batchRepository);
+        CrawlImportBatchQueueService queue = new CrawlImportBatchQueueService(batchRepository, diskGuard);
         when(batchRepository.renewLease(eq(12L), eq("worker-1"), any())).thenReturn(1);
         ArgumentCaptor<LocalDateTime> until = ArgumentCaptor.forClass(LocalDateTime.class);
 

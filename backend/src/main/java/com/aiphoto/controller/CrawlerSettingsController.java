@@ -24,6 +24,19 @@ public class CrawlerSettingsController {
     private final com.aiphoto.service.CrawlerExecutorService executorService;
     private final com.aiphoto.service.CrawlerProxyTestService proxyTestService;
 
+    private final com.aiphoto.service.CrawlDiskGuard diskGuard;
+
+    @GetMapping("/disk-guard")
+    public com.aiphoto.service.CrawlDiskGuard.Status diskGuard() {
+        return diskGuard.status();
+    }
+
+    @PutMapping("/disk-guard")
+    public com.aiphoto.service.CrawlDiskGuard.Status updateDiskGuard(
+            @RequestBody com.aiphoto.service.CrawlDiskGuard.Limit request) {
+        return diskGuard.update(request);
+    }
+
     @GetMapping
     public CrawlerSettingsService.SettingsView getSettings() {
         return settingsService.getSettings();

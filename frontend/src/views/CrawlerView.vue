@@ -11,6 +11,7 @@ import { crawlApi } from '@/api/crawlApi'
 import { createThumbnailQueue } from '@/utils/thumbnailQueue'
 import { crawlJobProgress } from '@/utils/crawlProgress'
 import http from '@/api/http'
+import CrawlDiskGuardPanel from '@/components/CrawlDiskGuardPanel.vue'
 import { settingApi } from '@/api/settingApi'
 import { queueStaticFrame } from '@/utils/staticFrameQueue'
 import StaticPhotoImage from '@/components/StaticPhotoImage.vue'
@@ -1671,6 +1672,8 @@ onUnmounted(() => {
         </el-space>
       </div>
     </el-card>
+
+    <CrawlDiskGuardPanel />
 
     <el-dialog v-model="newCollectionVisible" title="新建采集任务" width="min(520px, 94vw)" :close-on-click-modal="!newCollectionSaving" :close-on-press-escape="!newCollectionSaving" :show-close="!newCollectionSaving">
       <el-form label-position="top" @submit.prevent="createCollection">

@@ -308,9 +308,9 @@ public class CrawlWorker {
                     assetRepository.save(asset);
                     continue;
                 }
-                downloadAsset(jobId, job.getOwnerId(), rule, asset, imageHosts);
+                downloadAsset(jobId, workerId, job.getOwnerId(), rule, asset, imageHosts);
             }
-            if (stopped(jobId)) return;
+            if (stopped(jobId) || !queueService.renew(jobId, workerId)) return;
             job = jobRepository.findById(jobId).orElseThrow();
             job.setPhase(CrawlJob.Phase.REVIEW);
             int totalFailures = (int) pageRepository.countByJobIdAndStatusIn(jobId, java.util.List.of(CrawlPage.Status.FAILED))
@@ -371,7 +371,7 @@ public class CrawlWorker {
     }
 
     private void downloadAsset(
-            Long jobId, Long ownerId, CrawlRule rule, CrawlAsset asset,
+            Long jobId, String workerId, Long ownerId, CrawlRule rule, CrawlAsset asset,
             com.aiphoto.service.CrawlImageHostGuard imageHosts) throws Exception {
         String imageUrl = asset.getImageUrl();
         var skip = imageSkipRepository.findByOwnerIdAndUrlHash(ownerId, asset.getUrlHash()).orElse(null);
@@ -395,6 +395,7 @@ public class CrawlWorker {
             SafeHttpFetcher.FetchedResource resource = imageHosts.execute(imageUrl, () -> fetcher.fetchImage(
                     imageUrl, rule.getBlockedHosts(), rule.getMaxFileBytes(),
                     pageHostInterval(imageUrl, rule)));
+            if (stopped(jobId) || !queueService.renew(jobId, workerId)) return;
             if (!resource.contentType().startsWith("image/")) {
                 throw new IllegalArgumentException("图床返回的不是图片（" + resource.contentType()
                         + "），请检查原图属性及图床访问规则");

@@ -784,3 +784,6 @@ CREATE TABLE IF NOT EXISTS crawl_retries (
     message TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_crawl_retries_job ON crawl_retries(job_id, id DESC);
+
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS disk_limit_mode VARCHAR(16) NOT NULL DEFAULT 'OFF';
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS disk_limit_value DOUBLE PRECISION NOT NULL DEFAULT 0;

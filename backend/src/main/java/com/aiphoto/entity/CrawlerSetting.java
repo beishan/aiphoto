@@ -12,6 +12,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 @Data
 @NoArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "crawler_settings")
 public class CrawlerSetting {
 
@@ -38,6 +39,10 @@ public class CrawlerSetting {
     private Boolean taskAutoRetryEnabled = false;
     private Integer taskRetryIntervalSeconds = 300;
     private Integer taskMaxRetries = 3;
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    private com.aiphoto.service.CrawlDiskGuard.Mode diskLimitMode =
+            com.aiphoto.service.CrawlDiskGuard.Mode.OFF;
+    private double diskLimitValue;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 }

@@ -668,6 +668,11 @@ function getTaskStatusClass(status: string): string {
 
 // ===== Storage Management =====
 const storageInfo = ref<Record<string, unknown>>({})
+const storageVolumes = computed(() =>
+  (storageInfo.value.volumes ?? {}) as Record<string, { total: number; free: number; usable: number }>)
+function volumeUsedPercent(total: number, free: number) {
+  return total > 0 ? Math.min(100, Math.max(0, Math.round((1 - free / total) * 100))) : 0
+}
 
 async function loadStorageInfo() {
   try {
@@ -1076,16 +1081,20 @@ const systemStorageFolders = computed(() => [
           <div class="panel-card">
             <div class="setting-info" style="margin-bottom: 14px;">
               <span class="label-text">存储占用</span>
-              <span class="label-desc">照片、缩略图和模型文件的存储分布</span>
+              <span class="label-desc">应用管理的文件大小，包含图库原图、缩略图、采集暂存和模型</span>
             </div>
             <div class="storage-breakdown">
               <div class="storage-item">
-                <span class="storage-label">照片文件</span>
+                <span class="storage-label">图库原图</span>
                 <span class="storage-value">{{ formatSize(storageInfo.photosSize as number || 0) }}</span>
               </div>
               <div class="storage-item">
                 <span class="storage-label">缩略图</span>
                 <span class="storage-value">{{ formatSize(storageInfo.thumbsSize as number || 0) }}</span>
+              </div>
+              <div class="storage-item">
+                <span class="storage-label">网站采集</span>
+                <span class="storage-value">{{ formatSize(storageInfo.crawlSize as number || 0) }}</span>
               </div>
               <div class="storage-item">
                 <span class="storage-label">模型文件</span>
@@ -1098,20 +1107,20 @@ const systemStorageFolders = computed(() => [
             </div>
           </div>
           <!-- Disk space -->
-          <div v-if="storageInfo.diskTotalSpace" class="panel-card">
-            <div class="setting-row" style="margin-bottom: 12px;">
-              <div class="setting-info">
-                <span class="label-text">磁盘空间</span>
-                <span class="label-desc">数据存储所在磁盘的可用空间</span>
+          <div class="panel-card">
+            <div class="setting-info" style="margin-bottom: 14px;">
+              <span class="label-text">NAS 磁盘空间</span>
+              <span class="label-desc">按存储目录所在的卷显示。同一卷上的目录会显示相同容量。</span>
+            </div>
+            <p v-if="!Object.keys(storageVolumes).length">暂未获取到磁盘容量</p>
+            <div v-for="(volume, label) in storageVolumes" :key="label" style="margin: 14px 0">
+              <strong>{{ label }}</strong>
+              <el-progress :percentage="volumeUsedPercent(volume.total, volume.free)" />
+              <div class="disk-usage-meta">
+                <span>已用 {{ formatSize(volume.total - volume.free) }}</span>
+                <span>可用 {{ formatSize(volume.usable) }}</span>
+                <span>总容量 {{ formatSize(volume.total) }}</span>
               </div>
-            </div>
-            <div class="disk-usage-bar">
-              <div class="disk-used" :style="{ width: ((1 - ((storageInfo.diskFreeSpace as number) / (storageInfo.diskTotalSpace as number))) * 100).toFixed(1) + '%' }"></div>
-            </div>
-            <div class="disk-usage-meta">
-              <span>已用: {{ formatSize((storageInfo.diskTotalSpace as number) - (storageInfo.diskFreeSpace as number)) }}</span>
-              <span>可用: {{ formatSize(storageInfo.diskFreeSpace as number) }}</span>
-              <span>总计: {{ formatSize(storageInfo.diskTotalSpace as number) }}</span>
             </div>
           </div>
           <!-- Directory paths -->

@@ -47,7 +47,7 @@ class CrawlWorkerExecutorTest {
         });
 
         org.springframework.test.util.ReflectionTestUtils.invokeMethod(
-                worker, "downloadAsset", 1L, 9L, rule, asset, new CrawlImageHostGuard());
+                worker, "downloadAsset", 1L, "worker-1", 9L, rule, asset, new CrawlImageHostGuard());
 
         assertThat(asset.getStatus()).isEqualTo(com.aiphoto.entity.CrawlAsset.Status.FAILED);
         assertThat(asset.getDownloadDurationMillis()).isNotNull().isGreaterThanOrEqualTo(0L);

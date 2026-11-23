@@ -48,7 +48,7 @@ public class SystemInfoService {
     @Value("${spring.datasource.url}")
     private String dbUrl;
 
-    @Value("${app.version:0.24.6}")
+    @Value("${app.version:0.25.0}")
     private String appVersion;
 
     /**
@@ -71,15 +71,15 @@ public class SystemInfoService {
         info.put("totalStorageSize", (long) info.get("photosSize") + (long) info.get("thumbsSize")
                 + (long) info.get("crawlSize") + (long) info.get("modelsSize"));
         
-        // Disk free space
-        try {
-            Path dataPath = Paths.get(photosDir).toAbsolutePath().getParent();
-            if (dataPath != null && Files.exists(dataPath)) {
-                info.put("diskFreeSpace", dataPath.toFile().getFreeSpace());
-                info.put("diskTotalSpace", dataPath.toFile().getTotalSpace());
-            }
-        } catch (Exception e) {
-            log.warn("Failed to get disk space info", e);
+        Map<String, CrawlDiskGuard.Volume> volumes = new LinkedHashMap<>();
+        addVolume(volumes, "照片图库", photosDir);
+        addVolume(volumes, "缩略图", thumbsDir);
+        addVolume(volumes, "网站采集", crawlDir);
+        info.put("volumes", volumes);
+        var photoVolume = volumes.get("照片图库");
+        if (photoVolume != null) {
+            info.put("diskFreeSpace", photoVolume.usable());
+            info.put("diskTotalSpace", photoVolume.total());
         }
         
         return info;
@@ -135,6 +135,14 @@ public class SystemInfoService {
         }
         
         return info;
+    }
+
+    private void addVolume(Map<String, CrawlDiskGuard.Volume> volumes, String name, String directory) {
+        try {
+            volumes.put(name, CrawlDiskGuard.Volume.read(directory));
+        } catch (IOException exception) {
+            log.warn("Failed to read storage volume for {}", name, exception);
+        }
     }
 
     private long getDirectorySize(String dirPath) {

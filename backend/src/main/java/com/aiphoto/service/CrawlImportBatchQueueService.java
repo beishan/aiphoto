@@ -13,6 +13,7 @@ public class CrawlImportBatchQueueService {
 
     private static final Duration LEASE_DURATION = Duration.ofMinutes(10);
     private final CrawlImportBatchRepository batchRepository;
+    private final CrawlDiskGuard diskGuard;
     private final String instanceId = UUID.randomUUID().toString();
 
     public String newWorkerId() {
@@ -20,11 +21,16 @@ public class CrawlImportBatchQueueService {
     }
 
     public boolean claim(Long batchId, String workerId) {
+        if (diskGuard.blocked()) return false;
         LocalDateTime now = LocalDateTime.now();
         return batchRepository.claim(batchId, workerId, now, now.plus(LEASE_DURATION)) == 1;
     }
 
     public boolean renew(Long batchId, String workerId) {
+        if (diskGuard.blocked()) {
+            batchRepository.yieldForDiskSpace(batchId, workerId);
+            return false;
+        }
         return batchRepository.renewLease(
                 batchId, workerId, LocalDateTime.now().plus(LEASE_DURATION)) == 1;
     }

@@ -49,6 +49,12 @@ public interface CrawlJobRepository extends JpaRepository<CrawlJob, Long> {
 
     @Modifying
     @Transactional
+    @Query(value = "UPDATE crawl_jobs SET status = 'QUEUED', lease_owner = NULL, lease_until = NULL "
+            + "WHERE id = :id AND status = 'RUNNING' AND lease_owner = :worker", nativeQuery = true)
+    void yieldForDiskSpace(@Param("id") Long id, @Param("worker") String worker);
+
+    @Modifying
+    @Transactional
     @Query("UPDATE CrawlJob j SET j.status = com.aiphoto.entity.CrawlJob.Status.RUNNING, "
             + "j.leaseOwner = :worker, j.leaseUntil = :until, "
             + "j.attemptCount = j.attemptCount + 1 WHERE j.id = :id AND "

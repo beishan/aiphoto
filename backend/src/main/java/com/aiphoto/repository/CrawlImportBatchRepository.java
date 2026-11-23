@@ -23,6 +23,12 @@ public interface CrawlImportBatchRepository extends JpaRepository<CrawlImportBat
 
     @Modifying
     @Transactional
+    @Query(value = "UPDATE crawl_import_batches SET status = 'QUEUED', lease_owner = NULL, lease_until = NULL "
+            + "WHERE id = :id AND status = 'RUNNING' AND lease_owner = :worker", nativeQuery = true)
+    void yieldForDiskSpace(@Param("id") Long id, @Param("worker") String worker);
+
+    @Modifying
+    @Transactional
     @Query("UPDATE CrawlImportBatch b SET "
             + "b.status = com.aiphoto.entity.CrawlImportBatch.Status.RUNNING, "
             + "b.leaseOwner = :worker, b.leaseUntil = :until, "
