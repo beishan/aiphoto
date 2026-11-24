@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -124,6 +125,22 @@ fun NavHostController.viewer(source: String, id: Long) { navigate("viewer/${Uri.
 }
 
 @Composable
+private fun GalleryThumbnail(vm: AppViewModel, path: String?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val loader = vm.imageLoader
+    val request = remember(context, loader, path) {
+        ImageRequest.Builder(context).data(vm.mediaUrl(path)).build()
+    }
+    val fallback = rememberVectorPainter(Icons.Outlined.Image)
+    val surface = modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+    if (loader != null) {
+        // AsyncImage resolves the decode size from the tile's constraints.
+        AsyncImage(model = request, imageLoader = loader, contentDescription = null,
+            error = fallback, fallback = fallback, contentScale = ContentScale.Crop, modifier = surface)
+    } else Box(surface)
+}
+
+@Composable
 fun ConnectionScreens(vm: AppViewModel) {
     var address by rememberSaveable { mutableStateOf(vm.store.address) }
     var allowHttp by rememberSaveable { mutableStateOf(vm.store.allowHttp) }
@@ -160,27 +177,37 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
     var organize by remember { mutableStateOf(false) }
     var confirmTrash by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
-    val cells = remember(feed.photos, source) { feedCells(feed.photos, source) }
+    val photos = feed.photos
+    val cells = if (root) emptyList() else remember(photos, source) { feedCells(photos, source) }
+    val selectedIds = remember(selected) { selected.toHashSet() }
     LaunchedEffect(vm.failedBatchIds) {
         if (selecting && vm.failedBatchIds.isNotEmpty()) selected = selected.filter { it in vm.failedBatchIds }.toLongArray()
     }
     LaunchedEffect(source) { if (vm.feeds[source] == null) vm.loadFeed(source, true) }
     LaunchedEffect(gridState, source) {
-        snapshotFlow { (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) to gridState.layoutInfo.totalItemsCount }.collect { (last, total) ->
-            val current = vm.feeds[source] ?: return@collect
-            if (last >= total - 9 && current.photos.isNotEmpty() && !current.loading && current.more && current.error == null && !current.offline) vm.loadFeed(source)
-        }
+        snapshotFlow {
+            val current = vm.feeds[source]
+            if (current == null || current.photos.isEmpty() || current.loading || !current.more ||
+                current.error != null || current.offline) null
+            else {
+                val layout = gridState.layoutInfo
+                val last = layout.visibleItemsInfo.lastOrNull()?.index
+                val total = if (root) current.photos.size + 1 else layout.totalItemsCount
+                current.page.takeIf { last != null && last >= total - 9 }
+            }
+        }.collect { page -> if (page != null) vm.loadFeed(source) }
     }
     val scrollThreshold = with(LocalDensity.current) { 32.dp.roundToPx() }
     val rootScrolled by remember(scrollThreshold) { derivedStateOf {
         gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > scrollThreshold
     } }
-    val rootDate by remember(cells) { derivedStateOf {
-        if (!rootScrolled) null else {
-            val visible = if (gridState.canScrollForward) (gridState.firstVisibleItemIndex - 1).coerceAtLeast(0) else cells.lastIndex
-            dayLabel(cells.getOrNull(visible)?.photo?.createdAt)
+    val visibleDate by remember(photos, root) { derivedStateOf {
+        if (!root || !rootScrolled) null else {
+            val visible = if (gridState.canScrollForward) (gridState.firstVisibleItemIndex - 1).coerceAtLeast(0) else photos.lastIndex
+            photos.getOrNull(visible)?.let { it.createdAt?.take(10).orEmpty() }
         }
     } }
+    val rootDate = remember(visibleDate) { visibleDate?.let(::dayLabel) }
     var refreshing by remember { mutableStateOf(false) }
     val refreshGesture = rememberPullToRefreshState()
     LaunchedEffect(feed.loading) { if (!feed.loading) refreshing = false }
@@ -206,23 +233,44 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
             }
             LazyVerticalGrid(GridCells.Fixed(vm.columns), state = gridState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = if (root && !selecting && feed.photos.isNotEmpty()) 62.dp else 4.dp,
                 bottom = if (root && (!selecting || selected.isEmpty())) floatingNavClearance else 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                if (root && cells.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
+                if (root && photos.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
                     Text("最近入库", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
                 }
-                items(cells, key = { it.key }, span = { if (it.photo == null) GridItemSpan(maxLineSpan) else GridItemSpan(1) }) { cell ->
-                    if (cell.photo == null) {
-                        Text(cell.label.orEmpty(), Modifier.padding(horizontal = 12.dp, vertical = 14.dp), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                items(
+                    count = if (root) photos.size else cells.size,
+                    key = { if (root) photos[it].id else cells[it].key },
+                    span = if (root) null else { index ->
+                        GridItemSpan(if (cells[index].photo == null) maxLineSpan else 1)
+                    },
+                    contentType = { if (root || cells[it].photo != null) "photo" else "date" },
+                ) { index ->
+                    val photo = if (root) photos[index] else cells[index].photo
+                    if (photo == null) {
+                        Text(cells[index].label.orEmpty(), Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+                            style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                     } else {
-                        val photo = cell.photo
-                    Box(Modifier.aspectRatio(1f).semantics { contentDescription = photo.name }.clip(RoundedCornerShape(5.dp)).combinedClickable(onClick = {
-                        if (selecting) selected = if (photo.id in selected) selected.filter { it != photo.id }.toLongArray() else selected + photo.id
-                        else if (source != "trash") nav.viewer(source, photo.id)
-                        else { selecting = true; selected = longArrayOf(photo.id) }
-                    }, onLongClick = { selecting = true; selected = longArrayOf(photo.id) })) {
-                        PhotoImage(vm, photo.thumbnailUrl, Modifier.fillMaxSize())
-                        if (photo.favorite || photo.isVideo) Icon(if (photo.isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Favorite, if (photo.isVideo) "视频" else "已收藏", Modifier.align(Alignment.BottomStart).padding(6.dp).size(20.dp), tint = Color.White)
-                        if (selecting) Icon(if (photo.id in selected) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, if (photo.id in selected) "已选择" else "未选择", Modifier.align(Alignment.TopEnd).padding(6.dp).background(if (photo.id in selected) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = .3f), CircleShape).size(24.dp), tint = Color.White)
-                    }
+                        val chosen = photo.id in selectedIds
+                        Box(Modifier.aspectRatio(1f).semantics { contentDescription = photo.name }
+                            .clip(RoundedCornerShape(5.dp)).combinedClickable(onClick = {
+                                if (selecting) selected = if (chosen) selected.filter { it != photo.id }.toLongArray() else selected + photo.id
+                                else if (source != "trash") nav.viewer(source, photo.id)
+                                else { selecting = true; selected = longArrayOf(photo.id) }
+                            }, onLongClick = { selecting = true; selected = longArrayOf(photo.id) })) {
+                            if (root) GalleryThumbnail(vm, photo.thumbnailUrl, Modifier.fillMaxSize())
+                            else PhotoImage(vm, photo.thumbnailUrl, Modifier.fillMaxSize())
+                            if (photo.favorite || photo.isVideo) Icon(
+                                if (photo.isVideo) Icons.Outlined.PlayCircle else Icons.Outlined.Favorite,
+                                if (photo.isVideo) "视频" else "已收藏",
+                                Modifier.align(Alignment.BottomStart).padding(6.dp).size(20.dp), tint = Color.White,
+                            )
+                            if (selecting) Icon(
+                                if (chosen) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                                if (chosen) "已选择" else "未选择",
+                                Modifier.align(Alignment.TopEnd).padding(6.dp)
+                                    .background(if (chosen) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = .3f), CircleShape)
+                                    .size(24.dp), tint = Color.White,
+                            )
+                        }
                     }
                 }
                 if (feed.loading) item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }

@@ -41,7 +41,9 @@ import java.util.Locale
 @Composable fun PhotoViewer(vm: AppViewModel, nav: NavHostController, source: String, initialId: Long) {
     val feed = vm.feeds[source] ?: Feed()
     val photos = feed.photos
-    val initial = remember { photos.indexOfFirst { it.id == initialId }.coerceAtLeast(0) }
+    val initial = remember {
+        ((photos as? GalleryPages)?.indexOfId(initialId) ?: photos.indexOfFirst { it.id == initialId }).coerceAtLeast(0)
+    }
     val pager = rememberPagerState(initialPage = initial) { photos.size }
     var controls by rememberSaveable { mutableStateOf(true) }
     var shareOptions by remember { mutableStateOf(false) }

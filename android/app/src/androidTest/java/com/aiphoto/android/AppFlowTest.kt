@@ -147,7 +147,10 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("discover-list").performScrollToNode(hasText("小满"))
         compose.onNodeWithText("小满").performClick()
-        compose.onNodeWithText("改名").performClick()
+        val rename = hasText("改名") and isEnabled()
+        compose.waitUntil(10000) { compose.onAllNodes(rename).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(rename).performClick()
+        waitText("人物名称")
         compose.onNodeWithText("人物名称").performTextReplacement("小满同学")
         compose.onNodeWithText("保存名称").performClick()
         waitText("小满同学")

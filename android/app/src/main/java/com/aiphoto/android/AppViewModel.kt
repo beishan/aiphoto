@@ -22,6 +22,8 @@ import java.security.MessageDigest
 import java.util.UUID
 import okio.Path.Companion.toOkioPath
 
+private const val OFFLINE_FEED_LIMIT = 160
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     val store = SessionStore(application)
     private val db = Room.databaseBuilder(application, CacheDatabase::class.java, "browse-cache.db").build()
@@ -243,10 +245,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val page = client.get<PhotoPage>(path, params); next = page.content; more = !page.last
                 }
                 if (generation != epoch) return@launch
-                val combined = (if (refresh) next else base.photos + next).distinctBy { it.id }
+                val previous = feeds[source]?.photos ?: base.photos
+                val combined = if (source == "gallery") {
+                    GalleryPages.append(if (refresh) emptyList() else previous, next, if (refresh) null else base.cursor)
+                } else (if (refresh) next else previous + next).distinctBy { it.id }
                 val loaded = Feed(combined, (if (refresh) 0 else base.page) + 1, cursor, more, updated = System.currentTimeMillis())
                 feeds[source] = loaded
-                if (source != "search") cache("feed:$source", loaded.copy(photos = loaded.photos.take(160), page = 0, cursor = null, more = true))
+                // Beyond the offline preview limit the cached prefix has not changed.
+                if (source != "search" && (source != "gallery" || refresh || previous.size < OFFLINE_FEED_LIMIT)) {
+                    cache("feed:$source", loaded.copy(photos = combined.take(OFFLINE_FEED_LIMIT), page = 0, cursor = null, more = true))
+                }
             } catch (e: Exception) {
                 if (e !is CancellationException && generation == epoch) feeds[source] = (feeds[source] ?: old).copy(loading = false, offline = e is java.io.IOException, error = readable(e))
             }
@@ -334,7 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }, success = "已处理 ${ids.size} 项", done = done)
     private suspend fun persistFeeds() {
         feeds.toMap().filterKeys { it != "search" }.forEach { (source, feed) ->
-            cache("feed:$source", feed.copy(photos = feed.photos.take(160), page = 0, cursor = null, more = true))
+            cache("feed:$source", feed.copy(photos = feed.photos.take(OFFLINE_FEED_LIMIT), page = 0, cursor = null, more = true))
         }
     }
     suspend fun invalidateFeed(source: String) {
