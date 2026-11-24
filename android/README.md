@@ -54,9 +54,29 @@ cd android
 
 正式包：`./gradlew assembleRelease`。默认产出 unsigned APK；提供以下环境变量后使用用户自己的签名：`AIPHOTO_KEYSTORE`、`AIPHOTO_STORE_PASSWORD`、`AIPHOTO_KEY_ALIAS`、`AIPHOTO_KEY_PASSWORD`。不要将密钥或密码提交到仓库。未来正式版本必须沿用同一个应用签名，否则无法覆盖升级。
 
-## 安装连接
+## USB 安装到手机
 
-1. 先部署同版本后端与 Web 镜像（本次升级为 0.26.0），再安装 APK。
+在手机开发者选项开启 USB 调试，用支持数据传输的 USB 线连接电脑。解锁手机并允许 USB 调试授权弹窗。电脑上运行 `adb devices -l`，确认目标手机的状态为 `device`。
+
+从项目根目录运行以下命令。它会用 JDK 17 构建并安装调试 APK。第二行是 macOS 的 JDK 选择命令；其他系统将 `JAVA_HOME` 指向本机 JDK 17 后运行 `./gradlew :app:installDebug`。
+
+```bash
+cd android
+JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :app:installDebug
+```
+
+如果已经构建 APK，可在 `android/` 目录执行以下命令，仅安装现有文件。若同时连接了多个设备，将 `-d` 换成 `-s <手机序列号>`。
+
+```bash
+adb -d install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+- 如果 macOS 找不到 `adb`，用 `"$HOME/Library/Android/sdk/platform-tools/adb"`，或使用 `local.properties` 中 SDK 目录下的 `platform-tools/adb`。
+- 如果显示 `unauthorized`，解锁手机，允许电脑调试后重新运行 `adb devices -l`。安装完成后，手机应用列表会出现 **aiphoto**。
+
+## 连接 NAS
+
+1. 建议部署与 APK 同版本的后端和 Web 镜像。安卓采集中心要求 NAS 服务端 0.26.0 或更新版本。
 2. 输入 NAS 对外的服务根地址，例如 `https://photos.example.com/`；带代理前缀时输入 `https://nas.example.com/photos/`，不要附加 `/api`。
 3. HTTP 必须勾选明确允许；自签名或过期证书不会被静默忽略。
 4. 使用已有账户登录；不提供注册或手机上传入口。
