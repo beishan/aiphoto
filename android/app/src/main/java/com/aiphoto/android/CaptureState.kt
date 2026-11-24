@@ -2,7 +2,11 @@ package com.aiphoto.android
 
 import androidx.compose.runtime.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.util.UUID
 
@@ -51,7 +55,9 @@ internal fun dayLabel(value: String?) = runCatching {
 internal class CaptureState(private val api: ApiClient, private val admin: Boolean) {
     var jobs by mutableStateOf(emptyList<CaptureJob>())
         private set
-    var assets by mutableStateOf(emptyList<CaptureAsset>())
+    private var reviewAssets by mutableStateOf(emptyList<CaptureAsset>())
+    private val previewImports = mutableStateMapOf<Long, Job>()
+    val assets by derivedStateOf { reviewAssets.filterNot { it.id in previewImports } }
         private set
     var count by mutableLongStateOf(0)
         private set
@@ -117,7 +123,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         val generation = if (reset) ++reviewGeneration else reviewGeneration
         if (reset) {
             page = 0
-            assets = emptyList()
+            reviewAssets = emptyList()
             more = true
         }
         loading = true
@@ -125,7 +131,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         try {
             val result = reviewPage(page, jobFilter?.id)
             if (generation != reviewGeneration) return
-            assets = (assets + result.content).distinctBy { it.id }
+            reviewAssets = (reviewAssets + result.content).distinctBy { it.id }
             if (jobFilter == null) count = result.totalElements
             page++
             more = !result.last
@@ -154,7 +160,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                 val result = reviewPage(next++, jobFilter?.id, 200)
                 result.content.forEach { snapshot[it.id] = it }
             } while (!result.last)
-            selected = snapshot
+            selected = snapshot.filterKeys { it !in previewImports }
         } catch (failure: Exception) {
             record(failure)
         } finally {
@@ -177,7 +183,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
     }
 
     suspend fun perform(action: CaptureAction, targets: Collection<CaptureAsset>): Set<Long> {
-        if (busy || targets.isEmpty()) return emptySet()
+        if (busy || targets.isEmpty() || targets.any { it.id in previewImports }) return emptySet()
         busy = true
         error = null
         notice = null
@@ -185,12 +191,17 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         loading = false
         val completed = mutableSetOf<Long>()
         try {
-            for ((job, entries) in targets.groupBy { it.jobId }) {
+            jobs@ for ((job, entries) in targets.groupBy { it.jobId }) {
                 for (chunk in entries.chunked(100)) {
                     val ids = chunk.map { it.id }.sorted()
                     try {
                         if (action == CaptureAction.IMPORT) {
-                            completed += import(job, ids)
+                            val imported = withTimeoutOrNull(12_000L) { import(job, ids) }
+                            if (imported == null) {
+                                error = "暂未确认入库结果。可再次上滑查询或继续提交同一批次。"
+                                break@jobs
+                            }
+                            completed += imported
                         } else {
                             val suffix = when (action) {
                                 CaptureAction.SKIP -> "skip"
@@ -217,28 +228,34 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                     }
                 }
             }
-            assets = assets.filterNot { it.id in completed }
+            reviewAssets = reviewAssets.filterNot { it.id in completed }
             selected = selected - completed
-            notice = "已${action.title} ${completed.size} 张" +
+            if (error == null || completed.isNotEmpty()) notice = "已${action.title} ${completed.size} 张" +
                 if (completed.size != targets.size) "，${targets.size - completed.size} 张待处理" else ""
             if (completed.isNotEmpty()) {
                 // Rebase offset pagination after rows are removed to avoid skipping a page.
+                val generation = reviewGeneration
                 val desired = assets.size
-                val saved = assets
+                val saved = reviewAssets
                 try {
                     val reloaded = mutableListOf<CaptureAsset>()
                     var next = 0
                     do {
                         val result = reviewPage(next++, jobFilter?.id)
+                        if (generation != reviewGeneration) break
                         reloaded += result.content
                         more = !result.last
                         if (jobFilter == null) count = result.totalElements
                     } while (more && reloaded.size < desired)
-                    assets = reloaded.distinctBy { it.id }
-                    page = next
+                    if (generation == reviewGeneration) {
+                        reviewAssets = reloaded.distinctBy { it.id }
+                        page = next
+                    }
                 } catch (failure: Exception) {
-                    assets = saved
-                    more = false
+                    if (generation == reviewGeneration) {
+                        reviewAssets = saved
+                        more = false
+                    }
                     record(failure)
                 }
             }
@@ -248,19 +265,55 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         return completed
     }
 
+    fun queuePreviewImport(asset: CaptureAsset, scope: CoroutineScope): Boolean {
+        if (busy || asset.id in previewImports) return false
+        error = null
+        selected = selected - asset.id
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+            var succeeded = false
+            try {
+                val imported = withTimeoutOrNull(180_000L) { import(asset.jobId, listOf(asset.id)) }
+                when {
+                    imported == null -> error = "暂未确认 ${asset.title} 的入库结果，可再次上滑查询。"
+                    asset.id !in imported -> error = "${asset.title} 入库失败，已留在待整理。"
+                    else -> {
+                        succeeded = true
+                        reviewGeneration++
+                        loading = false
+                        reviewAssets = reviewAssets.filterNot { it.id == asset.id }
+                        page = 0
+                        notice = "${asset.title} 已入库"
+                    }
+                }
+            } catch (failure: Exception) {
+                record(failure)
+            } finally {
+                if (!succeeded && (jobFilter == null || jobFilter?.id == asset.jobId) &&
+                    reviewAssets.none { it.id == asset.id }) {
+                    reviewAssets = reviewAssets + asset
+                }
+                previewImports.remove(asset.id)
+            }
+        }
+        previewImports[asset.id] = job
+        job.start()
+        return true
+    }
+
+    fun cancelPreviewImports() {
+        previewImports.values.toList().forEach { it.cancel() }
+    }
+
     private suspend fun import(job: Long, ids: List<Long>): Set<Long> {
         val key = importKeys.getOrPut(ids) { UUID.randomUUID().toString() }
         val request = mapOf("ids" to ids, "idempotencyKey" to key)
-        api.write("crawl/jobs/$job/import-preview", body = request)
         val submitted = api.gson.fromJson(api.write("crawl/jobs/$job/import", body = request), CaptureImport::class.java)
         var status = submitted.status
         val endpoint = "crawl/imports/${submitted.batchId}"
-        var checks = 0
-        while (status in setOf("QUEUED", "RUNNING") && checks++ < 90) {
+        while (status == "QUEUED" || status == "RUNNING") {
             delay(1500)
             status = api.get<CaptureImportBatch>(endpoint).status
         }
-        if (status in setOf("QUEUED", "RUNNING")) error("入库仍在后台进行，重试可继续查询该批次")
         val completed = mutableSetOf<Long>()
         var next = 0
         do {

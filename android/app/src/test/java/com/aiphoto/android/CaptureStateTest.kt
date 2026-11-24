@@ -11,6 +11,26 @@ import org.junit.Test
 class CaptureStateTest {
     private val asset = """{"id":12,"jobId":3,"originalFilename":"sea.jpg","createdAt":"2026-11-24T10:00:00"}"""
 
+    @Test fun previewImportHidesPendingPhotoAndRestoresItOnFailure() = runBlocking {
+        MockWebServer().use { server ->
+            val api = ApiClient(ServerAddress(server.url("/").toString(), true), "token")
+            val state = CaptureState(api, admin = false)
+            server.enqueue(MockResponse().setBody("""{"content":[$asset],"last":true,"totalElements":1}"""))
+            server.enqueue(MockResponse().setBody("""{"batchId":41,"status":"FAILED"}"""))
+            server.enqueue(MockResponse().setBody("""{"content":[{"assetId":12,"status":"FAILED"}],"last":true}"""))
+            state.loadReview()
+            val photo = state.assets.single()
+            kotlinx.coroutines.coroutineScope {
+                assertTrue(state.queuePreviewImport(photo, this))
+                assertTrue(state.assets.isEmpty())
+                assertTrue(!state.busy)
+                assertTrue(!state.queuePreviewImport(photo, this))
+            }
+            assertEquals(photo, state.assets.single())
+            assertTrue(state.error.orEmpty().contains("入库失败"))
+        }
+    }
+
     @Test fun filtersReviewAndDeletesWithOneAuthenticatedWrite() = runBlocking {
         MockWebServer().use { server ->
             val api = ApiClient(ServerAddress(server.url("/nas/").toString(), true), "token")
@@ -43,7 +63,6 @@ class CaptureStateTest {
             val state = CaptureState(api, admin = false)
             val other = """{"id":13,"jobId":3}"""
             server.enqueue(MockResponse().setBody("""{"content":[$asset,$other],"last":true,"totalElements":2}"""))
-            server.enqueue(MockResponse().setBody("""{"requested":2,"importable":2}"""))
             server.enqueue(MockResponse().setBody("""{"batchId":41,"status":"PARTIAL"}"""))
             server.enqueue(MockResponse().setBody("""{"content":[{"assetId":12,"status":"SUCCESS"},{"assetId":13,"status":"FAILED"}],"last":true}"""))
             server.enqueue(MockResponse().setBody("""{"content":[$other],"last":true,"totalElements":1}"""))
@@ -57,11 +76,8 @@ class CaptureStateTest {
             assertEquals(13L, state.assets.single().id)
             assertEquals("已入库 1 张，1 张待处理", state.notice)
             server.takeRequest()
-            val preview = server.takeRequest()
             val submitted = server.takeRequest()
-            assertEquals("/api/crawl/jobs/3/import-preview", preview.path)
             assertEquals("/api/crawl/jobs/3/import", submitted.path)
-            assertEquals(preview.body.readUtf8(), submitted.body.readUtf8())
         }
     }
 }

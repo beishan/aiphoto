@@ -195,7 +195,11 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         scope.launch {
             val old = state.assets
             val originalPreview = previewId
-            val completed = state.perform(operation, targets)
+            val completed = if (operation == CaptureAction.IMPORT && originalPreview != null && targets.size == 1) {
+                if (vm.queueCapturePreviewImport(targets.single())) setOf(originalPreview) else emptySet()
+            } else {
+                state.perform(operation, targets)
+            }
             if (originalPreview != null && originalPreview in completed) {
                 val currentIndex = old.indexOfFirst { it.id == originalPreview }
                 val remaining = state.assets.mapTo(hashSetOf()) { it.id }
