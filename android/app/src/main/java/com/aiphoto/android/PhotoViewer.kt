@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -87,7 +88,7 @@ import java.util.Locale
             ViewerAction("加入相册", Icons.Outlined.CreateNewFolder, !vm.busy && !feed.offline) { vm.loadCatalog(); albumPicker = true }
             ViewerAction("下载", Icons.Outlined.Download, !feed.offline) { guard("") { pending = photo; export.launch(photo.name) } }
             ViewerAction("分享", Icons.Outlined.Share, !feed.offline) { shareOptions = true }
-            if (vm.supports("label-edit")) ViewerAction("标签", Icons.Outlined.Label, !feed.offline && !vm.busy) { vm.loadCatalog(); labels = true }
+            if (vm.supports("label-edit")) ViewerAction("标签", Icons.AutoMirrored.Outlined.Label, !feed.offline && !vm.busy) { vm.loadCatalog(); labels = true }
             if (vm.supports("family-timeline")) ViewerAction(if (photo.inTimeline) "移出精选" else "加入精选", Icons.Outlined.History, !vm.busy && !feed.offline) {
                 vm.updatePhoto(photo.id, mapOf("inTimeline" to !photo.inTimeline))
             }

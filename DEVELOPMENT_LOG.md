@@ -1,3 +1,8 @@
+## 0.26.1 - 2026-11-24
+
+- 安卓 Kotlin JVM 目标迁移至 `compilerOptions`，继续使用 JVM 17。标签管理与看图的标签图标改用支持 RTL 布局的 AutoMirrored API。
+- 验证：`assembleDebug testDebugUnitTest lintDebug` 全部通过，日志中的三条弃用警告已清除。
+
 ## 0.26.0 - 2026-11-24
 
 - 按交互原型更新安卓主导航、图标入口、图库悬浮日期、视频点击播放和发现页。发现页支持横滑人物、收藏和点赞，全部人物每行四列，家庭记忆使用封面入口。

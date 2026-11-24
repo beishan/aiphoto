@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,7 +33,7 @@ import kotlinx.coroutines.CancellationException
         LazyColumn {
             items(labels.filter { it.name.contains(query, ignoreCase = true) }, key = { it.id }) { label ->
                 ListItem(headlineContent = { Text(label.name) }, supportingContent = { Text("${label.photoCount} 张 · ${labelOrigin(label, category)}") },
-                    leadingContent = { Icon(if (category) Icons.Outlined.Category else Icons.Outlined.Label, null) },
+                    leadingContent = { Icon(if (category) Icons.Outlined.Category else Icons.AutoMirrored.Outlined.Label, null) },
                     trailingContent = { Icon(Icons.Outlined.ChevronRight, null) }, modifier = Modifier.clickable { nav.navigate("label/${if (category) "category" else "tag"}/${label.id}") })
             }
             if (labels.isEmpty() && !vm.busy) item { EmptyState("暂无词条", "点击右上角创建") }
