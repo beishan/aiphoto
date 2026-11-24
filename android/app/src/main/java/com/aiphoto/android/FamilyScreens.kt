@@ -87,14 +87,13 @@ import java.time.ZoneOffset
     var mergeTarget by remember { mutableStateOf<Person?>(null) }
     val enabled = person != null && !vm.busy && !vm.catalogOffline && vm.supports("people-edit")
     PhotoFeedScreen(vm, nav, "person:$id", person?.name ?: "人物", header = {
-        BackBar(person?.name ?: "未命名人物", nav) { IconButton({ vm.loadCatalog(); vm.loadFeed("person:$id", true) }) { Icon(Icons.Outlined.Refresh, "刷新人物") } }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            val cover = if (person?.coverFaceId != null && vm.supports("people-edit")) vm.api?.address?.api("mobile/faces/${person.coverFaceId}/preview")?.toString() else person?.coverPhotoUrl
-            PhotoImage(vm, cover, Modifier.size(64.dp).clip(CircleShape))
-            Column(Modifier.padding(start = 16.dp).weight(1f)) {
-                Text(person?.name ?: "未命名人物", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("${person?.photoCount ?: 0} 张照片", style = MaterialTheme.typography.bodySmall)
-            }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FloatingBack({ nav.popBackStack() })
+            Text(person?.name ?: "未命名人物", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+            Text("共 ${person?.photoCount ?: 0} 张", style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.weight(1f))
+            IconButton({ vm.loadCatalog(); vm.loadFeed("person:$id", true) }) { Icon(Icons.Outlined.Refresh, "刷新人物") }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton({ name = person?.name.orEmpty(); rename = true }, enabled = enabled) { Text("改名") }

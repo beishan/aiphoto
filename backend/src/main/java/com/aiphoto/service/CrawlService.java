@@ -614,11 +614,18 @@ public class CrawlService {
     public Page<CrawlAsset> listReviewAssets(
             Long ownerId, Long sourcePageId, String status, String importStatus,
             boolean exactDuplicates, boolean similarOnly, Pageable pageable) {
+        return listReviewAssets(ownerId, sourcePageId, null, status, importStatus, exactDuplicates, similarOnly, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CrawlAsset> listReviewAssets(
+            Long ownerId, Long sourcePageId, Long jobId, String status, String importStatus,
+            boolean exactDuplicates, boolean similarOnly, Pageable pageable) {
         if (exactDuplicates && similarOnly) {
             throw new IllegalArgumentException("精确重复和相似图片筛选不能同时启用");
         }
         Page<CrawlAsset> result = assetRepository.findReviewAssets(
-                ownerId, sourcePageId, status == null || status.isBlank() ? "ALL" : status,
+                ownerId, sourcePageId, jobId, status == null || status.isBlank() ? "ALL" : status,
                 importStatus == null || importStatus.isBlank() ? "ALL" : importStatus,
                 exactDuplicates, similarOnly, pageable);
         result.getContent().stream().collect(Collectors.groupingBy(CrawlAsset::getJobId))

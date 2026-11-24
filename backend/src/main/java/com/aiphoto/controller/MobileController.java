@@ -28,7 +28,7 @@ public class MobileController {
     public Map<String, Object> info() throws java.io.IOException {
         return Map.of("product", "aiphoto", "version", version, "apiVersion", 1, "instanceId", storage.getInstanceId(),
                 "libraryMode", "SHARED", "capabilities", java.util.List.of(
-                        "album-pagination", "authenticated-media", "preview", "shared-library-edit", "family-timeline", "baby-timeline-page", "people-edit", "label-edit"));
+                        "album-pagination", "authenticated-media", "preview", "shared-library-edit", "family-timeline", "baby-timeline-page", "people-edit", "label-edit", "mobile-capture"));
     }
 
     @GetMapping(value = "/faces/{id}/preview", produces = MediaType.IMAGE_JPEG_VALUE)

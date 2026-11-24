@@ -264,9 +264,10 @@ public class CrawlController {
             @RequestParam(defaultValue = "false") boolean exactDuplicates,
             @RequestParam(defaultValue = "false") boolean similarOnly,
             @RequestParam(required = false) Long sourcePageId,
+            @RequestParam(required = false) Long jobId,
             @RequestParam(defaultValue = "NOT_IMPORTED") String importStatus,
             Authentication authentication) {
-        return crawlService.listReviewAssets(userId(authentication), sourcePageId,
+        return crawlService.listReviewAssets(userId(authentication), sourcePageId, jobId,
                 status == null ? null : status.name(), importStatus, exactDuplicates, similarOnly,
                 PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200))));
     }
@@ -319,6 +320,15 @@ public class CrawlController {
             Authentication authentication) {
         return Map.of("success", crawlService.setAssetDeleted(
                 ids, jobId, userId(authentication), true));
+    }
+
+    @PostMapping("/jobs/{jobId}/assets/delete-and-skip")
+    public Map<String, Integer> deleteAndSkip(
+            @PathVariable Long jobId,
+            @RequestBody SkipAssetsRequest request,
+            Authentication authentication) {
+        return Map.of("success", imageSkipService.deleteAndSkip(
+                jobId, request.ids(), userId(authentication), request.reason()));
     }
 
     @PostMapping("/jobs/{jobId}/assets/delete-downloaded")

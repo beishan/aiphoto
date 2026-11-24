@@ -1,7 +1,9 @@
 package com.aiphoto.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.aiphoto.entity.CrawlAsset;
@@ -42,5 +44,14 @@ class CrawlImageSkipServiceTest {
         verify(skipRepository).save(skip.capture());
         assertThat(skip.getValue().getReason()).isEqualTo("重复图片");
         assertThat(skip.getValue().getSourcePageUrl()).isEqualTo("https://example.com/post/1");
+    }
+    @Test
+    void rejectsStaleDeleteAndSkipBeforeCreatingRules() {
+        when(crawlService.setAssetDeleted(List.of(3L, 4L), 7L, 9L, true)).thenReturn(1);
+        var service = new CrawlImageSkipService(crawlService, assetRepository, skipRepository);
+
+        assertThatThrownBy(() -> service.deleteAndSkip(7L, List.of(4L, 3L, 4L), 9L, null))
+                .isInstanceOf(IllegalStateException.class);
+        verifyNoInteractions(skipRepository);
     }
 }

@@ -107,3 +107,13 @@
 不新增上传或服务端分享接口。手机复用认证的原图 GET，在私有缓存中由 [Android ImageDecoder](https://developer.android.com/reference/android/graphics/ImageDecoder) 解码（方向、尺寸和 sRGB）后使用 [Bitmap.compress](https://developer.android.com/reference/android/graphics/Bitmap) 生成新的 JPEG。只将新文件通过 FileProvider 精确授权 URI 交给用户选择的应用，不传 NAS 地址、令牌或原始文件名。
 
 副本最长边 2048、JPEG 质量 92、透明部分白底；新文件不拷贝源 EXIF/XMP，旋转体现在像素中。JPEG 的新尺寸/编码信息仍存在，不承诺隐藏画面内容中的身份或位置。原文件字节不修改；失败或取消时清理不完整副本，不能回退到原件分享。暂不转换视频、动图和 RAW。
+
+
+## 0.26.0 安卓采集中心
+
+- `mobile/server-info` 返回 `mobile-capture` 能力时开启原生采集中心。
+- `GET /api/crawl/jobs` 提供当前账户任务及图片进度。任务控制复用 `POST /api/crawl/jobs/{jobId}/pause` 和 `/resume`。管理员概览可读取 `GET /api/settings/crawler/disk-guard`。
+- `GET /api/crawl/review/assets?status=DOWNLOADED&importStatus=NOT_IMPORTED&page=0&size=60` 提供待整理照片。可附加 `jobId` 精确筛选当前账户的采集任务；默认排序为资产 ID 倒序。详情和缩略图从 `/api/crawl/assets/{id}/content` 和 `/thumbnail` 获取，均使用现有 Bearer。
+- 「删除」使用 `POST /api/crawl/jobs/{jobId}/assets/delete`（请求体为 ID 数组）。「忽略」使用 `/assets/skip`，「删除并忽略」使用 `/assets/delete-and-skip`，请求体为 `{"ids":[12]}`，返回 `{"success":1}`。组合操作在同一服务端事务中更新资产和账户忽略规则。
+- 「入库」复用 `/import-preview`、`/import`、`/api/crawl/imports/{batchId}` 和 `/items`，按任务发送资产 ID，并为请求携带幂等键。客户端根据批次中的逐项结果保留失败照片。
+- 发现页的点赞列表复用 `GET /api/photos/liked`。

@@ -62,6 +62,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var catalogJob: Job? = null
     private var mutationJob: Job? = null
     private var authJob: Job? = null
+    internal var capture: CaptureState? = null
+        private set
     private var cacheScope: String = ""
     private val preferences get() = getApplication<Application>().getSharedPreferences("preferences_$cacheScope", Context.MODE_PRIVATE)
     init { session?.let { install(it); refreshSession() } }
@@ -72,6 +74,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         api = ApiClient(ServerAddress(store.address, store.allowHttp), login.token) {
             viewModelScope.launch { if (epoch == generation && session != null) logout("登录已失效，请重新登录") }
         }
+        capture = CaptureState(checkNotNull(api), login.user.role == "ADMIN")
         theme = preferences.getString("theme", "system")!!
         columns = preferences.getInt("columns", 3).coerceIn(3, 5)
         cellularOriginal = preferences.getBoolean("cellular", false)
@@ -145,7 +148,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         api?.http?.dispatcher?.cancelAll(); api?.http?.connectionPool?.evictAll()
         imageLoader?.shutdown(); imageLoader = null
         val oldScope = cacheScope
-        session = null; api = null; store.clear(); feeds.clear(); albums = emptyList(); people = emptyList(); tags = emptyList(); categories = emptyList(); transfers = emptyList(); busy = false; error = message
+        session = null; api = null; capture = null; store.clear(); feeds.clear(); albums = emptyList(); people = emptyList(); tags = emptyList(); categories = emptyList(); transfers = emptyList(); busy = false; error = message
         viewModelScope.launch(Dispatchers.IO) {
             // Exported SAF files are user-owned. Only private browser/temporary files are removed.
             db.entries().clearPrefix("$oldScope:%")
@@ -221,6 +224,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val pageNumber = if (refresh) 0 else base.page
                     val path = when {
                         source == "favorites" -> "photos/favorites"
+                        source == "likes" -> "photos/liked"
                         source == "trash" -> "photos/trash"
                         source == "search" -> "search"
                         source.startsWith("timeline:") -> if (source == "timeline:0:0") "timeline/undated" else "timeline/photos"

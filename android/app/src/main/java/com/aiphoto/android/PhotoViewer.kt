@@ -158,7 +158,7 @@ import java.util.Locale
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer); player.release(); (context as? android.app.Activity)?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
     }
-    LaunchedEffect(active) { if (!active) player.pause() }
+    LaunchedEffect(active, player) { if (active) player.play() else player.pause() }
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { PlayerView(it).apply { this.player = player;
             setFullscreenButtonClickListener { full ->

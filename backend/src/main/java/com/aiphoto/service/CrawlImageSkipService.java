@@ -47,6 +47,18 @@ public class CrawlImageSkipService {
     }
 
     @Transactional
+    public int deleteAndSkip(Long jobId, List<Long> ids, Long ownerId, String reason) {
+        List<Long> distinctIds = ids == null ? List.of() : ids.stream()
+                .filter(java.util.Objects::nonNull).distinct().sorted().toList();
+        if (distinctIds.isEmpty()) return 0;
+        int deleted = crawlService.setAssetDeleted(distinctIds, jobId, ownerId, true);
+        if (deleted != distinctIds.size()) {
+            throw new IllegalStateException("部分图片已被处理，请刷新待整理区");
+        }
+        return addFromAssets(jobId, distinctIds, ownerId, reason);
+    }
+
+    @Transactional
     public int addFromAssets(Long jobId, List<Long> ids, Long ownerId, String reason) {
         crawlService.getJob(jobId, ownerId);
         List<Long> safeIds = ids == null ? List.of() : ids.stream()

@@ -20,6 +20,7 @@ class AppFlowTest {
     private var tagAdded = false
     private var categoryAdded = false
     private var photoTagged = false
+    private val captureDeleted = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val image = java.io.ByteArrayOutputStream().use { stream ->
         val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(40, 99, 78))
@@ -32,9 +33,25 @@ class AppFlowTest {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 requests.add(request)
                 val path = request.requestUrl!!.encodedPath.removePrefix("/nas/api/")
-                if (path == "mobile/server-info") return json("""{"product":"aiphoto","version":"0.24.0","apiVersion":1,"instanceId":"test-nas-instance","capabilities":["album-pagination","authenticated-media","family-timeline","baby-timeline-page","people-edit","label-edit"]}""")
+                if (path == "mobile/server-info") return json("""{"product":"aiphoto","version":"0.26.0","apiVersion":1,"instanceId":"test-nas-instance","capabilities":["album-pagination","authenticated-media","family-timeline","baby-timeline-page","people-edit","label-edit","mobile-capture"]}""")
                 if (path == "auth/login") return json("""{"token":"test-session","user":{"id":1,"username":"tester","role":"ADMIN"}}""")
                 if (request.getHeader("Authorization") != "Bearer test-session") return MockResponse().setResponseCode(401)
+                if (path == "crawl/jobs") return json("""[{"id":3,"name":"采集测试任务","status":"COMPLETED","phase":"REVIEW","imagesDownloaded":2}]""")
+                if (path == "crawl/review/assets") {
+                    val fixtures = mapOf(
+                        12L to """{"id":12,"jobId":3,"originalFilename":"采集海岸.jpg"}""",
+                        13L to """{"id":13,"jobId":3,"originalFilename":"采集山谷.jpg"}""",
+                    ).filterKeys { it !in captureDeleted }
+                    return json("""{"content":[${fixtures.values.joinToString(",")}],"last":true,"totalElements":${fixtures.size}}""")
+                }
+                if (path == "crawl/jobs/3/assets/delete-and-skip") {
+                    val ids = com.google.gson.JsonParser.parseString(request.body.clone().readUtf8())
+                        .asJsonObject.getAsJsonArray("ids").map { it.asLong }
+                    captureDeleted.addAll(ids)
+                    return json("""{"success":${ids.size}}""")
+                }
+                if (path == "settings/crawler/disk-guard") return json("""{"blocked":false}""")
+                if (path.startsWith("crawl/assets/")) return MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(image))
                 if (path == "photos/browse") return json("""{"content":[${photo()}],"nextCursor":1,"hasMore":false}""")
                 if (path == "albums" && request.method == "POST") {
                     babyAdded = true
@@ -68,7 +85,7 @@ class AppFlowTest {
                 }
                 if (path == "users/me") return json("""{"id":1,"username":"tester","role":"ADMIN"}""")
                 if (path.startsWith("mobile/photos") || path.startsWith("mobile/faces") || request.requestUrl!!.encodedPath.contains("/media/")) return MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(image))
-                if (path == "search" || path.contains("/photos/page") || path == "photos/favorites" || path == "people/1/photos" || path == "timeline/photos" || path == "timeline/undated" || path == "categories/2/photos") return json("""{"content":[${photo()}],"last":true}""")
+                if (path == "search" || path.contains("/photos/page") || path == "photos/favorites" || path == "photos/liked" || path == "people/1/photos" || path == "timeline/photos" || path == "timeline/undated" || path == "categories/2/photos") return json("""{"content":[${photo()}],"last":true}""")
                 return MockResponse().setResponseCode(404)
             }
         }
@@ -123,12 +140,12 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("发现", useUnmergedTree = true).performClick()
-        waitText("精选时间线")
+        compose.onNodeWithTag("discover-list").performScrollToNode(hasText("精选时间线"))
         compose.onNodeWithText("精选时间线").performClick()
         waitText("11月")
         compose.waitUntil(10000) { requests.any { it.requestUrl?.encodedPath == "/nas/api/timeline/photos" } }
         compose.onNodeWithContentDescription("返回").performClick()
-        waitText("小满")
+        compose.onNodeWithTag("discover-list").performScrollToNode(hasText("小满"))
         compose.onNodeWithText("小满").performClick()
         compose.onNodeWithText("改名").performClick()
         compose.onNodeWithText("人物名称").performTextReplacement("小满同学")
@@ -143,7 +160,7 @@ class AppFlowTest {
         compose.waitUntil(10000) { requests.any { it.requestUrl?.encodedPath == "/nas/api/people/1/cover-face" && it.method == "PUT" } }
         compose.waitUntil(10000) { compose.onAllNodesWithText("选择人物封面").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithContentDescription("返回").performClick()
-        waitText("标签管理")
+        compose.onNodeWithTag("discover-list").performScrollToNode(hasText("标签管理"))
         compose.onNodeWithText("标签管理").performClick()
         waitText("识别风景")
         compose.onNodeWithText("识别风景").performClick()
@@ -202,6 +219,24 @@ class AppFlowTest {
         val permissions = compose.activity.packageManager.getPackageInfo(compose.activity.packageName, android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
         Assert.assertFalse(permissions.any { it.contains("READ_MEDIA") || it.contains("READ_EXTERNAL_STORAGE") || it.contains("MANAGE_EXTERNAL_STORAGE") })
         Assert.assertTrue(requests.filter { it.requestUrl?.encodedPath?.contains("/media/") == true }.all { it.getHeader("Authorization") == "Bearer test-session" })
+        repeat(3) { compose.onNodeWithContentDescription("返回").performClick() }
+        compose.onNodeWithText("采集").performClick()
+        waitText("去整理 ›")
+        compose.onNodeWithText("去整理 ›").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
+        waitText("左右滑动切换照片")
+        compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
+        waitText("1 / 1")
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithText("选择").performClick()
+        compose.onNodeWithContentDescription("全选").performClick()
+        waitText("已选 1 张")
+        compose.onNodeWithText("删除并忽略").performClick()
+        waitText("待整理区没有照片")
+        compose.onNodeWithText("删除 1 张照片？").assertDoesNotExist()
+        Assert.assertEquals(2, requests.count { it.requestUrl?.encodedPath == "/nas/api/crawl/jobs/3/assets/delete-and-skip" &&
+            it.getHeader("Authorization") == "Bearer test-session" })
     }
     @After fun cleanup() { server.shutdown() }
 }

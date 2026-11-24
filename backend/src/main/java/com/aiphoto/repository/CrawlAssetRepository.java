@@ -50,7 +50,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             @Param("status") CrawlAsset.Status status, Pageable pageable);
     @Query(value = "SELECT a.* FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
             + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND NOT EXISTS (SELECT 1 FROM crawl_image_skips sk WHERE sk.owner_id = j.owner_id AND sk.url_hash = a.url_hash AND sk.normalized_url = a.normalized_url) "
-            + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+            + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) AND (:jobId IS NULL OR a.job_id = :jobId) "
             + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
             + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
             + "OR (:importStatus = 'NOT_IMPORTED' AND a.imported_photo_id IS NULL)) "
@@ -61,7 +61,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             + "ORDER BY a.id DESC",
             countQuery = "SELECT COUNT(*) FROM crawl_assets a JOIN crawl_jobs j ON j.id = a.job_id "
                     + "WHERE j.owner_id = :ownerId AND j.phase = 'REVIEW' AND NOT EXISTS (SELECT 1 FROM crawl_image_skips sk WHERE sk.owner_id = j.owner_id AND sk.url_hash = a.url_hash AND sk.normalized_url = a.normalized_url) "
-                    + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) "
+                    + "AND a.status <> 'FAILED' AND (:pageId IS NULL OR j.source_page_id = :pageId) AND (:jobId IS NULL OR a.job_id = :jobId) "
                     + "AND ((:status = 'ALL' AND a.status <> 'DELETED') OR a.status = :status) "
                     + "AND (:importStatus = 'ALL' OR (:importStatus = 'IMPORTED' AND a.imported_photo_id IS NOT NULL) "
                     + "OR (:importStatus = 'NOT_IMPORTED' AND a.imported_photo_id IS NULL)) "
@@ -72,7 +72,7 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             nativeQuery = true)
     Page<CrawlAsset> findReviewAssets(
             @Param("ownerId") Long ownerId, @Param("pageId") Long pageId,
-            @Param("status") String status, @Param("importStatus") String importStatus,
+            @Param("jobId") Long jobId, @Param("status") String status, @Param("importStatus") String importStatus,
             @Param("exactDuplicates") boolean exactDuplicates,
             @Param("similarOnly") boolean similarOnly, Pageable pageable);
 

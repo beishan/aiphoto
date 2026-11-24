@@ -33,8 +33,17 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val dark = when (model.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
-            val palette = if (dark) darkColorScheme(primary = Color(0xFF98D5B8), background = Color(0xFF121713), surface = Color(0xFF171D19), secondaryContainer = Color(0xFF284838))
-                else lightColorScheme(primary = Color(0xFF28634E), background = Color(0xFFFAFAF7), surface = Color(0xFFFAFAF7), secondaryContainer = Color(0xFFE1EDE5), onSecondaryContainer = Color(0xFF204A37))
+            val palette = if (dark) darkColorScheme(
+                primary = Color(0xFFBDC7FF), primaryContainer = Color(0xFF303B63),
+                onPrimaryContainer = Color(0xFFE6EAFF), background = Color(0xFF151823),
+                surface = Color(0xFF222637), secondaryContainer = Color(0xFF303B63),
+                onSecondaryContainer = Color(0xFFE6EAFF),
+            ) else lightColorScheme(
+                primary = Color(0xFF3448A4), primaryContainer = Color(0xFFE6EAFF),
+                onPrimaryContainer = Color(0xFF253780), background = Color(0xFFF7F8FC),
+                surface = Color.White, secondaryContainer = Color(0xFFE6EAFF),
+                onSecondaryContainer = Color(0xFF253780),
+            )
             MaterialTheme(colorScheme = palette) { Surface { AiphotoApp(model) } }
         }
     }

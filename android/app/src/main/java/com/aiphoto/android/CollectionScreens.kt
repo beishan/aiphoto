@@ -4,6 +4,7 @@ package com.aiphoto.android
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.*
@@ -16,7 +17,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
@@ -30,11 +35,10 @@ import androidx.activity.result.contract.ActivityResultContracts
             IconButton({ vm.loadCatalog() }) { Icon(Icons.Outlined.Refresh, "刷新相册") }
             IconButton({ nav.navigate("album-edit/0") }) { Icon(Icons.Outlined.Add, "创建相册") }
         })
-        Text("好好收藏每一段时光", Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (vm.catalogOffline) Text("离线缓存 · 相册只读", Modifier.padding(16.dp))
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (vm.albums.isEmpty() && !vm.busy) EmptyState("还没有相册", "点击右上角创建普通相册")
-        LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = floatingNavClearance), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             items(vm.albums, key = { it.id }) { album -> Column(Modifier.clickable { nav.navigate("album/${album.id}") }) {
                 PhotoImage(vm, album.coverPhotoUrl, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)))
                 Text(album.name, Modifier.padding(top = 8.dp), fontWeight = FontWeight.SemiBold)
@@ -110,34 +114,117 @@ import androidx.activity.result.contract.ActivityResultContracts
     }
 }
 @Composable fun DiscoverScreen(vm: AppViewModel, nav: NavHostController) {
-    LaunchedEffect(Unit) { vm.loadCatalog() }
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { TopAppBar(title = { Text("发现", fontWeight = FontWeight.Bold) }, actions = { IconButton({ vm.loadCatalog() }) { Icon(Icons.Outlined.Refresh, "刷新") } }) }
-        item { Text("那些人，那些时光", Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (vm.catalogOffline) item { Text("离线缓存", Modifier.padding(20.dp)) }
-        if (vm.supports("family-timeline")) item { MenuRow("精选时间线", Icons.Outlined.History, "你选入的照片，按年月珍藏") { nav.navigate("timeline") } }
-        if (vm.supports("baby-timeline-page")) item { MenuRow("宝宝相册", Icons.Outlined.ChildCare, "在相册页创建宝宝相册并设置出生日期") { nav.navigate("albums") } }
+    LaunchedEffect(Unit) {
+        vm.loadCatalog()
+        vm.loadFeed("favorites", true)
+        vm.loadFeed("likes", true)
+        if (vm.supports("family-timeline")) vm.loadMonths()
+    }
+    val timelineCover = vm.months.firstOrNull()?.source?.let { vm.feeds[it]?.photos?.firstOrNull()?.thumbnailUrl }
+    LaunchedEffect(vm.months.firstOrNull()?.source) {
+        vm.months.firstOrNull()?.source?.let { if (vm.feeds[it] == null) vm.loadFeed(it) }
+    }
+    LazyColumn(Modifier.testTag("discover-list"), contentPadding = PaddingValues(bottom = floatingNavClearance), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { TopAppBar(title = { Text("发现", fontWeight = FontWeight.Bold) }, actions = {
+            IconButton({ vm.loadCatalog(); vm.loadFeed("favorites", true); vm.loadFeed("likes", true) }) { Icon(Icons.Outlined.Refresh, "刷新") }
+        }) }
+        if (vm.catalogOffline) item { Text("离线缓存", Modifier.padding(horizontal = 16.dp)) }
+        item {
+            DiscoverHeading("人物", "查看全部人物") { nav.navigate("people") }
+            if (vm.people.isEmpty()) Text("尚未识别到人物", Modifier.padding(horizontal = 16.dp))
+            else LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(vm.people.take(8), key = { it.id }) { person ->
+                    PersonCover(vm, person, Modifier.width(142.dp)) { nav.navigate("person/${person.id}") }
+                }
+            }
+        }
+        item { DiscoveryPhotoStrip(vm, nav, "收藏", "favorites") }
+        item { DiscoveryPhotoStrip(vm, nav, "点赞", "likes") }
+        val hasTimeline = vm.supports("family-timeline")
+        val hasBaby = vm.supports("baby-timeline-page")
+        if (hasTimeline || hasBaby) item {
+            val baby = vm.albums.firstOrNull { it.type == "BABY" }
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("家庭记忆", style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (hasTimeline) DiscoveryCover(vm, timelineCover, "精选时间线", Modifier.weight(1f), 1.55f) { nav.navigate("timeline") }
+                    if (hasBaby) DiscoveryCover(vm, baby?.coverPhotoUrl, "宝宝相册", Modifier.weight(1f), 1.55f) {
+                        if (baby != null) nav.navigate("album/${baby.id}") else nav.navigate("albums")
+                    }
+                }
+            }
+        }
         if (vm.supports("label-edit")) item {
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton({ nav.navigate("labels/tag") }) { Text("标签管理") }
                 OutlinedButton({ nav.navigate("labels/category") }) { Text("分类管理") }
             }
         }
-        item { Text("人物", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge) }
-        if (vm.people.isEmpty()) item { Text("尚未识别到人物，请在 NAS 完成人脸索引。", Modifier.padding(horizontal = 20.dp)) }
-        items(vm.people.chunked(3)) { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            row.forEach { person -> Column(Modifier.weight(1f).clickable { nav.navigate("person/${person.id}") }, horizontalAlignment = Alignment.CenterHorizontally) {
-                PhotoImage(vm, person.coverPhotoUrl, Modifier.size(82.dp).clip(CircleShape))
-                Text(person.name ?: "未命名", Modifier.padding(top = 6.dp)); Text("${person.photoCount} 张", style = MaterialTheme.typography.labelSmall)
-            } }
-            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-        } }
-        item { Text("探索照片", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge) }
-        items(vm.categories) { category -> ListItem(headlineContent = { Text(category.name) }, supportingContent = { Text("${category.photoCount} 张照片") }, leadingContent = { Icon(Icons.Outlined.Category, null) }, modifier = Modifier.clickable { nav.feed("category:${category.id}", category.name) }) }
-        item { Text("标签", Modifier.padding(20.dp), style = MaterialTheme.typography.titleLarge) }
-        item { FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { vm.tags.forEach { tag -> AssistChip({ nav.feed("tag:${tag.id}", tag.name) }, { Text(tag.name) }) } } }
+        if (vm.categories.isNotEmpty()) item { Text("探索照片", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium) }
+        items(vm.categories) { category ->
+            ListItem(headlineContent = { Text(category.name) }, supportingContent = { Text("${category.photoCount} 张照片") },
+                leadingContent = { Icon(Icons.Outlined.Category, null) },
+                modifier = Modifier.clickable { nav.feed("category:${category.id}", category.name) })
+        }
+        if (vm.tags.isNotEmpty()) item {
+            Text("标签", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.titleMedium)
+            FlowRow(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                vm.tags.forEach { tag -> AssistChip({ nav.feed("tag:${tag.id}", tag.name) }, { Text(tag.name) }) }
+            }
+        }
     }
 }
+
+@Composable
+private fun DiscoverHeading(title: String, label: String, open: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        IconButton(open) { Icon(Icons.Outlined.ChevronRight, label, tint = MaterialTheme.colorScheme.primary) }
+    }
+}
+
+@Composable
+private fun DiscoveryPhotoStrip(vm: AppViewModel, nav: NavHostController, title: String, source: String) {
+    val feed = vm.feeds[source] ?: Feed()
+    val open = { nav.feed(source, title) }
+    DiscoverHeading(title, "查看全部$title", open)
+    if (feed.photos.isEmpty()) {
+        Text(if (feed.loading) "加载中…" else if (feed.error != null) "暂时无法加载" else "暂无${title}照片",
+            Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(feed.photos.take(10), key = { it.id }) { photo ->
+            PhotoImage(vm, photo.thumbnailUrl, Modifier.size(100.dp).clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "打开${title}列表", onClick = open))
+        }
+    }
+}
+
+@Composable private fun PersonCover(vm: AppViewModel, person: Person, modifier: Modifier = Modifier, open: () -> Unit) =
+    DiscoveryCover(vm, person.coverPhotoUrl, person.name ?: "未命名", modifier, 1f, open)
+
+@Composable
+private fun DiscoveryCover(vm: AppViewModel, path: String?, title: String, modifier: Modifier, ratio: Float, open: () -> Unit) {
+    Box(modifier.aspectRatio(ratio).clip(RoundedCornerShape(12.dp)).clickable(onClick = open)) {
+        PhotoImage(vm, path, Modifier.fillMaxSize())
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(40.dp)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .58f)))))
+        Text(title, Modifier.align(Alignment.BottomStart).padding(horizontal = 7.dp, vertical = 6.dp),
+            color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
+    LaunchedEffect(Unit) { vm.loadCatalog() }
+    Column(Modifier.fillMaxSize()) {
+        BackBar("全部人物", nav)
+        if (vm.people.isEmpty()) EmptyState("暂无人物", retry = { vm.loadCatalog() })
+        else LazyVerticalGrid(GridCells.Fixed(4), contentPadding = PaddingValues(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(vm.people, key = { it.id }) { person -> PersonCover(vm, person) { nav.navigate("person/${person.id}") } }
+        }
+    }
+}
+
 @Composable fun SearchScreen(vm: AppViewModel, nav: NavHostController) {
     var query by rememberSaveable { mutableStateOf(vm.filter.query) }
     var semantic by rememberSaveable { mutableStateOf(vm.filter.semantic) }
@@ -181,7 +268,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 @Composable fun MineScreen(vm: AppViewModel, nav: NavHostController) {
     var change by remember { mutableStateOf(false) }
     LazyColumn {
-        item { TopAppBar(title = { Text("我的", fontWeight = FontWeight.Bold) }) }
+        item { BackBar("我的", nav) }
         item { ListItem(headlineContent = { Text(vm.session?.user?.nickname ?: vm.session?.user?.username.orEmpty(), style = MaterialTheme.typography.headlineSmall) }, supportingContent = { Text("${android.net.Uri.parse(vm.store.address).host} · 家庭共享图库") }, leadingContent = { Icon(Icons.Outlined.AccountCircle, null, Modifier.size(56.dp)) }) }
         item { HorizontalDivider(Modifier.padding(16.dp)) }
         item { MenuRow("收藏", Icons.Outlined.FavoriteBorder) { nav.feed("favorites", "收藏") } }
