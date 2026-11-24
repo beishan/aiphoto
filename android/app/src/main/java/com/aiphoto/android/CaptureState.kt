@@ -58,7 +58,6 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
     private var reviewAssets by mutableStateOf(emptyList<CaptureAsset>())
     private val previewImports = mutableStateMapOf<Long, Job>()
     val assets by derivedStateOf { reviewAssets.filterNot { it.id in previewImports } }
-        private set
     var count by mutableLongStateOf(0)
         private set
     var jobFilter by mutableStateOf<CaptureJob?>(null)
