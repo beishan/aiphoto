@@ -113,10 +113,36 @@ internal fun ScrollingTitle(title: String, date: String?, modifier: Modifier = M
 @Composable
 internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
     val state = vm.capture ?: return
+    var refreshAttempt by remember { mutableIntStateOf(0) }
+    var checking by remember { mutableStateOf(true) }
+    var refreshError by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshAttempt) {
+        checking = true
+        refreshError = false
+        try {
+            vm.refreshCapabilities()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            refreshError = true
+        } finally {
+            checking = false
+        }
+    }
     if (!vm.supports("mobile-capture")) {
         Column(Modifier.fillMaxSize()) {
             BackBar("采集", nav)
-            EmptyState("服务端暂不支持安卓采集中心", "请将 NAS 服务端升级到 0.26.0 或更新版本。")
+            when {
+                checking -> EmptyState("正在检查服务端能力", "请稍候。")
+                refreshError -> {
+                    EmptyState("无法检查服务端能力", "请检查网络连接后重试。")
+                    TextButton(onClick = { refreshAttempt++ }) { Text("重试") }
+                }
+                else -> {
+                    EmptyState("服务端暂不支持安卓采集中心", "当前服务端版本：${vm.serverInfo?.version ?: "未知"}。请升级 NAS 后端至 0.26.0 或更新版本，并确认连接的是已升级的服务。")
+                    TextButton(onClick = { refreshAttempt++ }) { Text("重新检查") }
+                }
+            }
         }
         return
     }

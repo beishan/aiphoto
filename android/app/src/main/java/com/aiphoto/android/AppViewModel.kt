@@ -353,6 +353,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) { db.entries().clearPrefix(key) }
     }
     fun supports(feature: String) = serverInfo?.capabilities?.contains(feature) == true
+    internal suspend fun refreshCapabilities() {
+        val generation = epoch
+        val client = api ?: throw IllegalStateException("请重新登录")
+        val info = client.get<ServerInfo>("mobile/server-info")
+        if (generation != epoch) throw CancellationException("会话已变更")
+        if (info.instanceId != store.instanceId) {
+            logout("服务器实例已变更，请重新连接并登录")
+            connected = false
+            throw CancellationException("服务器实例已变更")
+        }
+        serverInfo = info
+        store.info = info
+    }
     fun loadMonths() {
         if (!supports("family-timeline")) return
         monthsJob?.cancel()
