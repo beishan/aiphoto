@@ -54,11 +54,19 @@ fun AiphotoApp(vm: AppViewModel) {
         LaunchedEffect(vm.notice) { vm.notice?.let { snack.showSnackbar(it); vm.notice = null } }
         val primaryRoutes = listOf("gallery" to "照片", "albums" to "相册", "discover" to "发现", "capture" to "采集")
         val showMainNavigation = route in listOf("gallery", "albums", "discover")
+        val gallery = route == "gallery"
+        val contentInsets = when {
+            !gallery -> WindowInsets.safeDrawing
+            vm.error != null -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
+            else -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+        }
         Scaffold(
-            snackbarHost = { SnackbarHost(snack, modifier = Modifier.padding(bottom = if (route.startsWith("viewer") || showMainNavigation) 80.dp else 0.dp)) },
-            contentWindowInsets = WindowInsets.safeDrawing,
+            snackbarHost = { SnackbarHost(snack, modifier = Modifier
+                .then(if (gallery) Modifier.navigationBarsPadding() else Modifier)
+                .padding(bottom = if (route.startsWith("viewer") || showMainNavigation) 80.dp else 0.dp)) },
+            contentWindowInsets = contentInsets,
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            Box(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
                     if (vm.error != null && !route.startsWith("viewer")) ErrorNotice(vm.error!!, { vm.error = null })
                     NavHost(nav, "gallery", Modifier.weight(1f)) {
@@ -90,7 +98,7 @@ fun AiphotoApp(vm: AppViewModel) {
                         launchSingleTop = true
                         restoreState = true
                     }
-                }, Modifier.align(Alignment.BottomCenter))
+                }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
             }
         }
     }
@@ -208,6 +216,9 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
         }
     } }
     val rootDate = remember(visibleDate) { visibleDate?.let(::dayLabel) }
+    val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
+    val galleryTop = if (root && vm.error == null) safeInsets.calculateTopPadding() else 0.dp
+    val galleryBottom = if (root) safeInsets.calculateBottomPadding() else 0.dp
     var refreshing by remember { mutableStateOf(false) }
     val refreshGesture = rememberPullToRefreshState()
     LaunchedEffect(feed.loading) { if (!feed.loading) refreshing = false }
@@ -218,7 +229,9 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
         Column(Modifier.fillMaxSize()) {
             if (!root && header == null) BackBar(title, nav) { IconButton({ vm.loadFeed(source, true) }) { Icon(Icons.Outlined.Refresh, "刷新") } }
             header?.invoke()
-            if (root && selecting) Spacer(Modifier.height(60.dp))
+            if (root && (selecting || feed.offline || feed.error != null || (!feed.loading && photos.isEmpty()))) {
+                Spacer(Modifier.height(galleryTop + 60.dp))
+            }
             if (source == "trash") Text("恢复后重新显示在图库中，收藏和精选标记不自动还原。保留期由 NAS 配置决定。", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
             if (feed.offline) Text("离线缓存 · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(feed.updated))}", Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
             if (feed.error != null) ErrorNotice(feed.error, { vm.feeds[source] = feed.copy(error = null) }, { vm.loadFeed(source, true) })
@@ -228,11 +241,11 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
                 TextButton({ if (pickAlbum == null) selecting = !selecting; selected = longArrayOf() }) { Text(if (selecting) "取消" else "选择") }
             }
             if (feed.photos.isEmpty() && !feed.loading) {
-                if (root && !selecting) Spacer(Modifier.height(60.dp))
                 EmptyState(if (feed.error == null) "这里还没有照片" else "暂时无法加载", if (root) "请先通过 Web 管理端向 NAS 导入照片" else "换个条件再看看", { vm.loadFeed(source, true) })
             }
-            LazyVerticalGrid(GridCells.Fixed(vm.columns), state = gridState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 4.dp, top = if (root && !selecting && feed.photos.isNotEmpty()) 62.dp else 4.dp,
-                bottom = if (root && (!selecting || selected.isEmpty())) floatingNavClearance else 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            LazyVerticalGrid(GridCells.Fixed(vm.columns), state = gridState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 4.dp,
+                top = if (root && !selecting && !feed.offline && feed.error == null) galleryTop + 62.dp else 4.dp,
+                bottom = if (root && (!selecting || selected.isEmpty())) floatingNavClearance + galleryBottom else 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (root && photos.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
                     Text("最近入库", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
                 }
@@ -276,7 +289,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
                 if (feed.loading) item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 else if (feed.more && feed.photos.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { TextButton({ vm.loadFeed(source) }, Modifier.fillMaxWidth()) { Text("加载更多") } }
             }
-            if (selecting && selected.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(bottom = if (root) floatingNavClearance else 0.dp).horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (selecting && selected.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(bottom = if (root) floatingNavClearance + galleryBottom else 0.dp).horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val enabled = !vm.busy && !feed.offline
                 if (pickAlbum != null) Button({ vm.batch(selected.toSet(), "add", pickAlbum) { nav.popBackStack(); vm.loadFeed(if (vm.albums.find { it.id == pickAlbum }?.type == "BABY") "baby:$pickAlbum" else "album:$pickAlbum", true) } }, enabled = enabled) { Text("添加到相册（${selected.size}）") }
                 else if (source == "trash") Button({ vm.batch(selected.toSet(), "restore") { selected = longArrayOf() } }, enabled = enabled) { Text("恢复已选照片") }
@@ -290,9 +303,9 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
                 }
             }
         }
-        if (root && refreshing) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).padding(top = 56.dp).fillMaxWidth())
+        if (root && refreshing) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).padding(top = galleryTop + 56.dp).fillMaxWidth())
         if (root) Row(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(top = galleryTop).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {

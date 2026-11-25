@@ -3,6 +3,7 @@ package com.aiphoto.android
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -11,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -18,7 +20,10 @@ class MainActivity : ComponentActivity() {
     private val model: AppViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            navigationBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
+        window.isNavigationBarContrastEnforced = false
         lifecycleScope.launch {
             model.shareReady.collect { asset ->
                 val file = asset.file
@@ -33,6 +38,12 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val dark = when (model.theme) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
             val palette = if (dark) darkColorScheme(
                 primary = Color(0xFFBDC7FF), primaryContainer = Color(0xFF303B63),
                 onPrimaryContainer = Color(0xFFE6EAFF), background = Color(0xFF151823),
