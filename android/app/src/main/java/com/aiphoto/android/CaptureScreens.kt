@@ -479,7 +479,6 @@ private fun CapturePreview(
     val assets = state.assets
     val index = assets.indexOfFirst { it.id == photo.id }.coerceAtLeast(0)
     val pager = rememberPagerState(initialPage = index) { state.assets.size }
-    val scope = rememberCoroutineScope()
     val latestSelect by rememberUpdatedState(select)
     var menu by remember { mutableStateOf(false) }
     var animating by remember { mutableStateOf(false) }
@@ -499,16 +498,6 @@ private fun CapturePreview(
     val nearEnd = index >= assets.lastIndex - 5
     LaunchedEffect(nearEnd, assets.size, state.more) {
         if (nearEnd && state.more) state.loadReview()
-    }
-
-    fun step(direction: Int) {
-        if (!ready) return
-        scope.launch {
-            val target = pager.settledPage + direction
-            if (direction > 0 && target !in state.assets.indices && state.more) state.loadReview()
-            if (state.assets.getOrNull(pager.settledPage)?.id != photo.id) return@launch
-            if (target in state.assets.indices) pager.animateScrollToPage(target)
-        }
     }
 
     DarkMediaSystemBars()
@@ -546,10 +535,8 @@ private fun CapturePreview(
         }
         Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly) {
-            TextButton({ step(-1) }, enabled = ready && index > 0) { Text("上一张", color = Color.White) }
             TextButton({ action(CaptureAction.IMPORT, photo) }, enabled = ready) { Text("↑ 入库", color = Color.White) }
             TextButton({ action(CaptureAction.DELETE_SKIP, photo) }, enabled = ready) { Text("↓ 删除并忽略", color = Color.White) }
-            TextButton({ step(1) }, enabled = ready && (index < assets.lastIndex || state.more)) { Text("下一张", color = Color.White) }
         }
     }
 }

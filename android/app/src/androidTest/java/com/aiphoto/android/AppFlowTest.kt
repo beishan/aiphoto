@@ -23,6 +23,7 @@ class AppFlowTest {
     private var photoTagged = false
     private val captureDeleted = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val captureImportRunning = AtomicBoolean(true)
+    private val multipleGalleryPhotos = AtomicBoolean(false)
     private val image = java.io.ByteArrayOutputStream().use { stream ->
         val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(40, 99, 78))
@@ -62,7 +63,12 @@ class AppFlowTest {
                 }
                 if (path == "settings/crawler/disk-guard") return json("""{"blocked":false}""")
                 if (path.startsWith("crawl/assets/")) return MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(image))
-                if (path == "photos/browse") return json("""{"content":[${photo()}],"nextCursor":1,"hasMore":false}""")
+                if (path == "photos/browse") {
+                    val photos = if (multipleGalleryPhotos.get()) {
+                        photo().replace("\"id\":1", "\"id\":2").replace("海边.jpg", "山谷.jpg") + "," + photo()
+                    } else photo()
+                    return json("""{"content":[$photos],"nextCursor":1,"hasMore":false}""")
+                }
                 if (path == "albums" && request.method == "POST") {
                     babyAdded = true
                     return json("""{"id":2,"name":"小满的成长","type":"BABY","birthDate":"2024-02-29","photoCount":1}""")
@@ -107,6 +113,7 @@ class AppFlowTest {
     private fun back() { androidx.test.espresso.Espresso.pressBack(); compose.waitForIdle() }
 
     @Test fun doubleTapEntersLikeModeAndEveryFurtherTapAddsOneLike() {
+        multipleGalleryPhotos.set(true)
         compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
         compose.onAllNodes(isToggleable())[0].performClick()
         compose.onNodeWithText("连接服务器").performScrollTo().performClick()
@@ -118,6 +125,11 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("海边.jpg").performClick()
         waitText("查看原图")
         val preview = compose.onNodeWithTag("viewer-photo")
+        waitText("2 / 2")
+        preview.performTouchInput { swipeRight() }
+        waitText("1 / 2")
+        preview.performTouchInput { swipeLeft() }
+        waitText("2 / 2")
         fun likeRequests() = requests.filter { it.requestUrl?.encodedPath == "/nas/api/photos/1/like" }
         preview.performTouchInput { doubleClick() }
         compose.waitUntil(10000) { likeRequests().size == 1 }
@@ -162,6 +174,8 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
         waitText("1 / 2")
         val preview = compose.onNodeWithTag("capture-preview-image")
+        compose.onNodeWithText("上一张").assertDoesNotExist()
+        compose.onNodeWithText("下一张").assertDoesNotExist()
         preview.performTouchInput { swipeLeft() }
         waitText("2 / 2")
         preview.performTouchInput { swipeRight() }
@@ -308,7 +322,7 @@ class AppFlowTest {
         compose.onNodeWithText("去整理 ›").performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
-        waitText("上一张")
+        waitText("1 / 2")
         compose.onNodeWithText("左右滑动切换照片").assertDoesNotExist()
         compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
         waitText("1 / 1")

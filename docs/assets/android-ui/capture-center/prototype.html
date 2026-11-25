@@ -99,9 +99,9 @@
 :is(#capture-mock,#design-screen) .frame {min-height:0;flex:1;display:grid;place-items:center;position:relative;overflow:hidden;user-select:none}
 :is(#capture-mock,#design-screen) .frame img {position:absolute;inset:50% auto auto 0;width:100%;height:auto;transform:translateY(-50%);pointer-events:none}
 #capture-mock .capture-frame,#design-screen .viewer-frame {touch-action:none}
-#capture-mock :is(.preview-track,.preview-underlay) {position:absolute;inset:0}
+:is(#capture-mock,#design-screen) :is(.preview-track,.preview-underlay) {position:absolute;inset:0}
 #capture-mock .preview-underlay {opacity:0;transform:scale(.94)}
-#capture-mock .preview-slide {position:absolute;inset:0 auto 0 calc(var(--page) * (100% + 12px));width:100%;overflow:hidden;background:#101218}
+:is(#capture-mock,#design-screen) .preview-slide {position:absolute;inset:0 auto 0 calc(var(--page) * (100% + 12px));width:100%;overflow:hidden;background:#101218}
 #capture-mock .import-progress {position:absolute;z-index:5;inset:auto 0 var(--system-height);height:2px;overflow:hidden;background:#666be848;pointer-events:none}
 #capture-mock .import-progress::after {content:"";display:block;width:58%;height:100%;background:linear-gradient(90deg,transparent,#8878ff,#64dfff,#f591e8,transparent);animation:import-glow 1.3s linear infinite}
 @keyframes import-glow {from{transform:translateX(-100%)}to{transform:translateX(173%)}}
@@ -247,6 +247,32 @@ function updateGalleryHeader(scroll){
     }
   }
 
+const previewSlides = (items, current, image) => [-1,0,1].map(offset=>{
+  const item=items[current+offset];
+  return item===undefined?'':'<div class="preview-slide" data-page="'+offset+'" style="--page:'+offset+'">'+image(item,offset!==0)+'</div>';
+}).join('');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function animateTransform(element, from, to, duration) {
+  return element.animate(
+    [{transform:from},{transform:to}],
+    {duration:reduceMotion.matches?0:duration,easing:'cubic-bezier(.2,.75,.25,1)',fill:'forwards'},
+  );
+}
+const slideX = distance => 'translate3d('+distance+'px,0,0)';
+const adjacentSlide = (frame, direction) => frame.querySelector('[data-page="'+direction+'"]');
+async function settlePreviewSlide(frame, distance, direction, changePhoto) {
+  const track=frame.querySelector('.preview-track');
+  const target=direction?-(frame.clientWidth+12)*direction:0;
+  const animation=animateTransform(track,slideX(distance),slideX(target),220);
+  try {
+    await animation.finished;
+    if(frame.isConnected && direction)changePhoto(direction);
+  } finally {
+    track.style.transform='';
+    animation.cancel();
+  }
+}
+
 (() => {
 const root = document.getElementById('capture-mock');
 const phone = root.querySelector('.phone');
@@ -265,10 +291,7 @@ const btn = (label, attrs = '') => '<button type="button" '+attrs+'>'+label+'</b
 const previewImage = (id, decorative = false) =>
   '<img draggable="false" alt="'+(decorative?'':photoName(id))+'" src="'+photos[id]+'">';
 function previewFrame(list, current) {
-  const slides=[-1,0,1].map(offset=>{
-    const id=list[current+offset];
-    return id===undefined?'':'<div class="preview-slide" data-page="'+offset+'" style="--page:'+offset+'">'+previewImage(id,offset!==0)+'</div>';
-  }).join('');
+  const slides=previewSlides(list,current,previewImage);
   const adjacent=list[current+1]??list[current-1];
   return '<div class="frame capture-frame">'+(adjacent===undefined?'':'<div class="preview-underlay" aria-hidden="true">'+previewImage(adjacent,true)+'</div>')+
     '<div class="preview-track">'+slides+'</div></div>';
@@ -315,9 +338,8 @@ function render() {
     const list=[...pending], current=list.indexOf(index);
     content='<header class="top">'+back('返回待整理')+'<strong>'+(current+1)+' / '+list.length+'</strong>'+
       btn('⋯','class="icon" aria-label="更多操作" data-menu')+'</header>'+previewFrame(list,current)+
-      '<div class="preview-actions"><div class="row">'+btn('‹','aria-label="上一张" data-step="-1"'+(current>0?'':' disabled'))+
-      btn('↑ 入库','data-action="0"')+btn('↓ 删除并忽略','data-action="3"')+
-      btn('›','aria-label="下一张" data-step="1"'+(current<list.length-1?'':' disabled'))+'</div></div>';
+      '<div class="preview-actions"><div class="row">'+
+      btn('↑ 入库','data-action="0"')+btn('↓ 删除并忽略','data-action="3"')+'</div></div>';
   } else {
     const selecting=view==='selection';
     const disabled=pending.size?'':' disabled';
@@ -406,39 +428,21 @@ root.addEventListener('click',event=>{
     if(view==='selection'){if(selected.has(i))selected.delete(i);else selected.add(i);render();}
     else{index=i;navigate('preview');}
   }
-  else if('step' in d){
-    const frame=app.querySelector('.capture-frame');
-    if(frame)void slidePreview(frame,0,Number(d.step));
-  }
   else if('action' in d)request(Number(d.action));
   else if('menu' in d){confirmation='menu';render();}
   else if('cancel' in d){confirmation=null;render();}
   else if('confirm' in d)apply(confirmation);
   else if('retry' in d){message='已提交重试';render();}
 });
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-function animateTransform(element, from, to, duration) {
-  return element.animate(
-    [{transform:from},{transform:to}],
-    {duration:reduceMotion.matches?0:duration,easing:'cubic-bezier(.2,.75,.25,1)',fill:'forwards'},
-  );
-}
-const slideX = distance => 'translate3d('+distance+'px,0,0)';
 function throwTransform(x,y,height) {
   const rotation=Math.max(-16,Math.min(16,y/height*18));
   return 'translate3d('+x+'px,'+y+'px,0) rotate('+rotation+'deg)';
 }
 async function slidePreview(frame, distance, direction) {
-  const track=frame.querySelector('.preview-track');
   settlingFrame=frame;
-  const target=direction?-(frame.clientWidth+12)*direction:0;
-  const animation=animateTransform(track,slideX(distance),slideX(target),220);
   try {
-    await animation.finished;
-    if(frame.isConnected && direction)changePhoto(direction);
+    await settlePreviewSlide(frame,distance,direction,changePhoto);
   } finally {
-    track.style.transform='';
-    animation.cancel();
     if(settlingFrame===frame)settlingFrame=null;
   }
 }
@@ -480,7 +484,7 @@ root.addEventListener('pointermove',event=>{
   const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
   if(!drag.axis && Math.hypot(dx,dy)>8)drag.axis=Math.abs(dx)>Math.abs(dy)?'x':'y';
   if(drag.axis==='x'){
-    const adjacent=frame.querySelector('[data-page="'+(dx<0?1:-1)+'"]');
+    const adjacent=adjacentSlide(frame,dx<0?1:-1);
     drag.dx=adjacent?dx:dx*.22;
     frame.querySelector('.preview-track').style.transform=slideX(drag.dx);
   } else if(drag.axis==='y'){
@@ -503,7 +507,7 @@ function finishPreviewDrag(event, cancelled=false) {
   if(!frame.isConnected)return;
   if(axis==='x'){
     const direction=dx<0?1:-1;
-    const commit=!cancelled && Math.abs(dx)>45 && frame.querySelector('[data-page="'+direction+'"]');
+    const commit=!cancelled && Math.abs(dx)>45 && adjacentSlide(frame,direction);
     void slidePreview(frame,dx,commit?direction:0);
   } else if(axis==='y') {
     void throwPreview(frame,dx,dy,!cancelled && Math.abs(dy)>=64?(dy<0?0:3):null);
@@ -588,6 +592,14 @@ root.addEventListener('capture-open', event => {
   const memoryCover = (i,id) => go(id,img(i,'')+'<strong class="cover-caption">'+labels.get(id)+'</strong>','cover memory-cover');
   const people = ['小满','家人','爷爷','奶奶','爸爸','妈妈','小北','小禾'];
   const all = images.map((_,index)=>index);
+  let viewerPhotos=all.filter(id=>id!==video.id);
+  function showViewerPhoto(direction){
+    const position=viewerPhotos.indexOf(photo);
+    const next=viewerPhotos[position+direction];
+    if(next===undefined)return;
+    photo=next;
+    render();
+  }
   const personPhotos = () => {
     const index = people.indexOf(personName);
     const start = 9 + index;
@@ -608,10 +620,14 @@ root.addEventListener('capture-open', event => {
     login: () => body(form('login',field('account','账户','beibei')+field('password','密码','demo','password'),'登录')),
     photos: () => '<div class="photo-scroll" role="region" aria-label="可滚动照片图库">'+
       body(group('最近入库','<p class="muted">'+(all.length-1)+' 张照片 · 1 个视频</p>'))+datedPhotoGroups(all,grid)+'</div>',
-    viewer: () => '<div class="frame viewer-frame">'+img(photo,escape(renamed))+
-      '<span class="like-status" role="status"></span></div><div class="preview-actions"><p class="muted">'+
-      (photo+1)+' / '+images.length+'</p><div class="row">'+action('previous','上一张')+
-      action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+action('next','下一张')+'</div></div>',
+    viewer: () => {
+      const position=viewerPhotos.indexOf(photo);
+      return '<div class="frame viewer-frame"><div class="preview-track">'+
+        previewSlides(viewerPhotos,position,(id,decorative)=>img(id,decorative?'':escape(renamed)))+
+        '</div><span class="like-status" role="status"></span></div><div class="preview-actions"><p class="muted">'+
+        (position+1)+' / '+viewerPhotos.length+'</p><div class="row">'+
+        action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+'</div></div>';
+    },
     search: () => body(searchForm()+go('filters','组合筛选 ›','menu-row')+group(search?'「'+escape(search)+'」的示例结果':'最近照片','<p class="muted">照片 · '+(search?3:6)+' 张</p>'))+grid(search?[0,2,4]:all.slice(0,6)),
     filters: () => body(form('filters',field('start','开始日期','','date')+field('end','结束日期','','date')+'<label class="field">媒体类型<select name="media"><option>全部</option><option>照片</option><option>视频</option></select></label>'+field('person','人物')+field('tag','标签')+field('rating','最低评分','0','number'),'应用筛选')),
     albums: () => body(go('new-album','＋ 新建相册','primary')+'<div class="cover-grid">'+cover(1,escape(albumName()),'24 张照片','album')+cover(3,'旅行记忆','12 张照片','album')+'</div>'),
@@ -690,6 +706,7 @@ root.addEventListener('capture-open', event => {
       capture.dispatchEvent(new CustomEvent('capture-open',{detail:id}));
       return;
     }
+    if(id==='viewer' && !viewerPhotos.includes(photo)) photo=viewerPhotos[0];
     lastDesign=view=id;
     if(!preserveNotice)notice='';
     render();
@@ -753,16 +770,51 @@ root.addEventListener('capture-open', event => {
     },300)};
   }
 
+  let viewerDrag = null, viewerSettling = null;
+  function finishViewerDrag(event, cancelled=false){
+    if(!viewerDrag || viewerDrag.id!==event.pointerId)return;
+    const {frame,axis,distance}=viewerDrag;
+    viewerDrag=null;
+    if(!frame.isConnected)return;
+    if(!axis && !cancelled){
+      tapViewer(frame,event);
+    } else if(axis==='x'){
+      const direction=distance<0?1:-1;
+      const commit=!cancelled && Math.abs(distance)>45 && adjacentSlide(frame,direction);
+      viewerSettling=frame;
+      void settlePreviewSlide(frame,distance,commit?direction:0,showViewerPhoto).finally(()=>{
+        if(viewerSettling===frame)viewerSettling=null;
+      });
+    }
+  }
+
   let stripDrag = null;
   screen.addEventListener('scroll',event=>{
     if(event.target.matches('.photo-scroll'))updateGalleryHeader(event.target);
   },{capture:true,passive:true});
   screen.addEventListener('pointerdown',event=>{
+    const frame=event.target.closest('.viewer-frame');
+    if(frame && event.isPrimary && event.button===0 && !viewerSettling?.isConnected){
+      viewerDrag={frame,id:event.pointerId,x:event.clientX,y:event.clientY,axis:null,distance:0};
+      frame.setPointerCapture(event.pointerId);
+    }
     const strip=event.target.closest('.media-strip');
     if(!strip||event.pointerType!=='mouse'||event.button!==0)return;
     stripDrag={strip,start:event.clientX,offset:strip.scrollLeft,moved:false};
   });
   screen.addEventListener('pointermove',event=>{
+    if(viewerDrag?.id===event.pointerId){
+      const {frame}=viewerDrag;
+      const dx=event.clientX-viewerDrag.x,dy=event.clientY-viewerDrag.y;
+      if(!viewerDrag.axis && Math.hypot(dx,dy)>8){
+        clearPendingTap();
+        viewerDrag.axis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+      }
+      if(viewerDrag.axis==='x'){
+        viewerDrag.distance=adjacentSlide(frame,dx<0?1:-1)?dx:dx*.22;
+        frame.querySelector('.preview-track').style.transform=slideX(viewerDrag.distance);
+      }
+    }
     if(!stripDrag)return;
     if(!(event.buttons&1)){finishStripDrag();return;}
     const {strip,start,offset}=stripDrag;
@@ -780,24 +832,24 @@ root.addEventListener('capture-open', event => {
     stripDrag.strip.classList.remove('dragging');
     stripDrag=null;
   }
-  screen.addEventListener('pointerup',finishStripDrag);
-  screen.addEventListener('pointercancel',finishStripDrag);
+  screen.addEventListener('pointerup',event=>{finishViewerDrag(event);finishStripDrag();});
+  screen.addEventListener('pointercancel',event=>{finishViewerDrag(event,true);finishStripDrag();});
   screen.addEventListener('dragstart',event=>{
     if(event.target.closest('.media-strip'))event.preventDefault();
   });
 
   screen.addEventListener('click',event=>{
     const control=event.target.closest('button');
-    if(!control){
-      const frame=event.target.closest('.viewer-frame');
-      if(frame)tapViewer(frame,event);
-      return;
-    }
+    if(!control)return;
     const {go:id,photo:index,person:name,action:command}=control.dataset;
     if(index!==undefined)photo=Number(index);
     if(name!==undefined){personName=name;personParent=view;}
     if(id){
-      if(id==='viewer' && view!=='photo-detail')viewerParent=view;
+      if(id==='viewer' && view!=='photo-detail'){
+        viewerParent=view;
+        const ids=[...app.querySelectorAll('.gallery [data-go="viewer"]')].map(button=>Number(button.dataset.photo));
+        viewerPhotos=ids.length?ids:all.filter(id=>id!==video.id);
+      }
       if(id==='video')videoParent=view;
       if(id==='favorites'&&view!=='viewer')favoritesParent=view;
       show(id);return;
@@ -806,8 +858,6 @@ root.addEventListener('capture-open', event => {
     clearPendingTap();
     notice='';
     switch(command){
-      case 'previous': photo=Math.max(0,photo-1);break;
-      case 'next': photo=Math.min(images.length-1,photo+1);break;
       case 'favorite': if(favorites.has(photo))favorites.delete(photo);else favorites.add(photo);break;
       case 'restore': restored=true;notice='已恢复 1 张照片';break;
       case 'cache': cache='0 MB';notice='已清理缓存';break;
@@ -846,7 +896,10 @@ root.addEventListener('capture-open', event => {
     screen.style.colorScheme=scheme;
     capture.style.colorScheme=scheme;
   });
-  picker.addEventListener('change',()=>show(picker.value));
+  picker.addEventListener('change',()=>{
+    if(picker.value==='viewer')viewerPhotos=all.filter(id=>id!==video.id);
+    show(picker.value);
+  });
   capture.addEventListener('capture-exit',()=>show(lastDesign));
   capture.addEventListener('capture-view',event=>{if(!capture.hidden)picker.value=event.detail;});
   show(location.hash.slice(1)||'photos');
