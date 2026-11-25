@@ -57,6 +57,8 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         private set
     private var reviewAssets by mutableStateOf(emptyList<CaptureAsset>())
     private val previewImports = mutableStateMapOf<Long, Job>()
+    private var importingSelection by mutableStateOf(false)
+    val importing by derivedStateOf { importingSelection || previewImports.isNotEmpty() }
     val assets by derivedStateOf { reviewAssets.filterNot { it.id in previewImports } }
     var count by mutableLongStateOf(0)
         private set
@@ -184,6 +186,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
     suspend fun perform(action: CaptureAction, targets: Collection<CaptureAsset>): Set<Long> {
         if (busy || targets.isEmpty() || targets.any { it.id in previewImports }) return emptySet()
         busy = true
+        importingSelection = action == CaptureAction.IMPORT
         error = null
         notice = null
         reviewGeneration++
@@ -259,6 +262,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                 }
             }
         } finally {
+            importingSelection = false
             busy = false
         }
         return completed

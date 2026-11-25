@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,12 +21,15 @@ class CaptureStateTest {
             server.enqueue(MockResponse().setBody("""{"content":[{"assetId":12,"status":"FAILED"}],"last":true}"""))
             state.loadReview()
             val photo = state.assets.single()
+            assertFalse(state.importing)
             kotlinx.coroutines.coroutineScope {
                 assertTrue(state.queuePreviewImport(photo, this))
+                assertTrue(state.importing)
                 assertTrue(state.assets.isEmpty())
                 assertTrue(!state.busy)
                 assertTrue(!state.queuePreviewImport(photo, this))
             }
+            assertFalse(state.importing)
             assertEquals(photo, state.assets.single())
             assertTrue(state.error.orEmpty().contains("入库失败"))
         }

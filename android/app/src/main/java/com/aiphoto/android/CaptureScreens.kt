@@ -4,6 +4,13 @@ package com.aiphoto.android
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -18,6 +25,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,21 +39,30 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -195,21 +213,21 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         }
     }
 
-    fun action(operation: CaptureAction, targets: List<CaptureAsset>, confirmed: Boolean = false) {
-        if (state.busy || targets.isEmpty()) return
+    fun action(operation: CaptureAction, targets: List<CaptureAsset>, confirmed: Boolean = false): Job? {
+        if (state.busy || targets.isEmpty()) return null
         if (operation == CaptureAction.DELETE && !confirmed) {
             deleting = targets
-            return
+            return null
         }
-        scope.launch {
+        return scope.launch {
             val old = state.assets
             val originalPreview = previewId
-            val completed = if (operation == CaptureAction.IMPORT && originalPreview != null && targets.size == 1) {
+            val completed = if (operation == CaptureAction.IMPORT && originalPreview != null && targets.singleOrNull()?.id == originalPreview) {
                 if (vm.queueCapturePreviewImport(targets.single())) setOf(originalPreview) else emptySet()
             } else {
                 state.perform(operation, targets)
             }
-            if (originalPreview != null && originalPreview in completed) {
+            if (originalPreview != null && originalPreview == previewId && originalPreview in completed) {
                 val currentIndex = old.indexOfFirst { it.id == originalPreview }
                 val remaining = state.assets.mapTo(hashSetOf()) { it.id }
                 previewId = old.drop(currentIndex + 1).firstOrNull { it.id in remaining }?.id
@@ -241,15 +259,9 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
 
     Box(Modifier.fillMaxSize().background(if (preview != null) Color(0xFF101218) else MaterialTheme.colorScheme.background)) {
         when {
-            preview != null -> CapturePreview(vm, state, preview, ::back, { step ->
-                val position = state.assets.indexOfFirst { it.id == preview.id }
-                val next = state.assets.getOrNull(position + step)
-                if (next != null) previewId = next.id
-                else if (step > 0 && state.more) scope.launch {
-                    state.loadReview()
-                    if (previewId == preview.id) state.assets.getOrNull(position + step)?.let { previewId = it.id }
-                }
-            }) { action(it, listOf(preview)) }
+            preview != null -> CapturePreview(vm, state, preview, ::back, { previewId = it }) { operation, asset ->
+                action(operation, listOf(asset))
+            }
 
             tab == "review" -> CaptureReview(vm, state, grid, selecting, ::back, {
                 selecting = true
@@ -350,6 +362,9 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         val snack = remember { SnackbarHostState() }
         LaunchedEffect(state.notice) { state.notice?.let { snack.showSnackbar(it, duration = SnackbarDuration.Short) } }
         SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 72.dp))
+        if (tab == "review" && state.importing) {
+            CaptureImportProgress(Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        }
     }
     deleting?.let { targets ->
         ConfirmDialog("删除 ${targets.size} 张照片？", "照片会移出待整理区，采集副本按 NAS 清理策略处理。",
@@ -459,87 +474,231 @@ private fun CaptureReview(
 @Composable
 private fun CapturePreview(
     vm: AppViewModel, state: CaptureState, photo: CaptureAsset, back: () -> Unit,
-    step: (Int) -> Unit, action: (CaptureAction) -> Unit,
+    select: (Long) -> Unit, action: (CaptureAction, CaptureAsset) -> Job?,
 ) {
-    var zoom by remember(photo.id) { mutableFloatStateOf(1f) }
-    var translation by remember(photo.id) { mutableStateOf(Offset.Zero) }
-    var hint by remember(photo.id) { mutableStateOf<CaptureAction?>(null) }
+    val assets = state.assets
+    val index = assets.indexOfFirst { it.id == photo.id }.coerceAtLeast(0)
+    val pager = rememberPagerState(initialPage = index) { state.assets.size }
+    val scope = rememberCoroutineScope()
+    val latestSelect by rememberUpdatedState(select)
     var menu by remember { mutableStateOf(false) }
-    var failed by remember(photo.id) { mutableStateOf(false) }
-    var retry by remember(photo.id) { mutableIntStateOf(0) }
-    val latestStep by rememberUpdatedState(step)
-    val latestAction by rememberUpdatedState(action)
+    var animating by remember { mutableStateOf(false) }
+    val ready = !state.busy && !animating && !pager.isScrollInProgress
+    BackHandler(enabled = animating) { }
+
+    LaunchedEffect(photo.id) {
+        if (state.assets.getOrNull(pager.settledPage)?.id != photo.id) pager.scrollToPage(index)
+    }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage to pager.isScrollInProgress }.collect { (page, scrolling) ->
+            if (!scrolling && !animating && !state.busy) {
+                state.assets.getOrNull(page)?.let { latestSelect(it.id) }
+            }
+        }
+    }
+    val nearEnd = index >= assets.lastIndex - 5
+    LaunchedEffect(nearEnd, assets.size, state.more) {
+        if (nearEnd && state.more) state.loadReview()
+    }
+
+    fun step(direction: Int) {
+        if (!ready) return
+        scope.launch {
+            val target = pager.settledPage + direction
+            if (direction > 0 && target !in state.assets.indices && state.more) state.loadReview()
+            if (state.assets.getOrNull(pager.settledPage)?.id != photo.id) return@launch
+            if (target in state.assets.indices) pager.animateScrollToPage(target)
+        }
+    }
+
     DarkMediaSystemBars()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            FloatingBack(back, dark = true)
-            Text("${state.assets.indexOf(photo) + 1} / ${state.assets.size}", Modifier.weight(1f).padding(start = 10.dp), color = Color.White)
+        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            FloatingBack({ if (!animating) back() }, dark = true)
+            Text("${pager.currentPage + 1} / ${assets.size}", Modifier.weight(1f).padding(start = 10.dp), color = Color.White)
             Box {
-                IconButton({ menu = true }, enabled = !state.busy) { Icon(Icons.Outlined.MoreHoriz, "更多操作", tint = Color.White) }
+                IconButton({ menu = true }, enabled = ready) { Icon(Icons.Outlined.MoreHoriz, "更多操作", tint = Color.White) }
                 DropdownMenu(menu, { menu = false }) {
                     CaptureAction.entries.forEach { operation ->
-                        DropdownMenuItem({ Text(operation.title) }, { menu = false; action(operation) })
+                        DropdownMenuItem({ Text(operation.title) }, { menu = false; action(operation, photo) }, enabled = ready)
                     }
                 }
             }
         }
-        Box(Modifier.weight(1f).fillMaxWidth().testTag("capture-preview-image").pointerInput(photo.id, state.busy) {
-            if (state.busy) return@pointerInput
-            val edge = 20.dp.toPx()
-            val threshold = 64.dp.toPx()
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val inside = down.position.x in edge..(size.width - edge)
-                var travel = Offset.Zero
-                var transformed = zoom > 1f
-                do {
-                    val event = awaitPointerEvent()
-                    val pointers = event.changes.count { it.pressed }
-                    if (pointers > 1) {
-                        transformed = true
-                        zoom = (zoom * event.calculateZoom()).coerceIn(1f, 4f)
-                        val pan = translation + event.calculatePan()
-                        translation = if (zoom == 1f) Offset.Zero else Offset(
-                            pan.x.coerceIn(-size.width * (zoom - 1) / 2, size.width * (zoom - 1) / 2),
-                            pan.y.coerceIn(-size.height * (zoom - 1) / 2, size.height * (zoom - 1) / 2),
-                        )
-                        event.changes.forEach { it.consume() }
-                    } else if (inside) {
-                        val movement = event.changes.firstOrNull { it.id == down.id }?.positionChange() ?: Offset.Zero
-                        if (zoom > 1f) {
-                            val pan = translation + movement
-                            translation = Offset(
-                                pan.x.coerceIn(-size.width * (zoom - 1) / 2, size.width * (zoom - 1) / 2),
-                                pan.y.coerceIn(-size.height * (zoom - 1) / 2, size.height * (zoom - 1) / 2),
-                            )
-                        } else if (!transformed) {
-                            travel += movement
-                            hint = if (abs(travel.y) > abs(travel.x) && abs(travel.y) > threshold / 2)
-                                if (travel.y < 0) CaptureAction.IMPORT else CaptureAction.DELETE_SKIP else null
-                        }
-                    }
-                } while (event.changes.any { it.pressed })
-                hint = null
-                if (inside && !transformed) {
-                    if (abs(travel.x) > abs(travel.y) && abs(travel.x) > threshold) latestStep(if (travel.x < 0) 1 else -1)
-                    else if (abs(travel.y) > abs(travel.x) && abs(travel.y) > threshold) latestAction(if (travel.y < 0) CaptureAction.IMPORT else CaptureAction.DELETE_SKIP)
-                }
+        Box(Modifier.weight(1f).fillMaxWidth().testTag("capture-preview-image")) {
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.fillMaxSize(),
+                key = { assets[it].id },
+                pageSpacing = 12.dp,
+                beyondViewportPageCount = 1,
+                userScrollEnabled = !state.busy && !animating,
+            ) { page ->
+                val asset = assets[page]
+                CapturePreviewPage(
+                    vm, state, asset, assets.getOrNull(page + 1) ?: assets.getOrNull(page - 1),
+                    active = asset.id == photo.id, ready = ready,
+                    setAnimating = { animating = it }, action = action,
+                )
             }
-        }, contentAlignment = Alignment.Center) {
-            key(retry) {
-                PhotoImage(vm, state.media(photo.id, original = !failed), Modifier.fillMaxSize().graphicsLayer {
-                    scaleX = zoom; scaleY = zoom; translationX = translation.x; translationY = translation.y
-                }, ContentScale.Fit, background = Color(0xFF101218)) { if (!it) failed = true }
-            }
-            if (failed) TextButton({ failed = false; retry++ }, Modifier.align(Alignment.BottomCenter)) { Text("重试原图") }
-            hint?.let { Surface(shape = CircleShape) { Text(it.title, Modifier.padding(12.dp)) } }
             if (state.busy) CircularProgressIndicator(Modifier.align(Alignment.TopCenter).padding(12.dp).size(24.dp))
         }
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            TextButton({ step(-1) }, enabled = !state.busy) { Text("上一张", color = Color.White) }
-            TextButton({ action(CaptureAction.IMPORT) }, enabled = !state.busy) { Text("↑ 入库", color = Color.White) }
-            TextButton({ action(CaptureAction.DELETE_SKIP) }, enabled = !state.busy) { Text("↓ 删除并忽略", color = Color.White) }
-            TextButton({ step(1) }, enabled = !state.busy) { Text("下一张", color = Color.White) }
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly) {
+            TextButton({ step(-1) }, enabled = ready && index > 0) { Text("上一张", color = Color.White) }
+            TextButton({ action(CaptureAction.IMPORT, photo) }, enabled = ready) { Text("↑ 入库", color = Color.White) }
+            TextButton({ action(CaptureAction.DELETE_SKIP, photo) }, enabled = ready) { Text("↓ 删除并忽略", color = Color.White) }
+            TextButton({ step(1) }, enabled = ready && (index < assets.lastIndex || state.more)) { Text("下一张", color = Color.White) }
         }
+    }
+}
+
+@Composable
+private fun CapturePreviewPage(
+    vm: AppViewModel,
+    state: CaptureState,
+    asset: CaptureAsset,
+    next: CaptureAsset?,
+    active: Boolean,
+    ready: Boolean,
+    setAnimating: (Boolean) -> Unit,
+    action: (CaptureAction, CaptureAsset) -> Job?,
+) {
+    val scope = rememberCoroutineScope()
+    val canGesture by rememberUpdatedState(active && ready)
+    val latestAction by rememberUpdatedState(action)
+    val latestSetAnimating by rememberUpdatedState(setAnimating)
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    var travelFraction by remember { mutableFloatStateOf(0f) }
+    var failed by remember { mutableStateOf(false) }
+    var retry by remember { mutableIntStateOf(0) }
+    LaunchedEffect(active) {
+        if (!active) {
+            zoom = 1f
+            pan = Offset.Zero
+        }
+    }
+    Box(Modifier.fillMaxSize().clipToBounds().pointerInput(asset.id) {
+        val edge = 20.dp.toPx()
+        val threshold = 64.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (!canGesture) return@awaitEachGesture
+            val inside = down.position.x in edge..(size.width - edge)
+            var travel = Offset.Zero
+            var vertical = false
+            var horizontal = false
+            var transformed = zoom > 1f
+            var event = awaitPointerEvent(PointerEventPass.Initial)
+            while (event.changes.any { it.pressed }) {
+                val pinching = event.changes.count { it.pressed } > 1
+                val movement = event.changes.firstOrNull { it.id == down.id }?.positionChange() ?: Offset.Zero
+                if (pinching || zoom > 1f) {
+                    transformed = true
+                    drag = Offset.Zero
+                    travelFraction = 0f
+                    if (pinching) zoom = (zoom * event.calculateZoom()).coerceIn(1f, 4f)
+                    val shift = pan + if (pinching) event.calculatePan() else movement
+                    val maxX = size.width * (zoom - 1f) / 2f
+                    val maxY = size.height * (zoom - 1f) / 2f
+                    pan = Offset(shift.x.coerceIn(-maxX, maxX), shift.y.coerceIn(-maxY, maxY))
+                    event.changes.forEach { it.consume() }
+                } else if (!transformed && !horizontal && inside) {
+                    travel += movement
+                    if (!vertical && travel.getDistance() > viewConfiguration.touchSlop) {
+                        vertical = abs(travel.y) > abs(travel.x)
+                        horizontal = !vertical
+                    }
+                    if (vertical) {
+                        drag = Offset(travel.x * .38f, travel.y)
+                        travelFraction = drag.y / size.height.coerceAtLeast(1)
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+                event = awaitPointerEvent(PointerEventPass.Initial)
+            }
+            if (!vertical || transformed) return@awaitEachGesture
+
+            val from = drag
+            val fromFraction = travelFraction
+            val operation = if (from.y < 0) CaptureAction.IMPORT else CaptureAction.DELETE_SKIP
+            val fling = abs(from.y) >= threshold
+            val direction = if (from.y < 0f) -1f else 1f
+            val end = if (fling) Offset(from.x + direction * size.width * .16f, direction * size.height * 1.2f)
+                else Offset.Zero
+            val endFraction = if (fling) direction * 1.2f else 0f
+            latestSetAnimating(true)
+            scope.launch {
+                try {
+                    animate(0f, 1f, animationSpec = tween(if (fling) 220 else 160)) { fraction, _ ->
+                        drag = from + (end - from) * fraction
+                        travelFraction = fromFraction + (endFraction - fromFraction) * fraction
+                    }
+                    if (fling) latestAction(operation, asset)?.join()
+                } finally {
+                    drag = Offset.Zero
+                    travelFraction = 0f
+                    latestSetAnimating(false)
+                }
+            }
+        }
+    }) {
+        if (next != null && travelFraction != 0f) {
+            PhotoImage(vm, state.media(next.id), Modifier.fillMaxSize().graphicsLayer {
+                val reveal = (abs(travelFraction) * 2.5f).coerceIn(0f, 1f)
+                alpha = reveal
+                scaleX = .94f + .06f * reveal
+                scaleY = scaleX
+            }, ContentScale.Fit, background = Color(0xFF101218))
+        }
+        Box(Modifier.fillMaxSize().graphicsLayer {
+            scaleX = zoom
+            scaleY = zoom
+            translationX = pan.x + drag.x
+            translationY = pan.y + drag.y
+            rotationZ = (travelFraction * 18f).coerceIn(-16f, 16f)
+            alpha = (1f - (abs(travelFraction) - .50f).coerceAtLeast(0f) * 1.8f).coerceAtLeast(0f)
+        }) {
+            PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.Fit, background = Color(0xFF101218))
+            if (active && !failed) {
+                val context = LocalContext.current
+                val request = remember(context, asset.id, retry) {
+                    ImageRequest.Builder(context).data(vm.mediaUrl(state.media(asset.id, original = true))).build()
+                }
+                vm.imageLoader?.let { loader ->
+                    AsyncImage(model = request, imageLoader = loader, contentDescription = null,
+                        contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.fillMaxSize())
+                }
+            }
+        }
+        if (active && failed && ready) {
+            TextButton({ retry++; failed = false }, Modifier.align(Alignment.BottomCenter)) { Text("重试原图") }
+        }
+    }
+}
+
+@Composable
+private fun CaptureImportProgress(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "入库流光")
+    val position by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart),
+        label = "流光位置",
+    )
+    Canvas(modifier.fillMaxWidth().height(2.dp).semantics {
+        contentDescription = "正在入库"
+        progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+    }) {
+        drawRect(Color(0xFF666BE8).copy(alpha = .28f))
+        val width = size.width * .58f
+        val start = (size.width + width) * position - width
+        drawRect(Brush.horizontalGradient(
+            listOf(Color.Transparent, Color(0xFF8878FF), Color(0xFF64DFFF), Color(0xFFF591E8), Color.Transparent),
+            startX = start, endX = start + width,
+        ))
     }
 }

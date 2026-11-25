@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.*
 import org.junit.*
 import org.junit.runner.RunWith
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(AndroidJUnit4::class)
 class AppFlowTest {
@@ -21,6 +22,7 @@ class AppFlowTest {
     private var categoryAdded = false
     private var photoTagged = false
     private val captureDeleted = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+    private val captureImportRunning = AtomicBoolean(true)
     private val image = java.io.ByteArrayOutputStream().use { stream ->
         val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(40, 99, 78))
@@ -49,6 +51,14 @@ class AppFlowTest {
                         .asJsonObject.getAsJsonArray("ids").map { it.asLong }
                     captureDeleted.addAll(ids)
                     return json("""{"success":${ids.size}}""")
+                }
+                if (path == "crawl/jobs/3/import") return json("""{"batchId":41,"status":"QUEUED"}""")
+                if (path == "crawl/imports/41") return if (captureImportRunning.get()) {
+                    json("""{"status":"RUNNING"}""")
+                } else json("""{"status":"COMPLETED"}""")
+                if (path == "crawl/imports/41/items") {
+                    captureDeleted.add(12L)
+                    return json("""{"content":[{"assetId":12,"status":"SUCCESS","photoId":1}],"last":true}""")
                 }
                 if (path == "settings/crawler/disk-guard") return json("""{"blocked":false}""")
                 if (path.startsWith("crawl/assets/")) return MockResponse().setHeader("Content-Type", "image/png").setBody(okio.Buffer().write(image))
@@ -94,6 +104,35 @@ class AppFlowTest {
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
     private fun waitText(value: String) { compose.waitUntil(15000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() } }
     private fun back() { androidx.test.espresso.Espresso.pressBack(); compose.waitForIdle() }
+
+    @Test fun capturePreviewSwipesAndDisplaysProgressUntilImportCompletes() {
+        compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
+        compose.onAllNodes(isToggleable())[0].performClick()
+        compose.onNodeWithText("连接服务器").performScrollTo().performClick()
+        waitText("用户名")
+        compose.onNodeWithText("用户名").performTextInput("tester")
+        compose.onNodeWithText("密码").performTextInput("password")
+        compose.onNodeWithText("登录", useUnmergedTree = true).performScrollTo().performClick()
+        waitText("最近入库")
+        compose.onNodeWithText("采集").performClick()
+        waitText("去整理 ›")
+        compose.onNodeWithText("去整理 ›").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
+        waitText("1 / 2")
+        val preview = compose.onNodeWithTag("capture-preview-image")
+        preview.performTouchInput { swipeLeft() }
+        waitText("2 / 2")
+        preview.performTouchInput { swipeRight() }
+        waitText("1 / 2")
+        preview.performTouchInput { swipeUp() }
+        waitText("1 / 1")
+        compose.onNodeWithContentDescription("正在入库").assertExists()
+        captureImportRunning.set(false)
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("正在入库").fetchSemanticsNodes().isEmpty() }
+        preview.performTouchInput { swipeDown() }
+        waitText("待整理区没有照片")
+    }
 
     @Test fun connectsLogsInBrowsesAndUsesAuthenticatedApiWithoutMediaPermissions() {
         compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
