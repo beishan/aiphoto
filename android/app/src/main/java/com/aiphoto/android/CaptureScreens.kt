@@ -222,18 +222,21 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         return scope.launch {
             val old = state.assets
             val originalPreview = previewId
+            fun advancePreview(completed: Set<Long>) {
+                if (originalPreview != null && originalPreview == previewId && originalPreview in completed) {
+                    val currentIndex = old.indexOfFirst { it.id == originalPreview }
+                    val remaining = state.assets.mapTo(hashSetOf()) { it.id }
+                    previewId = old.drop(currentIndex + 1).firstOrNull { it.id in remaining }?.id
+                        ?: old.take(currentIndex.coerceAtLeast(0)).lastOrNull { it.id in remaining }?.id
+                        ?: state.assets.firstOrNull()?.id
+                }
+            }
             val completed = if (operation == CaptureAction.IMPORT && originalPreview != null && targets.singleOrNull()?.id == originalPreview) {
                 if (vm.queueCapturePreviewImport(targets.single())) setOf(originalPreview) else emptySet()
             } else {
-                state.perform(operation, targets)
+                state.perform(operation, targets, ::advancePreview)
             }
-            if (originalPreview != null && originalPreview == previewId && originalPreview in completed) {
-                val currentIndex = old.indexOfFirst { it.id == originalPreview }
-                val remaining = state.assets.mapTo(hashSetOf()) { it.id }
-                previewId = old.drop(currentIndex + 1).firstOrNull { it.id in remaining }?.id
-                    ?: old.take(currentIndex.coerceAtLeast(0)).lastOrNull { it.id in remaining }?.id
-                    ?: state.assets.firstOrNull()?.id
-            }
+            advancePreview(completed)
             if (selecting && state.selected.isEmpty() && completed.isNotEmpty()) selecting = false
         }
     }

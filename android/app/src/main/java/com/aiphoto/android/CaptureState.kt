@@ -183,7 +183,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         }
     }
 
-    suspend fun perform(action: CaptureAction, targets: Collection<CaptureAsset>): Set<Long> {
+    suspend fun perform(action: CaptureAction, targets: Collection<CaptureAsset>, onRemoved: (Set<Long>) -> Unit = {}): Set<Long> {
         if (busy || targets.isEmpty() || targets.any { it.id in previewImports }) return emptySet()
         busy = true
         importingSelection = action == CaptureAction.IMPORT
@@ -231,6 +231,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                 }
             }
             reviewAssets = reviewAssets.filterNot { it.id in completed }
+            onRemoved(completed)
             selected = selected - completed
             if (error == null || completed.isNotEmpty()) notice = "已${action.title} ${completed.size} 张" +
                 if (completed.size != targets.size) "，${targets.size - completed.size} 张待处理" else ""
