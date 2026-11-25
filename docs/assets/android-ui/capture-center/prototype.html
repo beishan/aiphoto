@@ -30,6 +30,7 @@
         <button type="button" data-view="tasks">任务</button>
         <button type="button" data-view="gallery">待整理</button>
       </nav>
+      <div class="import-progress" role="progressbar" aria-label="正在入库" hidden></div>
       <div class="system"><span></span></div>
     </section>
   </div>
@@ -49,16 +50,17 @@
 :is(#capture-mock,#design-screen) button:disabled {opacity:.45}
 :is(#capture-mock,#design-screen) button:focus-visible {outline:2px solid var(--blue);outline-offset:2px}
 :is(#capture-mock,#design-screen) .stage {padding:12px 0;display:grid;place-items:center}
-:is(#capture-mock,#design-screen) .phone {position:relative;display:flex;flex-direction:column;--floating-nav-clearance:70px;width:min(100%,400px);aspect-ratio:1200 / 2608;min-height:0;background:var(--paper);border:1px solid var(--line);border-radius:32px;overflow:hidden;box-shadow:0 12px 28px #10143720}
-:is(#capture-mock,#design-screen) .status {display:flex;flex:none;justify-content:space-between;padding:13px 23px 5px;font-size:12px}
-:is(#capture-mock,#design-screen) .system {display:grid;place-items:center;height:24px;flex:none}
+:is(#capture-mock,#design-screen) .phone {position:relative;display:flex;flex-direction:column;--floating-nav-clearance:70px;--status-height:35px;--system-height:24px;width:min(100%,400px);aspect-ratio:1200 / 2608;min-height:0;background:var(--paper);border:1px solid var(--line);border-radius:32px;overflow:hidden;box-shadow:0 12px 28px #10143720}
+:is(#capture-mock,#design-screen) .status {position:absolute;z-index:5;inset:0 0 auto;display:flex;justify-content:space-between;height:var(--status-height);padding:11px 23px 0;font-size:12px;pointer-events:none}
+:is(#capture-mock,#design-screen) .system {position:absolute;z-index:5;inset:auto 0 0;display:grid;place-items:center;height:var(--system-height);pointer-events:none}
 :is(#capture-mock,#design-screen) .system span {display:block;width:96px;height:4px;border-radius:6px;background:currentColor;opacity:.65}
-:is(#capture-mock,#design-screen) .app {flex:1;display:flex;flex-direction:column;position:relative;min-height:0;overflow-y:auto;overscroll-behavior-y:contain}
-:is(#capture-mock,#design-screen) .top {display:flex;flex:none;position:sticky;top:0;z-index:2;background:var(--paper);align-items:center;gap:10px;min-height:60px;padding:6px 14px 6px 68px}
-:is(#capture-mock,#design-screen) .back {position:absolute;left:14px;top:8px;z-index:1;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--card);border:1px solid var(--line);box-shadow:0 3px 10px #12193124;font-size:23px}
+:is(#capture-mock,#design-screen) .app {flex:1;display:flex;flex-direction:column;position:relative;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-bottom:var(--system-height)}
+:is(#capture-mock,#design-screen) :is(.app,.photo-scroll,.review-scroll) {scrollbar-width:none}
+:is(#capture-mock,#design-screen) .top {display:flex;flex:none;position:sticky;top:0;z-index:2;background:var(--paper);align-items:center;gap:10px;min-height:calc(60px + var(--status-height));padding:calc(6px + var(--status-height)) 14px 6px 68px}
+:is(#capture-mock,#design-screen) .back {position:absolute;left:14px;top:calc(8px + var(--status-height));z-index:1;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--card);border:1px solid var(--line);box-shadow:0 3px 10px #12193124;font-size:23px}
 :is(#capture-mock,#design-screen) .full .back {background:#252939;border-color:#3c4257}
-:is(#capture-mock,#design-screen) .segments {position:absolute;z-index:4;left:50%;bottom:30px;transform:translateX(-50%);isolation:isolate;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(76%,264px);padding:4px;border:1px solid var(--line);border-radius:30px;background:var(--card);background:color-mix(in srgb,var(--card) 94%,transparent);backdrop-filter:blur(12px);box-shadow:0 5px 20px #12193126}
-:is(#capture-mock,#design-screen) .phone:has(> .segments:not([hidden])):not(.scroll-gallery,.scroll-review) > .app {padding-bottom:var(--floating-nav-clearance)}
+:is(#capture-mock,#design-screen) .segments {position:absolute;z-index:4;left:50%;bottom:calc(var(--system-height) + 6px);transform:translateX(-50%);isolation:isolate;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(76%,264px);padding:4px;border:1px solid var(--line);border-radius:30px;background:var(--card);background:color-mix(in srgb,var(--card) 94%,transparent);backdrop-filter:blur(12px);box-shadow:0 5px 20px #12193126}
+:is(#capture-mock,#design-screen) .phone:has(> .segments:not([hidden])):not(.scroll-gallery,.scroll-review) > .app {padding-bottom:calc(var(--floating-nav-clearance) + var(--system-height))}
 :is(#capture-mock,#design-screen) .segments::before {content:"";position:absolute;z-index:-1;inset:4px auto 4px 4px;width:calc((100% - 8px) / 3);border-radius:24px;background:var(--tint);transform:translateX(calc(var(--segment,0) * 100%));transition:transform 180ms ease}
 :is(#capture-mock,#design-screen) .segments button {border-radius:24px;color:var(--muted)}
 :is(#capture-mock,#design-screen) .segments button[aria-current=page] {color:var(--blue);font-weight:650}
@@ -91,38 +93,49 @@
 :is(#capture-mock,#design-screen) .bottom button:first-child {color:var(--blue)}
 :is(#capture-mock,#design-screen) .bottom button:last-child {color:var(--red)}
 :is(#capture-mock,#design-screen) .phone.full {background:#101218;color:#f8f9ff}
-:is(#capture-mock,#design-screen) .full .app {justify-content:space-between}
-:is(#capture-mock,#design-screen) .full .top {display:grid;background:#101218;grid-template-columns:44px 1fr 44px;justify-items:center;gap:0;padding:6px 14px}
+:is(#capture-mock,#design-screen) .full .app {overflow:hidden}
+:is(#capture-mock,#design-screen) .full .top {display:grid;background:#101218;grid-template-columns:44px 1fr 44px;justify-items:center;gap:0;padding:calc(6px + var(--status-height)) 14px 6px}
 :is(#capture-mock,#design-screen) .full .top strong {grid-column:2}
-:is(#capture-mock,#design-screen) .frame {min-height:140px;flex:1;display:grid;place-items:center;position:relative;touch-action:none;user-select:none}
-:is(#capture-mock,#design-screen) .frame img {width:100%;max-height:420px;object-fit:contain;pointer-events:none}
-:is(#capture-mock,#design-screen) .gesture {position:absolute;top:44%;left:50%;transform:translate(-50%,-50%);background:#151827db;padding:10px 18px;border-radius:20px;white-space:nowrap}
+:is(#capture-mock,#design-screen) .frame {min-height:0;flex:1;display:grid;place-items:center;position:relative;overflow:hidden;user-select:none}
+:is(#capture-mock,#design-screen) .frame img {position:absolute;inset:50% auto auto 0;width:100%;height:auto;transform:translateY(-50%);pointer-events:none}
+#capture-mock .capture-frame,#design-screen .viewer-frame {touch-action:none}
+#capture-mock :is(.preview-track,.preview-underlay) {position:absolute;inset:0}
+#capture-mock .preview-underlay {opacity:0;transform:scale(.94)}
+#capture-mock .preview-slide {position:absolute;inset:0 auto 0 calc(var(--page) * (100% + 12px));width:100%;overflow:hidden;background:#101218}
+#capture-mock .import-progress {position:absolute;z-index:5;inset:auto 0 var(--system-height);height:2px;overflow:hidden;background:#666be848;pointer-events:none}
+#capture-mock .import-progress::after {content:"";display:block;width:58%;height:100%;background:linear-gradient(90deg,transparent,#8878ff,#64dfff,#f591e8,transparent);animation:import-glow 1.3s linear infinite}
+@keyframes import-glow {from{transform:translateX(-100%)}to{transform:translateX(173%)}}
+#design-screen .viewer-frame .exit-like {position:absolute;z-index:2;top:8px;right:8px;padding:0 12px;border-radius:24px;background:#303b63;color:#e6eaff}
+#design-screen .viewer-controls-hidden .viewer-frame .exit-like {top:calc(var(--status-height) + 8px)}
+#design-screen .floating-thumb {position:absolute;z-index:1;font-size:38px;line-height:1;pointer-events:none}
+@media (prefers-reduced-motion:reduce) {#capture-mock .import-progress::after {animation:none;transform:translateX(36%)}}
 :is(#capture-mock,#design-screen) .preview-actions {display:grid;gap:6px;padding:10px 14px}
-:is(#capture-mock,#design-screen) .preview-actions .row button {flex:1;background:#252939;border-radius:12px}
+:is(#capture-mock,#design-screen) .preview-actions .row button {flex:1;background:#252939;border-radius:12px;color:#f8f9ff}
 :is(#capture-mock,#design-screen) .preview-actions .row {gap:5px}
 :is(#capture-mock,#design-screen) .preview-actions .muted {text-align:center;color:#c0c6da}
 :is(#capture-mock,#design-screen) .sheet {position:absolute;z-index:3;inset:0;display:flex;align-items:flex-end;background:#14162a77}
-:is(#capture-mock,#design-screen) .sheet article {width:100%;background:var(--card);color:var(--ink);padding:18px;border-radius:22px 22px 0 0;display:grid;gap:9px}
+:is(#capture-mock,#design-screen) .sheet article {width:100%;background:var(--card);color:var(--ink);padding:18px 18px calc(18px + var(--system-height));border-radius:22px 22px 0 0;display:grid;gap:9px}
 :is(#capture-mock,#design-screen) .sheet button {border-radius:12px;background:var(--tint);color:var(--blue);padding:0 12px}
 :is(#capture-mock,#design-screen) .sheet .confirm {background:var(--redBg);color:var(--red)}
 :is(#capture-mock,#design-screen) .notice {padding:0 16px 8px;color:var(--muted);font-size:12px}
+#capture-mock .full .notice {position:absolute;z-index:2;inset:auto 12px calc(var(--system-height) + 66px);padding:8px 12px;border-radius:10px;background:#252939;color:#f8f9ff;pointer-events:none}
+#design-screen .like-status {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 :is(#capture-mock,#design-screen) [hidden] {display:none!important}
 #design-screen .main-title {padding-inline:16px}
 @media (max-width:600px) and (max-height:790px) {
   :is(#capture-mock,#design-screen) .phone {max-height:max(400px,calc(100svh - 116px))}
 }
-#design-screen .scroll-gallery .app {overflow:hidden}
-#capture-mock .scroll-review .app {overflow:hidden}
-#capture-mock .review-scroll {position:relative;flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-top:60px}
-#capture-mock .scroll-review:has(> .segments:not([hidden])) .review-scroll {padding-bottom:var(--floating-nav-clearance)}
-#capture-mock .scroll-review .bottom {flex:none}
+:is(#design-screen .scroll-gallery,#capture-mock .scroll-review) .app {overflow:hidden;padding-bottom:0}
+#capture-mock .review-scroll {position:relative;flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-top:calc(60px + var(--status-height));padding-bottom:var(--system-height)}
+#capture-mock .scroll-review:has(> .segments:not([hidden])) .review-scroll {padding-bottom:calc(var(--floating-nav-clearance) + var(--system-height))}
+#capture-mock .scroll-review .bottom {flex:none;padding-bottom:calc(4px + var(--system-height))}
 #capture-mock .review-scroll .body {padding-top:12px}
 #capture-mock .review-selected-count {flex:none;padding:4px 6px;border-radius:14px;background:var(--tint);color:var(--blue);font-size:11px;white-space:nowrap}
 #capture-mock .select-all-icon {position:relative;display:block;width:16px;height:16px;border:1.5px solid currentColor;border-radius:4px}
 #capture-mock .select-all-icon::after {content:"";position:absolute;left:4px;top:2px;width:4px;height:7px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
 #capture-mock .gallery-header .back {pointer-events:auto}
 #capture-mock .gallery-header .gallery-icon-button.review-select {width:auto;min-width:56px;padding:0 10px}
-#design-screen .photo-scroll {position:relative;flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-top:60px;padding-bottom:var(--floating-nav-clearance)}
+#design-screen .photo-scroll {position:relative;flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;padding-top:calc(60px + var(--status-height));padding-bottom:calc(var(--floating-nav-clearance) + var(--system-height))}
 #design-screen .photo-scroll .body {padding-top:12px}
 :is(#design-screen,#capture-mock) .gallery-header {position:absolute;inset:0 0 auto;background:transparent;pointer-events:none}
 :is(#design-screen,#capture-mock) .gallery-header .gallery-icon-button {pointer-events:auto}
@@ -130,6 +143,7 @@
 :is(#design-screen,#capture-mock) .photo-title > * {position:absolute;inset:0;display:flex;align-items:center;white-space:nowrap}
 :is(#design-screen,#capture-mock) .photo-title h2 {transform:translateY(calc(-32px * var(--gallery-progress,0)))}
 :is(#design-screen,#capture-mock) .photo-title .current-date {width:max-content;max-width:100%;padding:0 10px;border-radius:16px;background:var(--paper);background:color-mix(in srgb,var(--paper) 84%,transparent);backdrop-filter:blur(8px);font-size:16px;font-weight:650;transform:translateY(calc(32px - 32px * var(--gallery-progress,0)))}
+#design-screen .photo-title .current-date {padding:0;border-radius:0;background:none;backdrop-filter:none;font-weight:750}
 :is(#design-screen,#capture-mock) .gallery-header .gallery-icon-button {opacity:calc(1 - .42 * var(--gallery-progress,0));flex:none}
 :is(#design-screen,#capture-mock) .gallery-header {gap:6px}
 :is(#design-screen,#capture-mock) .gallery-header .gallery-icon-button {display:grid;place-items:center;width:44px;border-radius:50%;background:var(--tint);color:var(--blue)}
@@ -244,10 +258,26 @@ const names = ['海岸日落','海滩','山崖','沙丘','山谷','海上岛屿'
 const photoName = index => names[index] ?? '采集照片 '+(index+1);
 const pending = new Set(photos.map((_, index) => index));
 const selected = new Set();
+const importing = new Set();
+const importProgress = root.querySelector('.import-progress');
 const actions = ['入库','忽略','删除','删除并忽略'];
-let view = 'overview', index = 0, message = '', confirmation = null, task = null, origin = null, longPress;
+let view = 'overview', index = 0, message = '', confirmation = null, task = null, drag = null, settlingFrame = null, longPress;
 let reviewScroll = 0;
 const btn = (label, attrs = '') => '<button type="button" '+attrs+'>'+label+'</button>';
+const previewImage = (id, decorative = false) =>
+  '<img draggable="false" alt="'+(decorative?'':photoName(id))+'" src="'+photos[id]+'">';
+function previewFrame(list, current) {
+  const slides=[-1,0,1].map(offset=>{
+    const id=list[current+offset];
+    return id===undefined?'':'<div class="preview-slide" data-page="'+offset+'" style="--page:'+offset+'">'+previewImage(id,offset!==0)+'</div>';
+  }).join('');
+  const adjacent=list[current+1]??list[current-1];
+  return '<div class="frame capture-frame">'+(adjacent===undefined?'':'<div class="preview-underlay" aria-hidden="true">'+previewImage(adjacent,true)+'</div>')+
+    '<div class="preview-track">'+slides+'</div></div>';
+}
+function syncImportProgress() {
+  importProgress.hidden=importing.size===0 || !['preview','gallery','selection'].includes(view);
+}
 const back = (label = '返回') => btn('←','class="back" aria-label="'+label+'" data-back');
 const header = (title = '') => '<header class="top">'+back()+(title?'<h2>'+title+'</h2>':'')+'</header>';
 const taskNames = ['海岸风景 · 定时采集','旅行相册 · 手动采集','自然摄影 · 定时采集'];
@@ -284,7 +314,12 @@ function render() {
   } else if(view==='tasks'){
     content=task===null?header()+'<div class="body"><section><h3>采集任务</h3><div class="tasks">'+taskRows()+'</div></section></div>':header('任务详情')+'<div class="body"><div class="tile"><strong>'+taskNames[task]+'</strong><span class="muted">'+statuses[task]+'</span>'+(task===0?'<progress value="32" max="50" aria-label="采集进度"></progress>':task===2?'<span class="danger">下载超时</span>'+btn('重试','data-retry'):btn('查看待整理照片','data-view="gallery"'))+'</div></div>';
   } else if(view==='preview'){
-    content='<header class="top">'+back('返回待整理')+'<strong>'+([...pending].indexOf(index)+1)+' / '+pending.size+'</strong>'+btn('⋯','class="icon" aria-label="更多操作" data-menu')+'</header><div class="frame"><img draggable="false" alt="'+photoName(index)+'" src="'+photos[index]+'"><span class="gesture" hidden></span></div><div class="preview-actions"><p class="muted">左右滑动切换照片</p><div class="row">'+btn('‹','aria-label="上一张" data-step="-1"')+btn('↑ 入库','data-action="0"')+btn('↓ 删除并忽略','data-action="3"')+btn('›','aria-label="下一张" data-step="1"')+'</div></div>';
+    const list=[...pending], current=list.indexOf(index);
+    content='<header class="top">'+back('返回待整理')+'<strong>'+(current+1)+' / '+list.length+'</strong>'+
+      btn('⋯','class="icon" aria-label="更多操作" data-menu')+'</header>'+previewFrame(list,current)+
+      '<div class="preview-actions"><div class="row">'+btn('‹','aria-label="上一张" data-step="-1"'+(current>0?'':' disabled'))+
+      btn('↑ 入库','data-action="0"')+btn('↓ 删除并忽略','data-action="3"')+
+      btn('›','aria-label="下一张" data-step="1"'+(current<list.length-1?'':' disabled'))+'</div></div>';
   } else {
     const selecting=view==='selection';
     const disabled=pending.size?'':' disabled';
@@ -305,6 +340,7 @@ function render() {
     content+='<div class="sheet"><article role="dialog" aria-label="照片操作">'+(confirmation==='menu'?'<strong>照片操作</strong>'+actions.map((action,i)=>btn(action,'data-action="'+i+'"')).join('')+btn('关闭','data-cancel'):'<h3>'+actions[confirmation]+' '+count+' 张照片？</h3><p class="muted">移出待整理区，文件按 NAS 清理规则处理。</p><div class="row">'+btn('取消','data-cancel')+btn('确认'+actions[confirmation],'class="confirm" data-confirm')+'</div>')+'</article></div>';
   }
   app.innerHTML=content;
+  syncImportProgress();
   if(reviewing){
     const scroll=app.querySelector('.review-scroll');
     scroll.scrollTop=reviewScroll;
@@ -325,7 +361,25 @@ function apply(action){
   if(!ids.length)return;
   const before=[...pending];
   ids.forEach(i=>pending.delete(i));
-  message='已'+actions[action]+' '+ids.length+' 张';
+  if(action===0){
+    ids.forEach(i=>importing.add(i));
+    message='';
+    // The simulated NAS job finishes after the preview moves on.
+    setTimeout(()=>{
+      ids.forEach(i=>importing.delete(i));
+      syncImportProgress();
+      if(root.hidden || !['preview','gallery','selection'].includes(view))return;
+      message='已入库 '+ids.length+' 张';
+      let notice=app.querySelector('.notice');
+      if(!notice){
+        notice=document.createElement('p');
+        notice.className='notice';
+        notice.setAttribute('role','status');
+        app.append(notice);
+      }
+      notice.textContent=message;
+    },2200);
+  } else message='已'+actions[action]+' '+ids.length+' 张';
   confirmation=null;
   selected.clear();
   if(current && pending.size) index=before.slice(before.indexOf(index)+1).find(i=>pending.has(i)) ?? [...pending].at(-1);
@@ -341,7 +395,7 @@ root.addEventListener('scroll',event=>{
 },{capture:true,passive:true});
 root.addEventListener('click',event=>{
   const button=event.target.closest('button');
-  if(!button)return;
+  if(!button || settlingFrame?.isConnected)return;
   const d=button.dataset;
   if(d.view){message='';navigate(d.view);}
   else if('back' in d){message='';if(view==='overview'){root.dispatchEvent(new Event('capture-exit'));return;}navigate(view==='preview'||view==='selection'?'gallery':task!==null?'tasks':'overview');}
@@ -354,42 +408,111 @@ root.addEventListener('click',event=>{
     if(view==='selection'){if(selected.has(i))selected.delete(i);else selected.add(i);render();}
     else{index=i;navigate('preview');}
   }
-  else if('step' in d)changePhoto(Number(d.step));
+  else if('step' in d){
+    const frame=app.querySelector('.capture-frame');
+    if(frame)void slidePreview(frame,0,Number(d.step));
+  }
   else if('action' in d)request(Number(d.action));
   else if('menu' in d){confirmation='menu';render();}
   else if('cancel' in d){confirmation=null;render();}
   else if('confirm' in d)apply(confirmation);
   else if('retry' in d){message='已提交重试';render();}
 });
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function animateTransform(element, from, to, duration) {
+  return element.animate(
+    [{transform:from},{transform:to}],
+    {duration:reduceMotion.matches?0:duration,easing:'cubic-bezier(.2,.75,.25,1)',fill:'forwards'},
+  );
+}
+const slideX = distance => 'translate3d('+distance+'px,0,0)';
+function throwTransform(x,y,height) {
+  const rotation=Math.max(-16,Math.min(16,y/height*18));
+  return 'translate3d('+x+'px,'+y+'px,0) rotate('+rotation+'deg)';
+}
+async function slidePreview(frame, distance, direction) {
+  const track=frame.querySelector('.preview-track');
+  settlingFrame=frame;
+  const target=direction?-(frame.clientWidth+12)*direction:0;
+  const animation=animateTransform(track,slideX(distance),slideX(target),220);
+  try {
+    await animation.finished;
+    if(frame.isConnected && direction)changePhoto(direction);
+  } finally {
+    track.style.transform='';
+    animation.cancel();
+    if(settlingFrame===frame)settlingFrame=null;
+  }
+}
+async function throwPreview(frame, x, y, action) {
+  const current=frame.querySelector('[data-page="0"]');
+  const underlay=frame.querySelector('.preview-underlay');
+  const direction=Math.sign(y);
+  const height=frame.clientHeight;
+  settlingFrame=frame;
+  const animation=animateTransform(current,throwTransform(x,y,height),
+    action===null?'none':throwTransform(x+direction*frame.clientWidth*.16,direction*height*1.2,height),
+    action===null?160:220);
+  try {
+    await animation.finished;
+    if(frame.isConnected && action!==null)request(action);
+  } finally {
+    current.style.transform='';
+    if(underlay){underlay.style.opacity='';underlay.style.transform='';}
+    animation.cancel();
+    if(settlingFrame===frame)settlingFrame=null;
+  }
+}
 root.addEventListener('pointerdown',event=>{
+  if(!event.isPrimary || event.button!==0)return;
   const tile=event.target.closest('.thumb');
   if(tile && view==='gallery'){
     longPress=setTimeout(()=>{view='selection';selected.add(Number(tile.dataset.photo));render();},480);
   }
-  const frame=event.target.closest('.frame');
-  if(!frame||event.clientX-frame.getBoundingClientRect().left<20||frame.getBoundingClientRect().right-event.clientX<20)return;
-  origin={x:event.clientX,y:event.clientY};
+  const frame=event.target.closest('.capture-frame');
+  if(!frame || settlingFrame?.isConnected)return;
+  const bounds=frame.getBoundingClientRect();
+  if(event.clientX-bounds.left<20 || bounds.right-event.clientX<20)return;
+  drag={frame,id:event.pointerId,x:event.clientX,y:event.clientY,dx:0,dy:0,axis:null};
   frame.setPointerCapture(event.pointerId);
 });
 root.addEventListener('pointermove',event=>{
-  if(!origin)return;
-  const dx=event.clientX-origin.x,dy=event.clientY-origin.y;
-  const cue=app.querySelector('.gesture');
-  if(!cue)return;
-  cue.hidden=Math.abs(dy)<28||Math.abs(dy)<=Math.abs(dx);
-  cue.textContent=dy<0?'↑ 入库':'↓ 删除并忽略';
+  if(!drag || drag.id!==event.pointerId)return;
+  const {frame}=drag;
+  const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+  if(!drag.axis && Math.hypot(dx,dy)>8)drag.axis=Math.abs(dx)>Math.abs(dy)?'x':'y';
+  if(drag.axis==='x'){
+    const adjacent=frame.querySelector('[data-page="'+(dx<0?1:-1)+'"]');
+    drag.dx=adjacent?dx:dx*.22;
+    frame.querySelector('.preview-track').style.transform=slideX(drag.dx);
+  } else if(drag.axis==='y'){
+    drag.dx=dx*.38;
+    drag.dy=dy;
+    frame.querySelector('[data-page="0"]').style.transform=throwTransform(drag.dx,dy,frame.clientHeight);
+    const underlay=frame.querySelector('.preview-underlay');
+    if(underlay){
+      const reveal=Math.min(1,Math.abs(dy)/frame.clientHeight*2.5);
+      underlay.style.opacity=reveal;
+      underlay.style.transform='scale('+(.94+.06*reveal)+')';
+    }
+  }
 });
-root.addEventListener('pointercancel',()=>{clearTimeout(longPress);origin=null;const cue=app.querySelector('.gesture');if(cue)cue.hidden=true;});
-root.addEventListener('pointerup',event=>{
+function finishPreviewDrag(event, cancelled=false) {
   clearTimeout(longPress);
-  if(!origin)return;
-  const dx=event.clientX-origin.x,dy=event.clientY-origin.y;
-  origin=null;
-  const cue=app.querySelector('.gesture');
-  if(cue)cue.hidden=true;
-  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>45)changePhoto(dx<0?1:-1);
-  else if(Math.abs(dy)>Math.abs(dx)&&Math.abs(dy)>65)request(dy<0?0:3);
-});
+  if(!drag || drag.id!==event.pointerId)return;
+  const {frame,dx,dy,axis}=drag;
+  drag=null;
+  if(!frame.isConnected)return;
+  if(axis==='x'){
+    const direction=dx<0?1:-1;
+    const commit=!cancelled && Math.abs(dx)>45 && frame.querySelector('[data-page="'+direction+'"]');
+    void slidePreview(frame,dx,commit?direction:0);
+  } else if(axis==='y') {
+    void throwPreview(frame,dx,dy,!cancelled && Math.abs(dy)>=64?(dy<0?0:3):null);
+  }
+}
+root.addEventListener('pointercancel',event=>finishPreviewDrag(event,true));
+root.addEventListener('pointerup',event=>finishPreviewDrag(event));
 render();
 const demos = {
   '01-overview': () => navigate('overview'),
@@ -426,7 +549,9 @@ root.addEventListener('capture-open', event => {
   const labels = new Map(groups.flatMap(([,pages])=>pages));
   let view = 'photos', lastDesign = 'photos', photo = 0, notice = '';
   const favorites = new Set([3,4,8,10,12,14,17,20,22,24,27,30]);
-  const likedPhotos = [0,2,7,8,11,15,18,21,24,25,29,33];
+  const likeCounts = new Map([0,2,7,8,11,15,18,21,24,25,29,33].map(id=>[id,1]));
+  const likedPhotos = () => [...likeCounts.keys()].sort((a,b)=>likeCounts.get(b)-likeCounts.get(a));
+  let likeMode = false, viewerControls = true, pendingTap = null, nextThumb = 0;
   let galleryScroll = 0;
   let personName = '小满', personParent = 'people';
   let viewerParent = 'photos', videoParent = 'photos', favoritesParent = 'profile';
@@ -484,21 +609,25 @@ root.addEventListener('capture-open', event => {
     login: () => body(form('login',field('account','账户','beibei')+field('password','密码','demo','password'),'登录')),
     photos: () => '<div class="photo-scroll" role="region" aria-label="可滚动照片图库">'+
       body(group('最近入库','<p class="muted">'+(all.length-1)+' 张照片 · 1 个视频</p>'))+datedPhotoGroups(all,grid)+'</div>',
-    viewer: () => '<div class="frame">'+img(photo,renamed)+'</div><div class="preview-actions"><p class="muted">'+(photo+1)+' / '+images.length+'</p><div class="row">'+action('previous','上一张')+action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+action('next','下一张')+'</div></div>',
+    viewer: () => '<div class="frame viewer-frame">'+img(photo,escape(renamed))+
+      button('退出点赞模式','class="exit-like" data-action="exit-like" hidden')+
+      '<span class="like-status" role="status"></span></div><div class="preview-actions"><p class="muted">'+
+      (photo+1)+' / '+images.length+'</p><div class="row">'+action('previous','上一张')+
+      action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+action('next','下一张')+'</div></div>',
     search: () => body(searchForm()+go('filters','组合筛选 ›','menu-row')+group(search?'「'+escape(search)+'」的示例结果':'最近照片','<p class="muted">照片 · '+(search?3:6)+' 张</p>'))+grid(search?[0,2,4]:all.slice(0,6)),
     filters: () => body(form('filters',field('start','开始日期','','date')+field('end','结束日期','','date')+'<label class="field">媒体类型<select name="media"><option>全部</option><option>照片</option><option>视频</option></select></label>'+field('person','人物')+field('tag','标签')+field('rating','最低评分','0','number'),'应用筛选')),
     albums: () => body(go('new-album','＋ 新建相册','primary')+'<div class="cover-grid">'+cover(1,escape(albumName()),'24 张照片','album')+cover(3,'旅行记忆','12 张照片','album')+'</div>'),
     album: () => body(tile('<strong>'+escape(albumName())+'</strong><span class="muted">普通相册 · 24 张照片</span>'))+grid(all.slice(0,6)),
     discover: () => body(stripSection('人物','people','查看全部人物',personCards())+
       stripSection('收藏','favorites','查看全部收藏',photoStripCards(favorites,'favorites','收藏'),'photo-strip')+
-      stripSection('点赞','likes','查看全部点赞',photoStripCards(likedPhotos,'likes','点赞'),'photo-strip')+
+      stripSection('点赞','likes','查看全部点赞',photoStripCards(likedPhotos(),'likes','点赞'),'photo-strip')+
       group('家庭记忆','<div class="cover-grid">'+memoryCover(6,'timeline')+memoryCover(4,'baby')+'</div>')),
     people: () => body('<div class="people-grid">'+personCards()+'</div>'),
     person: () => grid(personPhotos()),
     timeline: () => body(group('2026 年 11 月',cover(6,'海边周末','11 月 24 日','viewer'))+group('2026 年 10 月',cover(2,'秋日旅行','10 月 14 日','viewer'))),
     baby: () => body(tile('<strong>小满的成长</strong><span class="muted">3 岁 · 成长相册</span>')+group('最近的成长记录',cover(4,'第一次去海边','2026 年 11 月','viewer'))),
     favorites: () => photoList('收藏照片',[...favorites]),
-    likes: () => photoList('点赞照片',likedPhotos),
+    likes: () => photoList('点赞照片',likedPhotos()),
     trash: () => body(restored?tile('回收站已清空'):tile('<strong>待恢复的照片</strong><span class="muted">1 张 · 采集于 11 月 20 日</span>'+action('restore','恢复照片','primary')))+(restored?'':grid([6])),
     profile: () => body(tile('<strong>beibei</strong><span class="muted">家庭 NAS</span>')+tile(row('favorites','收藏照片')+row('trash','回收站')+row('downloads','下载记录')+row('appearance','外观与缓存')+row('01-overview','采集中心'))),
     appearance: () => body(tile('<label class="field">外观<select name="theme">'+['跟随系统','浅色','深色'].map(mode=>'<option'+(mode===theme?' selected':'')+'>'+mode+'</option>').join('')+'</select></label>')+tile('<div class="row"><strong>本地缓存</strong><span class="muted">'+cache+'</span></div>'+action('cache','清理缓存'))),
@@ -537,6 +666,7 @@ root.addEventListener('capture-open', event => {
         button('<span aria-hidden="true">⋯</span>','class="gallery-icon-button header-more" data-go="profile" aria-label="更多，打开我的页面"'):'')+'</header>';
     app.scrollTop=0;
     app.innerHTML=header+screens[view]()+ (notice?'<p class="notice" role="status">'+notice+'</p>':'');
+    syncViewerControls();
     if(view==='photos'){
       const scroll=app.querySelector('.photo-scroll');
       scroll.scrollTop=galleryScroll;
@@ -547,6 +677,13 @@ root.addEventListener('capture-open', event => {
   function show(id, preserveNotice=false){
     if(view==='photos' && !screen.hidden) galleryScroll=app.querySelector('.photo-scroll')?.scrollTop ?? galleryScroll;
     if(!labels.has(id))id='photos';
+    if(id!==view){
+      clearPendingTap();
+      if(!((view==='viewer' && id==='photo-detail') || (view==='photo-detail' && id==='viewer'))){
+        likeMode=false;
+        viewerControls=true;
+      }
+    }
     picker.value=id;
     const native=Object.hasOwn(screens,id);
     screen.hidden=!native;
@@ -558,6 +695,60 @@ root.addEventListener('capture-open', event => {
     lastDesign=view=id;
     if(!preserveNotice)notice='';
     render();
+  }
+
+  function syncViewerControls(){
+    const viewer=view==='viewer';
+    phone.classList.toggle('viewer-controls-hidden',viewer && !viewerControls);
+    if(!viewer)return;
+    app.querySelector('.top').hidden=!viewerControls;
+    app.querySelector('.preview-actions').hidden=!viewerControls;
+    app.querySelector('.exit-like').hidden=!likeMode;
+  }
+
+  function clearPendingTap(){
+    if(!pendingTap)return;
+    clearTimeout(pendingTap.timer);
+    pendingTap=null;
+  }
+
+  function likeAt(frame,x,y){
+    likeMode=true;
+    syncViewerControls();
+    const count=(likeCounts.get(photo)??0)+1;
+    likeCounts.set(photo,count);
+    frame.querySelector('.like-status').textContent='已点赞，共 '+count+' 个赞';
+    const thumb=document.createElement('span');
+    thumb.className='floating-thumb';
+    thumb.setAttribute('aria-hidden','true');
+    thumb.textContent='👍';
+    thumb.style.left=x+'px';
+    thumb.style.top=y+'px';
+    const direction=nextThumb++%2===0?1:-1;
+    frame.append(thumb);
+    thumb.animate([
+      {transform:'translate(-50%,-50%) scale(.72)',opacity:1},
+      {transform:'translate(-50%,-50%) translate('+direction*15+'px,-48px) rotate('+direction*8+'deg) scale(1.24)',opacity:1,offset:.28},
+      {transform:'translate(-50%,-50%) translate('+direction*3+'px,-108px) rotate('+direction*-4+'deg) scale(1.24)',opacity:.48,offset:.65},
+      {transform:'translate(-50%,-50%) translate('+direction*14+'px,-156px) rotate('+direction*-16+'deg) scale(1.24)',opacity:0}
+    ],{duration:matchMedia('(prefers-reduced-motion: reduce)').matches?0:1050}).finished.then(()=>thumb.remove());
+  }
+
+  function tapViewer(frame,event){
+    const bounds=frame.getBoundingClientRect();
+    const x=event.clientX-bounds.left,y=event.clientY-bounds.top;
+    if(likeMode){likeAt(frame,x,y);return;}
+    if(pendingTap && Math.hypot(x-pendingTap.x,y-pendingTap.y)<=36){
+      clearPendingTap();
+      likeAt(frame,x,y);
+      return;
+    }
+    clearPendingTap();
+    pendingTap={x,y,timer:setTimeout(()=>{
+      pendingTap=null;
+      viewerControls=!viewerControls;
+      syncViewerControls();
+    },300)};
   }
 
   let stripDrag = null;
@@ -595,7 +786,11 @@ root.addEventListener('capture-open', event => {
 
   screen.addEventListener('click',event=>{
     const control=event.target.closest('button');
-    if(!control)return;
+    if(!control){
+      const frame=event.target.closest('.viewer-frame');
+      if(frame)tapViewer(frame,event);
+      return;
+    }
     const {go:id,photo:index,person:name,action:command}=control.dataset;
     if(index!==undefined)photo=Number(index);
     if(name!==undefined){personName=name;personParent=view;}
@@ -606,6 +801,12 @@ root.addEventListener('capture-open', event => {
       show(id);return;
     }
     if(!command)return;
+    if(command==='exit-like'){
+      likeMode=false;
+      syncViewerControls();
+      return;
+    }
+    clearPendingTap();
     notice='';
     switch(command){
       case 'previous': photo=Math.max(0,photo-1);break;
@@ -616,6 +817,12 @@ root.addEventListener('capture-open', event => {
       case 'download': download=download==='进行中'?'已取消':download==='已取消'?'进行中':'已完成';break;
     }
     render();
+  });
+  screen.addEventListener('keydown',event=>{
+    if(event.key==='Escape' && view==='viewer' && likeMode){
+      likeMode=false;
+      syncViewerControls();
+    }
   });
   screen.addEventListener('submit',event=>{
     event.preventDefault();
@@ -639,7 +846,9 @@ root.addEventListener('capture-open', event => {
   screen.addEventListener('change',event=>{
     if(event.target.name!=='theme')return;
     theme=event.target.value;
-    screen.style.colorScheme=theme==='深色'?'dark':theme==='浅色'?'light':'light dark';
+    const scheme=theme==='深色'?'dark':theme==='浅色'?'light':'light dark';
+    screen.style.colorScheme=scheme;
+    capture.style.colorScheme=scheme;
   });
   picker.addEventListener('change',()=>show(picker.value));
   capture.addEventListener('capture-exit',()=>show(lastDesign));
