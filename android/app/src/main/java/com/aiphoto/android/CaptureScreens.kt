@@ -535,7 +535,6 @@ private fun CapturePreview(
             hint?.let { Surface(shape = CircleShape) { Text(it.title, Modifier.padding(12.dp)) } }
             if (state.busy) CircularProgressIndicator(Modifier.align(Alignment.TopCenter).padding(12.dp).size(24.dp))
         }
-        Text("左右滑动切换照片", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp), color = Color.LightGray)
         Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             TextButton({ step(-1) }, enabled = !state.busy) { Text("上一张", color = Color.White) }
             TextButton({ action(CaptureAction.IMPORT) }, enabled = !state.busy) { Text("↑ 入库", color = Color.White) }

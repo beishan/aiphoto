@@ -228,7 +228,8 @@ class AppFlowTest {
         compose.onNodeWithText("去整理 ›").performClick()
         compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
-        waitText("左右滑动切换照片")
+        waitText("上一张")
+        compose.onNodeWithText("左右滑动切换照片").assertDoesNotExist()
         compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
         waitText("1 / 1")
         compose.onNodeWithContentDescription("返回").performClick()
