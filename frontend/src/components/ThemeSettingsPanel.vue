@@ -51,6 +51,7 @@ const dockIconStyleOptions = [
 const customIconItems: Array<{ name: DockIconName; label: string }> = [
   { name: 'photo', label: '照片' }, { name: 'timeline', label: '时间线' },
   { name: 'tags', label: '标签' }, { name: 'albums', label: '相册' },
+  { name: 'people', label: '人物' },
   { name: 'baby', label: '宝宝' }, { name: 'search', label: '搜索' },
   { name: 'crawler', label: '网络采集' },
   { name: 'settings', label: '设置' }, { name: 'trashEmpty', label: '回收站（空）' },

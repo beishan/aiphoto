@@ -35,6 +35,7 @@ const tabs: Array<{ path: string; name: string; label: string; dockIcon: DockIco
   { path: '/timeline', name: 'Timeline', label: '时间线', dockIcon: 'timeline' },
   { path: '/tags', name: 'Tags', label: '标签', dockIcon: 'tags' },
   { path: '/albums', name: 'Albums', label: '相册', dockIcon: 'albums' },
+  { path: '/people', name: 'People', label: '人物', dockIcon: 'people' },
   { path: '/baby', name: 'Baby', label: '宝宝', dockIcon: 'baby' },
   { path: '/search', name: 'Search', label: '搜索', dockIcon: 'search' },
   { path: '/crawler', name: 'Crawler', label: '网络采集', dockIcon: 'crawler' },
@@ -731,8 +732,8 @@ function getDockItemStyle(index: number) {
 
   .dock-icon,
   .dock-icon-tile.custom .dock-icon {
-    width: min(var(--dock-icon-size), 34px);
-    height: min(var(--dock-icon-size), 34px);
+    width: min(var(--dock-icon-size), 34px, calc((100vw - 80px) / 11));
+    height: min(var(--dock-icon-size), 34px, calc((100vw - 80px) / 11));
   }
 
   .dock-item {
