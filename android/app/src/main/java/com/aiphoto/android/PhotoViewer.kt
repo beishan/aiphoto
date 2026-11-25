@@ -157,7 +157,7 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
         if (feed.error != null) ErrorNotice(feed.error, {}, { vm.loadFeed(source) })
         if (photo == null) { Text("照片已移除，请返回图库", Modifier.padding(24.dp), color = Color.White); return@Column }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            val videoClearance = if (controls && photo.isVideo) Modifier.navigationBarsPadding().padding(bottom = 80.dp) else Modifier
+            val videoClearance = if (controls && photo.isVideo) Modifier.navigationBarsPadding().padding(bottom = 80.dp) else if (controls) Modifier.padding(bottom = 48.dp) else Modifier
             HorizontalPager(pager, modifier = Modifier.fillMaxSize().then(videoClearance), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
                 val item = photos[index]
                 if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
@@ -228,7 +228,7 @@ private fun ViewerAction(
 ) {
     val color = if (enabled) Color(0xFF171717) else Color(0xFF6E6E73)
     Column(
-        modifier.heightIn(min = 64.dp).clickable(enabled = enabled, onClick = action).padding(vertical = 8.dp),
+        modifier.heightIn(min = 52.dp).clickable(enabled = enabled, onClick = action).padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
