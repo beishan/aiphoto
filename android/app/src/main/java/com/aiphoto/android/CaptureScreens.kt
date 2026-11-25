@@ -522,12 +522,12 @@ private fun CapturePreview(
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
-                key = { assets[it].id },
+                key = { assets.getOrNull(it)?.id ?: "removed-page-$it" },
                 pageSpacing = 12.dp,
                 beyondViewportPageCount = 1,
                 userScrollEnabled = !state.busy && !animating,
             ) { page ->
-                val asset = assets[page]
+                val asset = assets.getOrNull(page) ?: return@HorizontalPager
                 CapturePreviewPage(
                     vm, state, asset, assets.getOrNull(page + 1) ?: assets.getOrNull(page - 1),
                     active = asset.id == photo.id, ready = ready,

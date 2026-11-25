@@ -204,6 +204,27 @@ class AppFlowTest {
         waitText("待整理区没有照片")
     }
 
+    @Test fun capturePreviewDeleteAdvancesWithoutClosingPreview() {
+        compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
+        compose.onAllNodes(isToggleable())[0].performClick()
+        compose.onNodeWithText("连接服务器").performScrollTo().performClick()
+        waitText("用户名")
+        compose.onNodeWithText("用户名").performTextInput("tester")
+        compose.onNodeWithText("密码").performTextInput("password")
+        compose.onNodeWithText("登录", useUnmergedTree = true).performScrollTo().performClick()
+        waitText("最近入库")
+        compose.onNodeWithText("采集").performClick()
+        waitText("去整理 ›")
+        compose.onNodeWithText("去整理 ›").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
+        waitText("1 / 2")
+        compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
+        waitText("1 / 1")
+        compose.onNodeWithTag("capture-preview-image").assertExists()
+        compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
+        waitText("待整理区没有照片")
+    }
     @Test fun connectsLogsInBrowsesAndUsesAuthenticatedApiWithoutMediaPermissions() {
         compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
         compose.onAllNodes(isToggleable())[0].performClick()
