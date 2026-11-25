@@ -139,7 +139,7 @@ import java.util.Locale
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         vm.imageLoader?.let { loader ->
             AsyncImage(model = ImageRequest.Builder(context).data(if (failed) vm.mediaUrl(photo.thumbnailUrl) else if (original) vm.mediaUrl(photo.originalUrl) else vm.preview(photo)).size(2048, 2048).build(), imageLoader = loader,
-                contentDescription = photo.name, contentScale = ContentScale.Fit,
+                contentDescription = photo.name, contentScale = ContentScale.FillWidth,
                 onError = { failed = true }, modifier = Modifier.fillMaxSize()
                     .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y }
                     .pointerInput(photo.id) { detectTapGestures(onTap = { onTap() }, onDoubleTap = { scale = if (scale > 1f) 1f else 2f; offset = androidx.compose.ui.geometry.Offset.Zero }) }

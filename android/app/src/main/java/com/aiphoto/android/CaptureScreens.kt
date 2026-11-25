@@ -652,7 +652,7 @@ private fun CapturePreviewPage(
                 alpha = reveal
                 scaleX = .94f + .06f * reveal
                 scaleY = scaleX
-            }, ContentScale.Fit, background = Color(0xFF101218))
+            }, ContentScale.FillWidth, background = Color(0xFF101218))
         }
         Box(Modifier.fillMaxSize().graphicsLayer {
             scaleX = zoom
@@ -662,7 +662,7 @@ private fun CapturePreviewPage(
             rotationZ = (travelFraction * 18f).coerceIn(-16f, 16f)
             alpha = (1f - (abs(travelFraction) - .50f).coerceAtLeast(0f) * 1.8f).coerceAtLeast(0f)
         }) {
-            PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.Fit, background = Color(0xFF101218))
+            PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.FillWidth, background = Color(0xFF101218))
             if (active && !failed) {
                 val context = LocalContext.current
                 val request = remember(context, asset.id, retry) {
@@ -670,7 +670,7 @@ private fun CapturePreviewPage(
                 }
                 vm.imageLoader?.let { loader ->
                     AsyncImage(model = request, imageLoader = loader, contentDescription = null,
-                        contentScale = ContentScale.Fit, onError = { failed = true }, modifier = Modifier.fillMaxSize())
+                        contentScale = ContentScale.FillWidth, onError = { failed = true }, modifier = Modifier.fillMaxSize())
                 }
             }
         }
