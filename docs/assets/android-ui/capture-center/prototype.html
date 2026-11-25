@@ -111,6 +111,11 @@
 :is(#capture-mock,#design-screen) .preview-actions .row button {flex:1;background:#252939;border-radius:12px;color:#f8f9ff}
 :is(#capture-mock,#design-screen) .preview-actions .row {gap:5px}
 :is(#capture-mock,#design-screen) .preview-actions .muted {text-align:center;color:#c0c6da}
+#design-screen .viewer-actions {position:absolute;z-index:2;inset:auto 0 var(--system-height);padding:8px 24px;justify-items:center;pointer-events:none}
+#design-screen .viewer-actions .row {width:min(100%,340px);padding:0 8px;gap:0;border:1px solid #ffffffb8;border-radius:999px;background:#f8f8fad1;backdrop-filter:blur(10px);pointer-events:auto}
+#design-screen .viewer-actions .row button {display:grid;align-content:center;justify-items:center;gap:3px;min-height:62px;background:none;color:#171717;font-size:12px}
+#design-screen .viewer-actions .action-icon {display:block;width:22px;height:22px;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round;fill:none}
+#design-screen .viewer-more {grid-column:3;grid-row:1}
 :is(#capture-mock,#design-screen) .sheet {position:absolute;z-index:3;inset:0;display:flex;align-items:flex-end;background:#14162a77}
 :is(#capture-mock,#design-screen) .sheet article {width:100%;background:var(--card);color:var(--ink);padding:18px 18px calc(18px + var(--system-height));border-radius:22px 22px 0 0;display:grid;gap:9px}
 :is(#capture-mock,#design-screen) .sheet button {border-radius:12px;background:var(--tint);color:var(--blue);padding:0 12px}
@@ -550,6 +555,8 @@ root.addEventListener('capture-open', event => {
   const capture = document.getElementById('capture-mock');
   const labels = new Map(groups.flatMap(([,pages])=>pages));
   let view = 'photos', lastDesign = 'photos', photo = 0, notice = '';
+  let viewerDialog = null;
+  const deletedPhotos = new Set();
   const favorites = new Set([3,4,8,10,12,14,17,20,22,24,27,30]);
   const likeCounts = new Map([0,2,7,8,11,15,18,21,24,25,29,33].map(id=>[id,1]));
   const likedPhotos = () => [...likeCounts.keys()].sort((a,b)=>likeCounts.get(b)-likeCounts.get(a));
@@ -581,7 +588,7 @@ root.addEventListener('capture-open', event => {
   const row = (id,label,detail='') => go(id,'<span>'+label+'</span><span class="muted">'+detail+' ›</span>','menu-row');
   const field = (name,label,value='',type='text') => '<label class="field">'+label+'<input type="'+type+'" name="'+name+'" value="'+escape(value)+'"></label>';
   const form = (id, html, label) => '<form class="tile" data-form="'+id+'">'+html+'<button class="primary">'+label+'</button></form>';
-  const grid = ids => '<div class="gallery">'+ids.map(i=>{
+  const grid = ids => '<div class="gallery">'+ids.filter(id=>!deletedPhotos.has(id)).map(i=>{
     const isVideo=i===video.id;
     const label=isVideo?'播放 '+video.name:'照片 '+(i+1);
     const badge=isVideo?'<span class="video-badge" aria-hidden="true">▶ '+video.duration+'</span>':'';
@@ -592,7 +599,8 @@ root.addEventListener('capture-open', event => {
   const memoryCover = (i,id) => go(id,img(i,'')+'<strong class="cover-caption">'+labels.get(id)+'</strong>','cover memory-cover');
   const people = ['小满','家人','爷爷','奶奶','爸爸','妈妈','小北','小禾'];
   const all = images.map((_,index)=>index);
-  let viewerPhotos=all.filter(id=>id!==video.id);
+  const allViewerPhotos = () => all.filter(id=>id!==video.id && !deletedPhotos.has(id));
+  let viewerPhotos=allViewerPhotos();
   function showViewerPhoto(direction){
     const position=viewerPhotos.indexOf(photo);
     const next=viewerPhotos[position+direction];
@@ -614,19 +622,30 @@ root.addEventListener('capture-open', event => {
   const photoList = (title,ids) => body(group(title,'<p class="muted">'+ids.length+' 张照片</p>'))+
     (ids.length?grid(ids):body(tile('还没有'+title)));
 
+  const viewerIcon={
+    heart:'<path d="M20.8 4.6a5 5 0 0 0-7.1 0L12 6.3l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 20l8.8-8.3a5 5 0 0 0 0-7.1Z"/>',
+    like:'<path d="M8 10v10H4V10Zm0 0 4.4-6.4c.7-1 2.3-.4 2.1.8L14 9h5a2 2 0 0 1 2 2.4l-1.4 7A2 2 0 0 1 17.7 20H8"/>',
+    trash:'<path d="M3 6h18M9 6V4h6v2M6 6l1 14h10l1-14M10 10v6m4-6v6"/>',
+  };
+  const viewerAction=(id,icon,label,filled=false)=>action(id,'<svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"'+
+    (filled?' style="fill:currentColor"':'')+'>'+viewerIcon[icon]+'</svg><span>'+label+'</span>');
+  const viewerSheet=()=> viewerDialog===null?'':'<div class="sheet"><article role="dialog" aria-label="照片操作">'+
+    (viewerDialog==='menu'?go('photo-detail','详情')+action('viewer-dismiss','关闭'):
+      '<h3>移入回收站？</h3><div class="row">'+action('viewer-dismiss','取消')+action('viewer-delete','移入回收站','confirm')+'</div>')+
+    '</article></div>';
   const searchForm = () => form('search',field('query','关键词或语义搜索',search),'搜索');
   const screens = {
     connect: () => body(tile('<strong>连接你的 AI 相册</strong><p class="muted">输入 NAS 相册服务器地址</p>')+form('connect',field('server','服务器地址','https://photos.example.test','url'),'连接服务器')),
     login: () => body(form('login',field('account','账户','beibei')+field('password','密码','demo','password'),'登录')),
     photos: () => '<div class="photo-scroll" role="region" aria-label="可滚动照片图库">'+
-      body(group('最近入库','<p class="muted">'+(all.length-1)+' 张照片 · 1 个视频</p>'))+datedPhotoGroups(all,grid)+'</div>',
+      body(group('最近入库','<p class="muted">'+allViewerPhotos().length+' 张照片 · 1 个视频</p>'))+datedPhotoGroups(all,grid)+'</div>',
     viewer: () => {
       const position=viewerPhotos.indexOf(photo);
       return '<div class="frame viewer-frame"><div class="preview-track">'+
         previewSlides(viewerPhotos,position,(id,decorative)=>img(id,decorative?'':escape(renamed)))+
-        '</div><span class="like-status" role="status"></span></div><div class="preview-actions"><p class="muted">'+
-        (position+1)+' / '+viewerPhotos.length+'</p><div class="row">'+
-        action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+'</div></div>';
+        '</div><span class="like-status" role="status"></span></div><div class="preview-actions viewer-actions"><div class="row" role="group" aria-label="照片操作">'+
+        viewerAction('favorite','heart',favorites.has(photo)?'已收藏':'收藏',favorites.has(photo))+
+        viewerAction('viewer-like','like','点赞')+viewerAction('viewer-trash','trash','删除')+'</div></div>'+viewerSheet();
     },
     search: () => body(searchForm()+go('filters','组合筛选 ›','menu-row')+group(search?'「'+escape(search)+'」的示例结果':'最近照片','<p class="muted">照片 · '+(search?3:6)+' 张</p>'))+grid(search?[0,2,4]:all.slice(0,6)),
     filters: () => body(form('filters',field('start','开始日期','','date')+field('end','结束日期','','date')+'<label class="field">媒体类型<select name="media"><option>全部</option><option>照片</option><option>视频</option></select></label>'+field('person','人物')+field('tag','标签')+field('rating','最低评分','0','number'),'应用筛选')),
@@ -674,7 +693,9 @@ root.addEventListener('capture-open', event => {
     const header = '<header class="top'+(showBack?'':' main-title')+(view==='photos'?' gallery-header':'')+'">'+
       (showBack?button('←','class="back" data-go="'+(view==='viewer'?viewerParent:view==='video'?videoParent:view==='person'?personParent:view==='favorites'?favoritesParent:(parents[view]||'photos'))+'" aria-label="返回"'):'')+
       (view==='photos'?photoScrollTitle(name):
-        full?'<strong>'+name+'</strong>':'<h2>'+name+'</h2>')+
+        view==='viewer'?'<strong class="viewer-position">'+(viewerPhotos.indexOf(photo)+1)+' / '+viewerPhotos.length+'</strong>'+
+          button('⋯','class="icon viewer-more" aria-label="更多照片操作" data-action="viewer-more"'):
+          full?'<strong>'+name+'</strong>':'<h2>'+name+'</h2>')+
       (view==='person'?'<span class="person-total">共 '+personPhotos().length+' 张</span>':'')+
       (view==='photos'?button('<span class="search-icon" aria-hidden="true"></span>','class="gallery-icon-button header-search" data-go="search" aria-label="搜索照片"')+
         button('<span aria-hidden="true">⋯</span>','class="gallery-icon-button header-more" data-go="profile" aria-label="更多，打开我的页面"'):'')+'</header>';
@@ -692,6 +713,7 @@ root.addEventListener('capture-open', event => {
     if(view==='photos' && !screen.hidden) galleryScroll=app.querySelector('.photo-scroll')?.scrollTop ?? galleryScroll;
     if(!labels.has(id))id='photos';
     if(id!==view){
+      viewerDialog=null;
       clearPendingTap();
       if(!((view==='viewer' && id==='photo-detail') || (view==='photo-detail' && id==='viewer'))){
         exitLikeMode();
@@ -730,10 +752,12 @@ root.addEventListener('capture-open', event => {
     likeMode=false;
   }
 
-  function likeAt(frame,x,y){
-    likeMode=true;
-    clearTimeout(likeIdleTimer);
-    likeIdleTimer=setTimeout(exitLikeMode,likeIdleMillis);
+  function likeAt(frame,x,y,fromGesture=true){
+    if(fromGesture || likeMode){
+      likeMode=true;
+      clearTimeout(likeIdleTimer);
+      likeIdleTimer=setTimeout(exitLikeMode,likeIdleMillis);
+    }
     const count=(likeCounts.get(photo)??0)+1;
     likeCounts.set(photo,count);
     frame.querySelector('.like-status').textContent='已点赞，共 '+count+' 个赞';
@@ -848,7 +872,7 @@ root.addEventListener('capture-open', event => {
       if(id==='viewer' && view!=='photo-detail'){
         viewerParent=view;
         const ids=[...app.querySelectorAll('.gallery [data-go="viewer"]')].map(button=>Number(button.dataset.photo));
-        viewerPhotos=ids.length?ids:all.filter(id=>id!==video.id);
+        viewerPhotos=ids.length?ids:allViewerPhotos();
       }
       if(id==='video')videoParent=view;
       if(id==='favorites'&&view!=='viewer')favoritesParent=view;
@@ -859,6 +883,26 @@ root.addEventListener('capture-open', event => {
     notice='';
     switch(command){
       case 'favorite': if(favorites.has(photo))favorites.delete(photo);else favorites.add(photo);break;
+      case 'viewer-like': {
+        const frame=app.querySelector('.viewer-frame');
+        const imageBox=frame.getBoundingClientRect(), hit=control.getBoundingClientRect();
+        likeAt(frame,hit.left+hit.width/2-imageBox.left,hit.top+hit.height/2-imageBox.top,false);
+        return;
+      }
+      case 'viewer-more': viewerDialog='menu';break;
+      case 'viewer-trash': viewerDialog='trash';break;
+      case 'viewer-dismiss': viewerDialog=null;break;
+      case 'viewer-delete': {
+        const position=viewerPhotos.indexOf(photo);
+        deletedPhotos.add(photo);
+        favorites.delete(photo);
+        likeCounts.delete(photo);
+        viewerPhotos=viewerPhotos.filter(id=>id!==photo);
+        viewerDialog=null;
+        if(!viewerPhotos.length){show(viewerParent);return;}
+        photo=viewerPhotos[Math.min(position,viewerPhotos.length-1)];
+        break;
+      }
       case 'restore': restored=true;notice='已恢复 1 张照片';break;
       case 'cache': cache='0 MB';notice='已清理缓存';break;
       case 'download': download=download==='进行中'?'已取消':download==='已取消'?'进行中':'已完成';break;
@@ -897,7 +941,7 @@ root.addEventListener('capture-open', event => {
     capture.style.colorScheme=scheme;
   });
   picker.addEventListener('change',()=>{
-    if(picker.value==='viewer')viewerPhotos=all.filter(id=>id!==video.id);
+    if(picker.value==='viewer')viewerPhotos=allViewerPhotos();
     show(picker.value);
   });
   capture.addEventListener('capture-exit',()=>show(lastDesign));

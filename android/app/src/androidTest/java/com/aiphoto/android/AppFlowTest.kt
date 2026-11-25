@@ -111,6 +111,10 @@ class AppFlowTest {
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
     private fun waitText(value: String) { compose.waitUntil(15000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() } }
     private fun back() { androidx.test.espresso.Espresso.pressBack(); compose.waitForIdle() }
+    private fun viewerMenuAction(title: String) {
+        compose.onNodeWithContentDescription("更多照片操作").performClick()
+        compose.onNodeWithText(title).performClick()
+    }
 
     @Test fun doubleTapEntersLikeModeAndEveryFurtherTapAddsOneLike() {
         multipleGalleryPhotos.set(true)
@@ -131,6 +135,12 @@ class AppFlowTest {
         preview.performTouchInput { swipeLeft() }
         waitText("2 / 2")
         fun likeRequests() = requests.filter { it.requestUrl?.encodedPath == "/nas/api/photos/1/like" }
+        val bottomActions = listOf("收藏", "点赞", "删除").map { compose.onNodeWithText(it).fetchSemanticsNode().boundsInWindow }
+        Assert.assertTrue(bottomActions.zipWithNext().all { (left, right) -> left.right <= right.left && left.top == right.top })
+        compose.onNodeWithText("详情").assertDoesNotExist()
+        compose.onNodeWithText("删除").performClick()
+        waitText("移入回收站？")
+        compose.onNodeWithText("取消").performClick()
         preview.performTouchInput { doubleClick() }
         compose.waitUntil(10000) { likeRequests().size == 1 }
         compose.onNodeWithText("退出点赞模式").assertDoesNotExist()
@@ -156,6 +166,11 @@ class AppFlowTest {
         preview.performTouchInput { advanceEventTime(2200); click(center) }
         compose.waitUntil(10000) { compose.onAllNodesWithText("查看原图").fetchSemanticsNodes().isEmpty() }
         Assert.assertEquals(6, likeRequests().size)
+        preview.performTouchInput { advanceEventTime(400); click(center) }
+        waitText("查看原图")
+        compose.onNodeWithText("点赞").performClick()
+        compose.waitUntil(10000) { likeRequests().size == 7 }
+        compose.onAllNodes(activeLikeMode).assertCountEquals(0)
     }
 
     @Test fun capturePreviewSwipesAndDisplaysProgressUntilImportCompletes() {
@@ -203,7 +218,7 @@ class AppFlowTest {
         waitText("查看原图")
         compose.onNodeWithText("收藏").performClick()
         waitText("已收藏")
-        compose.onNodeWithText("详情").performClick()
+        viewerMenuAction("详情")
         waitText("照片详情")
         compose.onNodeWithText("海边的午后").assertExists()
         back(); back()
@@ -229,8 +244,10 @@ class AppFlowTest {
         compose.onNodeWithText("小满的成长").performClick()
         waitText("2 岁 8 个月")
         compose.onNodeWithContentDescription("海边.jpg").performClick()
-        compose.onNodeWithText("加入精选").performScrollTo().performClick()
+        viewerMenuAction("加入精选")
+        compose.onNodeWithContentDescription("更多照片操作").performClick()
         waitText("移出精选")
+        back()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("发现", useUnmergedTree = true).performClick()
@@ -272,7 +289,7 @@ class AppFlowTest {
         compose.onNodeWithText("假日").performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("海边.jpg").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("海边.jpg").performClick()
-        compose.onNodeWithText("标签").performScrollTo().performClick()
+        viewerMenuAction("标签")
         waitText("照片标签")
         compose.onNodeWithText("整理标签与分类").performClick()
         waitText("假日 · 人工标签")
@@ -295,7 +312,7 @@ class AppFlowTest {
         compose.onNodeWithText("周末精选").performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithContentDescription("海边.jpg").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("海边.jpg").performClick()
-        compose.onNodeWithText("标签").performScrollTo().performClick()
+        viewerMenuAction("标签")
         compose.onNodeWithText("整理标签与分类").performClick()
         compose.onNodeWithText("分类", useUnmergedTree = true).performClick()
         waitText("周末精选 · 自建分类")
@@ -305,7 +322,7 @@ class AppFlowTest {
         compose.waitUntil(10000) { compose.onAllNodesWithText("整理 1 张照片").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText("关闭").performClick()
         compose.waitUntil(10000) { compose.onAllNodesWithText("照片标签").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithText("分享").performScrollTo().performClick()
+        viewerMenuAction("分享")
         waitText("分享去元数据副本")
         compose.onNodeWithText("分享原文件").assertExists()
         compose.onNodeWithText("取消").performClick()

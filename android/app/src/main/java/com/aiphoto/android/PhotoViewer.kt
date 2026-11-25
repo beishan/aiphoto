@@ -13,6 +13,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Label
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.*
@@ -66,6 +68,7 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
     val likeMode = lastLikeAt != null
     var shareOptions by remember { mutableStateOf(false) }
     var labels by remember { mutableStateOf(false) }
+    var moreActions by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
     var albumPicker by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
@@ -95,6 +98,15 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
             confirmAction = action
         } else action()
     }
+    fun like(id: Long, fromGesture: Boolean): Boolean {
+        if (feed.offline) {
+            vm.notice = "离线时无法点赞"
+            return false
+        }
+        val sent = vm.likePhoto(id)
+        if (sent && (fromGesture || lastLikeAt != null)) lastLikeAt = SystemClock.elapsedRealtime()
+        return sent
+    }
     DarkMediaSystemBars()
     Column(Modifier.fillMaxSize().background(Color(0xFF101411))) {
         if (controls || vm.error != null || feed.error != null || photo == null || photo.isVideo) {
@@ -102,39 +114,66 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
         }
         if (controls) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton({ nav.popBackStack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回", tint = Color.White) }
-            Text("${if (photos.isEmpty()) 0 else pager.currentPage + 1} / ${photos.size}${if (feed.more) "+" else ""}", Modifier.weight(1f), color = Color.White)
-            if (photo != null && !photo.isVideo) TextButton({ guard("") { originalId = photo.id } }, enabled = !feed.offline) { Text(if (originalId == photo.id) "原图" else "查看原图", color = Color.White) }
+            Column(Modifier.weight(1f)) {
+                Text("${if (photos.isEmpty()) 0 else pager.currentPage + 1} / ${photos.size}${if (feed.more) "+" else ""}", color = Color.White)
+                photo?.let { Text(it.name, color = Color.LightGray, style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            if (photo != null) {
+                if (!photo.isVideo) TextButton({ guard("") { originalId = photo.id } }, enabled = !feed.offline) {
+                    Text(if (originalId == photo.id) "原图" else "查看原图", color = Color.White)
+                }
+                Box {
+                    IconButton({ moreActions = true }) { Icon(Icons.Outlined.MoreHoriz, "更多照片操作", tint = Color.White) }
+                    DropdownMenu(moreActions, { moreActions = false }) {
+                        DropdownMenuItem({ Text("详情") }, { moreActions = false; details = true })
+                        DropdownMenuItem({ Text("加入相册") }, { moreActions = false; vm.loadCatalog(); albumPicker = true },
+                            enabled = !vm.busy && !feed.offline)
+                        DropdownMenuItem({ Text("下载") }, { moreActions = false; guard("") { pending = photo; export.launch(photo.name) } },
+                            enabled = !feed.offline)
+                        DropdownMenuItem({ Text("分享") }, { moreActions = false; shareOptions = true }, enabled = !feed.offline)
+                        if (vm.supports("label-edit")) {
+                            DropdownMenuItem({ Text("标签") }, { moreActions = false; vm.loadCatalog(); labels = true },
+                                enabled = !feed.offline && !vm.busy)
+                        }
+                        if (vm.supports("family-timeline")) {
+                            DropdownMenuItem({ Text(if (photo.inTimeline) "移出精选" else "加入精选") }, {
+                                moreActions = false
+                                vm.updatePhoto(photo.id, mapOf("inTimeline" to !photo.inTimeline))
+                            }, enabled = !vm.busy && !feed.offline)
+                        }
+                        if ((source.startsWith("album:") || source.startsWith("baby:")) &&
+                            vm.albums.find { it.id == source.substringAfter(':').toLongOrNull() }?.type in listOf("VIRTUAL", "BABY")) {
+                            DropdownMenuItem({ Text("设为封面") }, {
+                                moreActions = false
+                                vm.mutate({ it.write("albums/${source.substringAfter(':')}/cover", "PUT", mapOf("photoId" to photo.id)) }) { vm.loadCatalog() }
+                            }, enabled = !vm.busy && !feed.offline)
+                        }
+                    }
+                }
+            }
         }
         if (vm.error != null) ErrorNotice(vm.error!!, { vm.error = null })
         if (feed.error != null) ErrorNotice(feed.error, {}, { vm.loadFeed(source) })
         if (photo == null) { Text("照片已移除，请返回图库", Modifier.padding(24.dp), color = Color.White); return@Column }
-        HorizontalPager(pager, modifier = Modifier.weight(1f).fillMaxWidth(), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
-            val item = photos[index]
-            if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
-            else ZoomPhoto(vm, item, originalId == item.id, likeMode && canLike, { controls = !controls }) {
-                if (feed.offline) {
-                    vm.notice = "离线时无法点赞"
-                    false
-                } else vm.likePhoto(item.id).also { sent -> if (sent) lastLikeAt = SystemClock.elapsedRealtime() }
-            }
-        }
-        if (controls) Text(photo.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.LightGray, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-        if (controls) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 8.dp)) {
-            ViewerAction(if (photo.favorite) "已收藏" else "收藏", if (photo.favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, !vm.busy && !feed.offline) { vm.updatePhoto(photo.id, mapOf("favorite" to !photo.favorite)) }
-            ViewerAction("详情", Icons.Outlined.Info, true) { details = true }
-            ViewerAction("加入相册", Icons.Outlined.CreateNewFolder, !vm.busy && !feed.offline) { vm.loadCatalog(); albumPicker = true }
-            ViewerAction("下载", Icons.Outlined.Download, !feed.offline) { guard("") { pending = photo; export.launch(photo.name) } }
-            ViewerAction("分享", Icons.Outlined.Share, !feed.offline) { shareOptions = true }
-            if (vm.supports("label-edit")) ViewerAction("标签", Icons.AutoMirrored.Outlined.Label, !feed.offline && !vm.busy) { vm.loadCatalog(); labels = true }
-            if (vm.supports("family-timeline")) ViewerAction(if (photo.inTimeline) "移出精选" else "加入精选", Icons.Outlined.History, !vm.busy && !feed.offline) {
-                vm.updatePhoto(photo.id, mapOf("inTimeline" to !photo.inTimeline))
-            }
-            if ((source.startsWith("album:") || source.startsWith("baby:")) && vm.albums.find { it.id == source.substringAfter(':').toLongOrNull() }?.type in listOf("VIRTUAL", "BABY")) {
-                ViewerAction("设为封面", Icons.Outlined.PhotoAlbum, !vm.busy && !feed.offline) {
-                    vm.mutate({ it.write("albums/${source.substringAfter(':')}/cover", "PUT", mapOf("photoId" to photo.id)) }, "已设为封面") { vm.loadCatalog() }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            val videoClearance = if (controls && photo.isVideo) Modifier.navigationBarsPadding().padding(bottom = 80.dp) else Modifier
+            HorizontalPager(pager, modifier = Modifier.fillMaxSize().then(videoClearance), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
+                val item = photos[index]
+                if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
+                else ZoomPhoto(vm, item, originalId == item.id, likeMode && canLike, { controls = !controls }) {
+                    like(item.id, fromGesture = true)
                 }
             }
-            ViewerAction("删除", Icons.Outlined.DeleteOutline, !vm.busy && !feed.offline) { deleting = true }
+            if (controls) ViewerActionGroup(
+                photo = photo,
+                canEdit = !vm.busy && !feed.offline,
+                canLike = canLike,
+                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 8.dp),
+                onFavorite = { vm.updatePhoto(photo.id, mapOf("favorite" to !photo.favorite)) },
+                onLike = { like(photo.id, fromGesture = false) },
+                onDelete = { deleting = true },
+            )
         }
         if (!controls && photo.isVideo) Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
@@ -152,10 +191,49 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
     if (deleting && photo != null) ConfirmDialog("移入回收站？", "会影响 NAS 共享图库和其他客户端，不会删除手机文件。", { deleting = false }) { deleting = false; vm.batch(setOf(photo.id), "trash") { nav.popBackStack() } }
     if (confirmAction != null) ConfirmDialog("确认读取原文件", confirmText, { confirmAction = null }) { val action = confirmAction; confirmAction = null; action?.invoke() }
 }
-@Composable private fun ViewerAction(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, action: () -> Unit) {
-    Column(Modifier.widthIn(min = 64.dp).clickable(enabled = enabled, onClick = action).padding(horizontal = 8.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, title, tint = if (enabled) Color.White else Color.Gray, modifier = Modifier.size(22.dp))
-        Text(title, Modifier.padding(top = 4.dp), color = if (enabled) Color.White else Color.Gray, style = MaterialTheme.typography.labelSmall)
+@Composable
+private fun ViewerActionGroup(
+    photo: Photo, canEdit: Boolean, canLike: Boolean, modifier: Modifier,
+    onFavorite: () -> Unit, onLike: () -> Boolean, onDelete: () -> Unit,
+) {
+    var sequence by remember(photo.id) { mutableIntStateOf(0) }
+    val likes = remember(photo.id) { mutableStateListOf<FloatingLike>() }
+    val iconCenter = with(LocalDensity.current) { 22.dp.toPx() }
+    Box(modifier.widthIn(max = 340.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFFF8F8FA).copy(alpha = .82f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = .72f)),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                ViewerAction(if (photo.favorite) "已收藏" else "收藏",
+                    if (photo.favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                    canEdit, Modifier.weight(1f), onFavorite)
+                ViewerAction("点赞", Icons.Outlined.ThumbUp, canLike, Modifier.weight(1f)) {
+                    if (onLike()) likes.add(FloatingLike(sequence++, Offset(iconCenter, iconCenter)))
+                }
+                ViewerAction("删除", Icons.Outlined.DeleteOutline, canEdit, Modifier.weight(1f), onDelete)
+            }
+        }
+        likes.forEach { like ->
+            key(like.id) { FloatingThumb(like, Modifier.align(Alignment.Center)) { likes.remove(like) } }
+        }
+    }
+}
+
+@Composable
+private fun ViewerAction(
+    title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean,
+    modifier: Modifier, action: () -> Unit,
+) {
+    val color = if (enabled) Color(0xFF171717) else Color(0xFF6E6E73)
+    Column(
+        modifier.heightIn(min = 64.dp).clickable(enabled = enabled, onClick = action).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+        Text(title, Modifier.padding(top = 3.dp), color = color, style = MaterialTheme.typography.labelSmall)
     }
 }
 @Composable private fun ZoomPhoto(
