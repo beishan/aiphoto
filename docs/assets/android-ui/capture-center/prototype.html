@@ -439,10 +439,8 @@ root.addEventListener('click',event=>{
   else if('confirm' in d)apply(confirmation);
   else if('retry' in d){message='已提交重试';render();}
 });
-function throwTransform(x,y,height) {
-  const rotation=Math.max(-16,Math.min(16,y/height*18));
-  return 'translate3d('+x+'px,'+y+'px,0) rotate('+rotation+'deg)';
-}
+const verticalTransform = (x,y,scale=1) => 'translate3d('+x+'px,'+y+'px,0) scale('+scale+')';
+const previewDragY = (y,height) => Math.max(-height*.55,Math.min(height*.55,y*.65));
 async function slidePreview(frame, distance, direction) {
   settlingFrame=frame;
   try {
@@ -451,15 +449,22 @@ async function slidePreview(frame, distance, direction) {
     if(settlingFrame===frame)settlingFrame=null;
   }
 }
-async function throwPreview(frame, x, y, action) {
+async function settleVerticalPreview(frame, x, y, action) {
   const current=frame.querySelector('[data-page="0"]');
   const underlay=frame.querySelector('.preview-underlay');
-  const direction=Math.sign(y);
   const height=frame.clientHeight;
+  const fromY=previewDragY(y,height);
+  const dismiss=action!==null;
+  const animationOptions={duration:reduceMotion.matches?0:dismiss?370:160,easing:'cubic-bezier(.4,0,.2,1)',fill:'forwards'};
   settlingFrame=frame;
-  const animation=animateTransform(current,throwTransform(x,y,height),
-    action===null?'none':throwTransform(x+direction*frame.clientWidth*.16,direction*height*1.2,height),
-    action===null?160:220);
+  const animation=current.animate([
+    {transform:verticalTransform(x,fromY),opacity:1},
+    {transform:dismiss?verticalTransform(x,fromY+Math.sign(y)*height*.10,.12):'none',opacity:dismiss?0:1},
+  ],animationOptions);
+  const reveal=underlay?.animate([
+    {transform:underlay.style.transform,opacity:underlay.style.opacity},
+    {transform:dismiss?'scale(1)':'scale(.94)',opacity:dismiss?1:0},
+  ],animationOptions);
   try {
     await animation.finished;
     if(frame.isConnected && action!==null)request(action);
@@ -467,6 +472,7 @@ async function throwPreview(frame, x, y, action) {
     current.style.transform='';
     if(underlay){underlay.style.opacity='';underlay.style.transform='';}
     animation.cancel();
+    reveal?.cancel();
     if(settlingFrame===frame)settlingFrame=null;
   }
 }
@@ -495,10 +501,11 @@ root.addEventListener('pointermove',event=>{
   } else if(drag.axis==='y'){
     drag.dx=dx*.38;
     drag.dy=dy;
-    frame.querySelector('[data-page="0"]').style.transform=throwTransform(drag.dx,dy,frame.clientHeight);
+    const offsetY=previewDragY(dy,frame.clientHeight);
+    frame.querySelector('[data-page="0"]').style.transform=verticalTransform(drag.dx,offsetY);
     const underlay=frame.querySelector('.preview-underlay');
     if(underlay){
-      const reveal=Math.min(1,Math.abs(dy)/frame.clientHeight*2.5);
+      const reveal=Math.min(1,Math.abs(offsetY)/frame.clientHeight*2.5);
       underlay.style.opacity=reveal;
       underlay.style.transform='scale('+(.94+.06*reveal)+')';
     }
@@ -515,7 +522,7 @@ function finishPreviewDrag(event, cancelled=false) {
     const commit=!cancelled && Math.abs(dx)>45 && adjacentSlide(frame,direction);
     void slidePreview(frame,dx,commit?direction:0);
   } else if(axis==='y') {
-    void throwPreview(frame,dx,dy,!cancelled && Math.abs(dy)>=64?(dy<0?0:3):null);
+    void settleVerticalPreview(frame,dx,dy,!cancelled && Math.abs(dy)>=64?(dy<0?0:3):null);
   }
 }
 root.addEventListener('pointercancel',event=>finishPreviewDrag(event,true));

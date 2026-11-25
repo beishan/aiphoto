@@ -560,6 +560,7 @@ private fun CapturePreviewPage(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var drag by remember { mutableStateOf(Offset.Zero) }
     var travelFraction by remember { mutableFloatStateOf(0f) }
+    var dismissProgress by remember { mutableFloatStateOf(0f) }
     var failed by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     LaunchedEffect(active) {
@@ -600,7 +601,8 @@ private fun CapturePreviewPage(
                         horizontal = !vertical
                     }
                     if (vertical) {
-                        drag = Offset(travel.x * .38f, travel.y)
+                        val maxDrag = size.height * .55f
+                        drag = Offset(travel.x * .38f, (travel.y * .65f).coerceIn(-maxDrag, maxDrag))
                         travelFraction = drag.y / size.height.coerceAtLeast(1)
                         event.changes.forEach { it.consume() }
                     }
@@ -612,22 +614,21 @@ private fun CapturePreviewPage(
             val from = drag
             val fromFraction = travelFraction
             val operation = if (from.y < 0) CaptureAction.IMPORT else CaptureAction.DELETE_SKIP
-            val fling = abs(from.y) >= threshold
+            val dismiss = abs(travel.y) >= threshold
             val direction = if (from.y < 0f) -1f else 1f
-            val end = if (fling) Offset(from.x + direction * size.width * .16f, direction * size.height * 1.2f)
-                else Offset.Zero
-            val endFraction = if (fling) direction * 1.2f else 0f
+            val end = if (dismiss) from + Offset(0f, direction * size.height * .10f) else Offset.Zero
             latestSetAnimating(true)
             scope.launch {
                 try {
-                    animate(0f, 1f, animationSpec = tween(if (fling) 220 else 160)) { fraction, _ ->
+                    animate(0f, 1f, animationSpec = tween(if (dismiss) 370 else 160)) { fraction, _ ->
                         drag = from + (end - from) * fraction
-                        travelFraction = fromFraction + (endFraction - fromFraction) * fraction
+                        if (dismiss) dismissProgress = fraction else travelFraction = fromFraction * (1f - fraction)
                     }
-                    if (fling) latestAction(operation, asset)?.join()
+                    if (dismiss) latestAction(operation, asset)?.join()
                 } finally {
                     drag = Offset.Zero
                     travelFraction = 0f
+                    dismissProgress = 0f
                     latestSetAnimating(false)
                 }
             }
@@ -635,19 +636,18 @@ private fun CapturePreviewPage(
     }) {
         if (next != null && travelFraction != 0f) {
             PhotoImage(vm, state.media(next.id), Modifier.fillMaxSize().graphicsLayer {
-                val reveal = (abs(travelFraction) * 2.5f).coerceIn(0f, 1f)
+                val reveal = (abs(travelFraction) * 2.5f + dismissProgress).coerceIn(0f, 1f)
                 alpha = reveal
                 scaleX = .94f + .06f * reveal
                 scaleY = scaleX
             }, ContentScale.FillWidth, background = Color(0xFF101218))
         }
         Box(Modifier.fillMaxSize().graphicsLayer {
-            scaleX = zoom
-            scaleY = zoom
+            scaleX = zoom * (1f - .88f * dismissProgress)
+            scaleY = scaleX
             translationX = pan.x + drag.x
             translationY = pan.y + drag.y
-            rotationZ = (travelFraction * 18f).coerceIn(-16f, 16f)
-            alpha = (1f - (abs(travelFraction) - .50f).coerceAtLeast(0f) * 1.8f).coerceAtLeast(0f)
+            alpha = 1f - dismissProgress
         }) {
             PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.FillWidth, background = Color.Transparent)
             if (active && !failed) {
