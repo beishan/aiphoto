@@ -649,7 +649,7 @@ private fun CapturePreviewPage(
             rotationZ = (travelFraction * 18f).coerceIn(-16f, 16f)
             alpha = (1f - (abs(travelFraction) - .50f).coerceAtLeast(0f) * 1.8f).coerceAtLeast(0f)
         }) {
-            PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.FillWidth, background = Color(0xFF101218))
+            PhotoImage(vm, state.media(asset.id), Modifier.fillMaxSize(), ContentScale.FillWidth, background = Color.Transparent)
             if (active && !failed) {
                 val context = LocalContext.current
                 val request = remember(context, asset.id, retry) {

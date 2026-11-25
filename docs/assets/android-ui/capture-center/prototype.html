@@ -101,7 +101,7 @@
 #capture-mock .capture-frame,#design-screen .viewer-frame {touch-action:none}
 :is(#capture-mock,#design-screen) :is(.preview-track,.preview-underlay) {position:absolute;inset:0}
 #capture-mock .preview-underlay {opacity:0;transform:scale(.94)}
-:is(#capture-mock,#design-screen) .preview-slide {position:absolute;inset:0 auto 0 calc(var(--page) * (100% + 12px));width:100%;overflow:hidden;background:#101218}
+:is(#capture-mock,#design-screen) .preview-slide {position:absolute;inset:0 auto 0 calc(var(--page) * (100% + 12px));width:100%;overflow:hidden}
 #capture-mock .import-progress {position:absolute;z-index:5;inset:auto 0 var(--system-height);height:2px;overflow:hidden;background:#666be848;pointer-events:none}
 #capture-mock .import-progress::after {content:"";display:block;width:58%;height:100%;background:linear-gradient(90deg,transparent,#8878ff,#64dfff,#f591e8,transparent);animation:import-glow 1.3s linear infinite}
 @keyframes import-glow {from{transform:translateX(-100%)}to{transform:translateX(173%)}}
