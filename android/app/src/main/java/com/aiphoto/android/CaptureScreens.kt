@@ -91,7 +91,12 @@ internal fun FloatingBack(onBack: () -> Unit, dark: Boolean = false) {
 }
 
 @Composable
-internal fun ScrollingTitle(title: String, date: String?, modifier: Modifier = Modifier) {
+internal fun ScrollingTitle(
+    title: String,
+    date: String?,
+    modifier: Modifier = Modifier,
+    showDateBackground: Boolean = true,
+) {
     AnimatedContent(
         targetState = date,
         modifier = modifier,
@@ -103,6 +108,8 @@ internal fun ScrollingTitle(title: String, date: String?, modifier: Modifier = M
         label = "图库日期",
     ) { day ->
         if (day == null) Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+        else if (!showDateBackground) Text(day, fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         else Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = .86f)) {
             Text(day, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.titleSmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)

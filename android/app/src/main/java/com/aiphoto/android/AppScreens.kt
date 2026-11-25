@@ -296,7 +296,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ScrollingTitle("照片图库", rootDate, Modifier.weight(1f))
+            ScrollingTitle("照片图库", rootDate, Modifier.weight(1f), showDateBackground = false)
             val colors = IconButtonDefaults.filledTonalIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = if (rootScrolled) .60f else 1f),
             )
