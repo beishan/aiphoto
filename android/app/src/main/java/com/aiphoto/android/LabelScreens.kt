@@ -30,7 +30,7 @@ import kotlinx.coroutines.CancellationException
         Text(if (category) "系统分类由 AI 维护；自建分类可手动整理。" else "人工标签可维护；AI 词条只读，可逐张确认或移除。", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
         if (vm.catalogOffline) Text("离线缓存 · 仅浏览", Modifier.padding(horizontal = 16.dp))
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn {
+        LazyColumn(contentPadding = PaddingValues(bottom = bottomContentInset())) {
             items(labels.filter { it.name.contains(query, ignoreCase = true) }, key = { it.id }) { label ->
                 ListItem(headlineContent = { Text(label.name) }, supportingContent = { Text("${label.photoCount} 张 · ${labelOrigin(label, category)}") },
                     leadingContent = { Icon(if (category) Icons.Outlined.Category else Icons.AutoMirrored.Outlined.Label, null) },

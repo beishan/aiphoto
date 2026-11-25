@@ -38,7 +38,7 @@ import androidx.activity.result.contract.ActivityResultContracts
         if (vm.catalogOffline) Text("离线缓存 · 相册只读", Modifier.padding(16.dp))
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (vm.albums.isEmpty() && !vm.busy) EmptyState("还没有相册", "点击右上角创建普通相册")
-        LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = floatingNavClearance), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = floatingNavClearance + bottomContentInset()), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             items(vm.albums, key = { it.id }) { album -> Column(Modifier.clickable { nav.navigate("album/${album.id}") }) {
                 PhotoImage(vm, album.coverPhotoUrl, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)))
                 Text(album.name, Modifier.padding(top = 8.dp), fontWeight = FontWeight.SemiBold)
@@ -85,7 +85,7 @@ import androidx.activity.result.contract.ActivityResultContracts
     var validation by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().imePadding()) {
         BackBar(if (id == 0L) "新建相册" else "编辑相册", nav)
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Column(Modifier.imePadding().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
             Icon(Icons.Outlined.PhotoAlbum, null, Modifier.size(100.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(24.dp), tint = MaterialTheme.colorScheme.primary)
             if (id == 0L && vm.supports("baby-timeline-page")) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(type == "VIRTUAL", { type = "VIRTUAL" }, { Text("普通相册") })
@@ -124,7 +124,7 @@ import androidx.activity.result.contract.ActivityResultContracts
     LaunchedEffect(vm.months.firstOrNull()?.source) {
         vm.months.firstOrNull()?.source?.let { if (vm.feeds[it] == null) vm.loadFeed(it) }
     }
-    LazyColumn(Modifier.testTag("discover-list"), contentPadding = PaddingValues(bottom = floatingNavClearance), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.testTag("discover-list"), contentPadding = PaddingValues(bottom = floatingNavClearance + bottomContentInset()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { TopAppBar(title = { Text("发现", fontWeight = FontWeight.Bold) }, actions = {
             IconButton({ vm.loadCatalog(); vm.loadFeed("favorites", true); vm.loadFeed("likes", true) }) { Icon(Icons.Outlined.Refresh, "刷新") }
         }) }
@@ -218,7 +218,7 @@ internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
     Column(Modifier.fillMaxSize()) {
         BackBar("全部人物", nav)
         if (vm.people.isEmpty()) EmptyState("暂无人物", retry = { vm.loadCatalog() })
-        else LazyVerticalGrid(GridCells.Fixed(4), contentPadding = PaddingValues(12.dp),
+        else LazyVerticalGrid(GridCells.Fixed(4), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp + bottomContentInset()),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(vm.people, key = { it.id }) { person -> PersonCover(vm, person) { nav.navigate("person/${person.id}") } }
         }
@@ -267,7 +267,7 @@ internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
 }
 @Composable fun MineScreen(vm: AppViewModel, nav: NavHostController) {
     var change by remember { mutableStateOf(false) }
-    LazyColumn {
+    LazyColumn(contentPadding = PaddingValues(bottom = bottomContentInset())) {
         item { BackBar("我的", nav) }
         item { ListItem(headlineContent = { Text(vm.session?.user?.nickname ?: vm.session?.user?.username.orEmpty(), style = MaterialTheme.typography.headlineSmall) }, supportingContent = { Text("${android.net.Uri.parse(vm.store.address).host} · 家庭共享图库") }, leadingContent = { Icon(Icons.Outlined.AccountCircle, null, Modifier.size(56.dp)) }) }
         item { HorizontalDivider(Modifier.padding(16.dp)) }
@@ -284,7 +284,7 @@ internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
 @Composable fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     var logout by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.measureCache() }
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()) {
         BackBar("外观与缓存", nav)
         Text("主题", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEach { (value, label) -> FilterChip(vm.theme == value, { vm.chooseTheme(value) }, { Text(label) }) } }
@@ -308,7 +308,7 @@ internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val licenseText = remember { context.assets.open("THIRD_PARTY_NOTICES.md").bufferedReader().use { it.readText() } + "\n\n" + context.assets.open("APACHE-2.0.txt").bufferedReader().use { it.readText() } }
     LaunchedEffect(Unit) { runCatching { vm.api?.get<ServerInfo>("mobile/server-info")?.version }.getOrNull()?.let { version = it } }
-    Column(Modifier.verticalScroll(rememberScrollState())) {
+    Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()) {
         BackBar("关于 aiphoto", nav)
         Text("aiphoto", Modifier.padding(24.dp), style = MaterialTheme.typography.headlineLarge)
         ListItem(headlineContent = { Text("客户端版本") }, trailingContent = { Text(BuildConfig.VERSION_NAME) })
@@ -326,7 +326,7 @@ internal fun AllPeopleScreen(vm: AppViewModel, nav: NavHostController) {
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) pending?.let { vm.download(it, uri) }; pending = null
     }
-    LazyColumn {
+    LazyColumn(contentPadding = PaddingValues(bottom = bottomContentInset())) {
         item { BackBar("下载记录", nav) }
         item { Text("仅记录你主动下载或分享的文件。重试时可重新选择保存位置。", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall) }
         if (vm.transfers.isEmpty()) item { EmptyState("暂无下载记录") }

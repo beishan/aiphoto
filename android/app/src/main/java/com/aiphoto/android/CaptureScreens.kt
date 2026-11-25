@@ -153,6 +153,8 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         }
         return
     }
+    val topInset = if (vm.error == null) WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() else 0.dp
+    val bottomInset = bottomContentInset()
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf("overview") }
     var jobId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -265,8 +267,8 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
             }, { openReview(null) }, { scope.launch { state.loadReview(reset = true) } })
 
             else -> LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 68.dp,
-                    bottom = if (showSegments) floatingNavClearance else 16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topInset + 68.dp,
+                    bottom = bottomInset + if (showSegments) floatingNavClearance else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 when {
@@ -317,7 +319,7 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
         if (preview == null && tab != "review") Row(
-            Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 6.dp, end = 16.dp),
+            Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(start = 12.dp, top = 6.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -330,9 +332,9 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         if (showSegments) FloatingSegments(options, tab, { next ->
             if (next == "review" && tab != "review" && state.jobFilter != null) openReview(null)
             else tab = next
-        }, Modifier.align(Alignment.BottomCenter))
+        }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         state.error?.let { text ->
-            Surface(Modifier.align(Alignment.BottomCenter).padding(bottom = if (preview != null || showSegments || selecting) 76.dp else 8.dp),
+            Surface(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = if (preview != null || showSegments || selecting) 76.dp else 8.dp),
                 shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text, Modifier.padding(10.dp).widthIn(max = 240.dp), style = MaterialTheme.typography.bodySmall)
@@ -347,7 +349,7 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
         }
         val snack = remember { SnackbarHostState() }
         LaunchedEffect(state.notice) { state.notice?.let { snack.showSnackbar(it, duration = SnackbarDuration.Short) } }
-        SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).padding(bottom = 72.dp))
+        SnackbarHost(snack, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 72.dp))
     }
     deleting?.let { targets ->
         ConfirmDialog("删除 ${targets.size} 张照片？", "照片会移出待整理区，采集副本按 NAS 清理策略处理。",
@@ -381,6 +383,8 @@ private fun CaptureReview(
     back: () -> Unit, select: () -> Unit, open: (CaptureAsset) -> Unit, longSelect: (CaptureAsset) -> Unit,
     all: () -> Unit, action: (CaptureAction) -> Unit, clearFilter: () -> Unit, refresh: () -> Unit,
 ) {
+    val topInset = if (vm.error == null) WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding() else 0.dp
+    val bottomInset = bottomContentInset()
     val scrollThreshold = with(LocalDensity.current) { 32.dp.roundToPx() }
     val scrolled by remember(scrollThreshold) { derivedStateOf {
         grid.firstVisibleItemIndex > 0 || grid.firstVisibleItemScrollOffset > scrollThreshold
@@ -396,8 +400,8 @@ private fun CaptureReview(
         Box(Modifier.weight(1f)) {
             LazyVerticalGrid(
                 GridCells.Fixed(3), state = grid, modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 64.dp,
-                    bottom = if (selecting) 8.dp else floatingNavClearance),
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = topInset + 64.dp,
+                    bottom = if (selecting) 8.dp else floatingNavClearance + bottomInset),
                 verticalArrangement = Arrangement.spacedBy(5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 items(state.assets, key = { it.id }) { image ->
@@ -421,7 +425,7 @@ private fun CaptureReview(
                 }
             }
             Row(
-                Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -437,10 +441,10 @@ private fun CaptureReview(
                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = if (scrolled) .62f else 1f)),
                     contentPadding = PaddingValues(horizontal = 12.dp)) { Text("选择") }
             }
-            if (state.busy) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).padding(top = 58.dp).fillMaxWidth())
+            if (state.busy) LinearProgressIndicator(Modifier.align(Alignment.TopCenter).padding(top = topInset + 58.dp).fillMaxWidth())
         }
         if (selecting) Surface(tonalElevation = 2.dp) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 CaptureAction.entries.forEach { operation ->
                     TextButton({ action(operation) }, Modifier.weight(1f).heightIn(min = 56.dp),
                         enabled = !state.busy && state.selected.isNotEmpty(), contentPadding = PaddingValues(horizontal = 2.dp)) {
@@ -465,8 +469,9 @@ private fun CapturePreview(
     var retry by remember(photo.id) { mutableIntStateOf(0) }
     val latestStep by rememberUpdatedState(step)
     val latestAction by rememberUpdatedState(action)
+    DarkMediaSystemBars()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             FloatingBack(back, dark = true)
             Text("${state.assets.indexOf(photo) + 1} / ${state.assets.size}", Modifier.weight(1f).padding(start = 10.dp), color = Color.White)
             Box {
@@ -531,7 +536,7 @@ private fun CapturePreview(
             if (state.busy) CircularProgressIndicator(Modifier.align(Alignment.TopCenter).padding(12.dp).size(24.dp))
         }
         Text("左右滑动切换照片", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp), color = Color.LightGray)
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             TextButton({ step(-1) }, enabled = !state.busy) { Text("上一张", color = Color.White) }
             TextButton({ action(CaptureAction.IMPORT) }, enabled = !state.busy) { Text("↑ 入库", color = Color.White) }
             TextButton({ action(CaptureAction.DELETE_SKIP) }, enabled = !state.busy) { Text("↓ 删除并忽略", color = Color.White) }

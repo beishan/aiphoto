@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -11,6 +12,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -56,6 +58,23 @@ class MainActivity : ComponentActivity() {
                 onSecondaryContainer = Color(0xFF253780),
             )
             MaterialTheme(colorScheme = palette) { Surface { AiphotoApp(model) } }
+        }
+    }
+}
+
+@Composable
+internal fun DarkMediaSystemBars() {
+    val view = LocalView.current
+    val activity = LocalActivity.current ?: return
+    DisposableEffect(view, activity) {
+        val controller = WindowCompat.getInsetsController(activity.window, view)
+        val lightStatus = controller.isAppearanceLightStatusBars
+        val lightNavigation = controller.isAppearanceLightNavigationBars
+        controller.isAppearanceLightStatusBars = false
+        controller.isAppearanceLightNavigationBars = false
+        onDispose {
+            controller.isAppearanceLightStatusBars = lightStatus
+            controller.isAppearanceLightNavigationBars = lightNavigation
         }
     }
 }

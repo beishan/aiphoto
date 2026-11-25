@@ -54,21 +54,19 @@ fun AiphotoApp(vm: AppViewModel) {
         LaunchedEffect(vm.notice) { vm.notice?.let { snack.showSnackbar(it); vm.notice = null } }
         val primaryRoutes = listOf("gallery" to "照片", "albums" to "相册", "discover" to "发现", "capture" to "采集")
         val showMainNavigation = route in listOf("gallery", "albums", "discover")
-        val gallery = route == "gallery"
-        val contentInsets = when {
-            !gallery -> WindowInsets.safeDrawing
-            vm.error != null -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
-            else -> WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-        }
+        val showError = vm.error != null && !route.startsWith("viewer")
+        val contentInsets = WindowInsets.safeDrawing.only(
+            if (showError) WindowInsetsSides.Horizontal + WindowInsetsSides.Top else WindowInsetsSides.Horizontal,
+        )
         Scaffold(
             snackbarHost = { SnackbarHost(snack, modifier = Modifier
-                .then(if (gallery) Modifier.navigationBarsPadding() else Modifier)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .padding(bottom = if (route.startsWith("viewer") || showMainNavigation) 80.dp else 0.dp)) },
             contentWindowInsets = contentInsets,
         ) { padding ->
             Box(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
-                    if (vm.error != null && !route.startsWith("viewer")) ErrorNotice(vm.error!!, { vm.error = null })
+                    if (showError) ErrorNotice(vm.error!!, { vm.error = null })
                     NavHost(nav, "gallery", Modifier.weight(1f)) {
                         composable("gallery") { PhotoFeedScreen(vm, nav, "gallery", "照片", root = true) }
                         composable("albums") { AlbumsScreen(vm, nav) }
@@ -98,11 +96,14 @@ fun AiphotoApp(vm: AppViewModel) {
                         launchSingleTop = true
                         restoreState = true
                     }
-                }, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+                }, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)))
             }
         }
     }
 }
+@Composable
+internal fun bottomContentInset() = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+
 fun NavHostController.feed(source: String, title: String) { navigate("feed/${Uri.encode(source)}/${Uri.encode(title)}") }
 fun NavHostController.viewer(source: String, id: Long) { navigate("viewer/${Uri.encode(source)}/$id") }
 @Composable fun BackBar(title: String, nav: NavHostController, actions: @Composable RowScope.() -> Unit = {}) {
@@ -154,7 +155,9 @@ fun ConnectionScreens(vm: AppViewModel) {
     var allowHttp by rememberSaveable { mutableStateOf(vm.store.allowHttp) }
     var username by rememberSaveable { mutableStateOf(vm.store.username) }
     var password by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()).imePadding().padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+        .imePadding().verticalScroll(rememberScrollState())
+        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Spacer(Modifier.height(36.dp))
         Icon(Icons.Outlined.Landscape, "aiphoto", Modifier.size(60.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(12.dp), tint = MaterialTheme.colorScheme.primary)
         Text("aiphoto", fontSize = 32.sp, fontWeight = FontWeight.Bold)
@@ -218,7 +221,13 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
     val rootDate = remember(visibleDate) { visibleDate?.let(::dayLabel) }
     val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
     val galleryTop = if (root && vm.error == null) safeInsets.calculateTopPadding() else 0.dp
-    val galleryBottom = if (root) safeInsets.calculateBottomPadding() else 0.dp
+    val bottomInset = bottomContentInset()
+    val showBatchActions = selecting && selected.isNotEmpty()
+    val gridBottom = when {
+        showBatchActions -> 4.dp
+        root -> floatingNavClearance + bottomInset
+        else -> 4.dp + bottomInset
+    }
     var refreshing by remember { mutableStateOf(false) }
     val refreshGesture = rememberPullToRefreshState()
     LaunchedEffect(feed.loading) { if (!feed.loading) refreshing = false }
@@ -245,7 +254,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
             }
             LazyVerticalGrid(GridCells.Fixed(vm.columns), state = gridState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 4.dp,
                 top = if (root && !selecting && !feed.offline && feed.error == null) galleryTop + 62.dp else 4.dp,
-                bottom = if (root && (!selecting || selected.isEmpty())) floatingNavClearance + galleryBottom else 4.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                bottom = gridBottom), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (root && photos.isNotEmpty()) item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
                     Text("最近入库", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
                 }
@@ -289,7 +298,7 @@ fun PhotoFeedScreen(vm: AppViewModel, nav: NavHostController, source: String, ti
                 if (feed.loading) item(span = { GridItemSpan(maxLineSpan) }) { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 else if (feed.more && feed.photos.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { TextButton({ vm.loadFeed(source) }, Modifier.fillMaxWidth()) { Text("加载更多") } }
             }
-            if (selecting && selected.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(bottom = if (root) floatingNavClearance + galleryBottom else 0.dp).horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showBatchActions) Row(Modifier.fillMaxWidth().padding(bottom = bottomInset + if (root) floatingNavClearance else 0.dp).horizontalScroll(rememberScrollState()).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val enabled = !vm.busy && !feed.offline
                 if (pickAlbum != null) Button({ vm.batch(selected.toSet(), "add", pickAlbum) { nav.popBackStack(); vm.loadFeed(if (vm.albums.find { it.id == pickAlbum }?.type == "BABY") "baby:$pickAlbum" else "album:$pickAlbum", true) } }, enabled = enabled) { Text("添加到相册（${selected.size}）") }
                 else if (source == "trash") Button({ vm.batch(selected.toSet(), "restore") { selected = longArrayOf() } }, enabled = enabled) { Text("恢复已选照片") }

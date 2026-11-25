@@ -70,7 +70,11 @@ import java.util.Locale
             confirmAction = action
         } else action()
     }
+    DarkMediaSystemBars()
     Column(Modifier.fillMaxSize().background(Color(0xFF101411))) {
+        if (controls || vm.error != null || feed.error != null || photo == null || photo.isVideo) {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
+        }
         if (controls) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton({ nav.popBackStack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回", tint = Color.White) }
             Text("${if (photos.isEmpty()) 0 else pager.currentPage + 1} / ${photos.size}${if (feed.more) "+" else ""}", Modifier.weight(1f), color = Color.White)
@@ -84,7 +88,7 @@ import java.util.Locale
             if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index) else ZoomPhoto(vm, item, originalId == item.id) { controls = !controls }
         }
         if (controls) Text(photo.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.LightGray, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-        if (controls) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+        if (controls) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 8.dp)) {
             ViewerAction(if (photo.favorite) "已收藏" else "收藏", if (photo.favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, !vm.busy && !feed.offline) { vm.updatePhoto(photo.id, mapOf("favorite" to !photo.favorite)) }
             ViewerAction("详情", Icons.Outlined.Info, true) { details = true }
             ViewerAction("加入相册", Icons.Outlined.CreateNewFolder, !vm.busy && !feed.offline) { vm.loadCatalog(); albumPicker = true }
@@ -101,6 +105,7 @@ import java.util.Locale
             }
             ViewerAction("删除", Icons.Outlined.DeleteOutline, !vm.busy && !feed.offline) { deleting = true }
         }
+        if (!controls && photo.isVideo) Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
     }
     if (shareOptions && photo != null) AlertDialog(onDismissRequest = { shareOptions = false }, title = { Text("分享照片") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

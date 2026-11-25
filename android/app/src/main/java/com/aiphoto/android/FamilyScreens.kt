@@ -87,7 +87,7 @@ import java.time.ZoneOffset
     var mergeTarget by remember { mutableStateOf<Person?>(null) }
     val enabled = person != null && !vm.busy && !vm.catalogOffline && vm.supports("people-edit")
     PhotoFeedScreen(vm, nav, "person:$id", person?.name ?: "人物", header = {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
+        Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FloatingBack({ nav.popBackStack() })
             Text(person?.name ?: "未命名人物", style = MaterialTheme.typography.titleLarge, maxLines = 1)
