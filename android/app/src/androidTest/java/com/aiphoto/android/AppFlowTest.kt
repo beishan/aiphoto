@@ -131,10 +131,15 @@ class AppFlowTest {
         }
         compose.waitUntil(10000) { likeRequests().size == 4 }
         Assert.assertTrue(likeRequests().all { it.method == "POST" && it.getHeader("Authorization") == "Bearer test-session" })
-        compose.onNodeWithText("退出点赞模式").performClick()
+        android.os.SystemClock.sleep(1100)
+        preview.performTouchInput { click(center) }
+        compose.waitUntil(10000) { likeRequests().size == 5 }
+        android.os.SystemClock.sleep(1050)
+        compose.onNodeWithText("退出点赞模式").assertExists()
+        compose.waitUntil(2200) { compose.onAllNodesWithText("退出点赞模式").fetchSemanticsNodes().isEmpty() }
         preview.performTouchInput { click(center) }
         compose.waitUntil(10000) { compose.onAllNodesWithText("查看原图").fetchSemanticsNodes().isEmpty() }
-        Assert.assertEquals(4, likeRequests().size)
+        Assert.assertEquals(5, likeRequests().size)
     }
 
     @Test fun capturePreviewSwipesAndDisplaysProgressUntilImportCompletes() {

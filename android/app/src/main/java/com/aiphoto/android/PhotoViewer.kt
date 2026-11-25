@@ -2,6 +2,7 @@
 package com.aiphoto.android
 
 import android.net.ConnectivityManager
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,8 +46,11 @@ import androidx.media3.ui.PlayerView
 import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.sin
+
+private const val LIKE_MODE_IDLE_MILLIS = 2_000L
 
 @Composable fun PhotoViewer(vm: AppViewModel, nav: NavHostController, source: String, initialId: Long) {
     val feed = vm.feeds[source] ?: Feed()
@@ -56,7 +60,8 @@ import kotlin.math.sin
     }
     val pager = rememberPagerState(initialPage = initial) { photos.size }
     var controls by rememberSaveable { mutableStateOf(true) }
-    var likeMode by rememberSaveable { mutableStateOf(false) }
+    var lastLikeAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    val likeMode = lastLikeAt != null
     var shareOptions by remember { mutableStateOf(false) }
     var labels by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
@@ -72,7 +77,12 @@ import kotlin.math.sin
     }
     val photo = photos.getOrNull(pager.currentPage)
     val canLike = !feed.offline && photo?.isVideo == false
-    BackHandler(enabled = likeMode && canLike) { likeMode = false }
+    BackHandler(enabled = likeMode && canLike) { lastLikeAt = null }
+    LaunchedEffect(lastLikeAt) {
+        val lastTap = lastLikeAt ?: return@LaunchedEffect
+        delay((LIKE_MODE_IDLE_MILLIS - (SystemClock.elapsedRealtime() - lastTap)).coerceAtLeast(0L))
+        if (lastLikeAt == lastTap) lastLikeAt = null
+    }
     LaunchedEffect(pager.currentPage, photos.size) {
         if (pager.currentPage >= photos.size - 3 && photos.isNotEmpty() && feed.more && !feed.loading && feed.error == null && !feed.offline) vm.loadFeed(source)
     }
@@ -104,12 +114,12 @@ import kotlin.math.sin
                     if (feed.offline) {
                         vm.notice = "离线时无法点赞"
                         false
-                    } else vm.likePhoto(item.id).also { sent -> if (sent) likeMode = true }
+                    } else vm.likePhoto(item.id).also { sent -> if (sent) lastLikeAt = SystemClock.elapsedRealtime() }
                 }
             }
             if (likeMode && canLike) {
                 val topInset = if (controls) Modifier else Modifier.statusBarsPadding()
-                FilledTonalButton({ likeMode = false }, Modifier.align(Alignment.TopEnd).then(topInset).padding(8.dp)) {
+                FilledTonalButton({ lastLikeAt = null }, Modifier.align(Alignment.TopEnd).then(topInset).padding(8.dp)) {
                     Text("退出点赞模式")
                 }
             }

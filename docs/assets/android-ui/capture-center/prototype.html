@@ -551,7 +551,8 @@ root.addEventListener('capture-open', event => {
   const favorites = new Set([3,4,8,10,12,14,17,20,22,24,27,30]);
   const likeCounts = new Map([0,2,7,8,11,15,18,21,24,25,29,33].map(id=>[id,1]));
   const likedPhotos = () => [...likeCounts.keys()].sort((a,b)=>likeCounts.get(b)-likeCounts.get(a));
-  let likeMode = false, viewerControls = true, pendingTap = null, nextThumb = 0;
+  const likeIdleMillis = 2000;
+  let likeMode = false, likeIdleTimer, viewerControls = true, pendingTap = null, nextThumb = 0;
   let galleryScroll = 0;
   let personName = '小满', personParent = 'people';
   let viewerParent = 'photos', videoParent = 'photos', favoritesParent = 'profile';
@@ -680,7 +681,7 @@ root.addEventListener('capture-open', event => {
     if(id!==view){
       clearPendingTap();
       if(!((view==='viewer' && id==='photo-detail') || (view==='photo-detail' && id==='viewer'))){
-        likeMode=false;
+        exitLikeMode();
         viewerControls=true;
       }
     }
@@ -712,8 +713,16 @@ root.addEventListener('capture-open', event => {
     pendingTap=null;
   }
 
+  function exitLikeMode(){
+    clearTimeout(likeIdleTimer);
+    likeMode=false;
+    syncViewerControls();
+  }
+
   function likeAt(frame,x,y){
     likeMode=true;
+    clearTimeout(likeIdleTimer);
+    likeIdleTimer=setTimeout(exitLikeMode,likeIdleMillis);
     syncViewerControls();
     const count=(likeCounts.get(photo)??0)+1;
     likeCounts.set(photo,count);
@@ -802,8 +811,7 @@ root.addEventListener('capture-open', event => {
     }
     if(!command)return;
     if(command==='exit-like'){
-      likeMode=false;
-      syncViewerControls();
+      exitLikeMode();
       return;
     }
     clearPendingTap();
@@ -820,8 +828,7 @@ root.addEventListener('capture-open', event => {
   });
   screen.addEventListener('keydown',event=>{
     if(event.key==='Escape' && view==='viewer' && likeMode){
-      likeMode=false;
-      syncViewerControls();
+      exitLikeMode();
     }
   });
   screen.addEventListener('submit',event=>{
