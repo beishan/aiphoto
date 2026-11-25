@@ -32,6 +32,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -106,22 +108,14 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
         if (vm.error != null) ErrorNotice(vm.error!!, { vm.error = null })
         if (feed.error != null) ErrorNotice(feed.error, {}, { vm.loadFeed(source) })
         if (photo == null) { Text("照片已移除，请返回图库", Modifier.padding(24.dp), color = Color.White); return@Column }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            HorizontalPager(pager, modifier = Modifier.fillMaxSize(), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
-                val item = photos[index]
-                if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
-                else ZoomPhoto(vm, item, originalId == item.id, likeMode && canLike, { controls = !controls }) {
-                    if (feed.offline) {
-                        vm.notice = "离线时无法点赞"
-                        false
-                    } else vm.likePhoto(item.id).also { sent -> if (sent) lastLikeAt = SystemClock.elapsedRealtime() }
-                }
-            }
-            if (likeMode && canLike) {
-                val topInset = if (controls) Modifier else Modifier.statusBarsPadding()
-                FilledTonalButton({ lastLikeAt = null }, Modifier.align(Alignment.TopEnd).then(topInset).padding(8.dp)) {
-                    Text("退出点赞模式")
-                }
+        HorizontalPager(pager, modifier = Modifier.weight(1f).fillMaxWidth(), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
+            val item = photos[index]
+            if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
+            else ZoomPhoto(vm, item, originalId == item.id, likeMode && canLike, { controls = !controls }) {
+                if (feed.offline) {
+                    vm.notice = "离线时无法点赞"
+                    false
+                } else vm.likePhoto(item.id).also { sent -> if (sent) lastLikeAt = SystemClock.elapsedRealtime() }
             }
         }
         if (controls) Text(photo.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.LightGray, style = MaterialTheme.typography.bodySmall, maxLines = 1)
@@ -180,7 +174,9 @@ private const val LIKE_MODE_IDLE_MILLIS = 2_000L
         scale = (scale * zoom).coerceIn(1f, 5f)
         offset = if (scale > 1f) offset + pan else Offset.Zero
     }
-    Box(Modifier.fillMaxSize().testTag("viewer-photo").pointerInput(photo.id, likeMode) {
+    Box(Modifier.fillMaxSize().testTag("viewer-photo").semantics {
+        if (likeMode) stateDescription = "点赞模式"
+    }.pointerInput(photo.id, likeMode) {
         fun like(at: Offset) {
             if (latestLike()) floatingLikes.add(FloatingLike(likeSequence++, at))
         }

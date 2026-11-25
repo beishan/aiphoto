@@ -120,8 +120,8 @@ class AppFlowTest {
         val preview = compose.onNodeWithTag("viewer-photo")
         fun likeRequests() = requests.filter { it.requestUrl?.encodedPath == "/nas/api/photos/1/like" }
         preview.performTouchInput { doubleClick() }
-        waitText("退出点赞模式")
         compose.waitUntil(10000) { likeRequests().size == 1 }
+        compose.onNodeWithText("退出点赞模式").assertDoesNotExist()
         preview.performTouchInput {
             click(center)
             advanceEventTime(40)
@@ -135,11 +135,15 @@ class AppFlowTest {
         preview.performTouchInput { click(center) }
         compose.waitUntil(10000) { likeRequests().size == 5 }
         android.os.SystemClock.sleep(1050)
-        compose.onNodeWithText("退出点赞模式").assertExists()
-        compose.waitUntil(2200) { compose.onAllNodesWithText("退出点赞模式").fetchSemanticsNodes().isEmpty() }
         preview.performTouchInput { click(center) }
+        compose.waitUntil(10000) { likeRequests().size == 6 }
+        val activeLikeMode = hasTestTag("viewer-photo") and
+            SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "点赞模式")
+        compose.waitUntil(3200) { compose.onAllNodes(activeLikeMode).fetchSemanticsNodes().isEmpty() }
+        // Advance the injected touch clock as well as the app's idle clock between clicks.
+        preview.performTouchInput { advanceEventTime(2200); click(center) }
         compose.waitUntil(10000) { compose.onAllNodesWithText("查看原图").fetchSemanticsNodes().isEmpty() }
-        Assert.assertEquals(5, likeRequests().size)
+        Assert.assertEquals(6, likeRequests().size)
     }
 
     @Test fun capturePreviewSwipesAndDisplaysProgressUntilImportCompletes() {

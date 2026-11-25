@@ -105,8 +105,6 @@
 #capture-mock .import-progress {position:absolute;z-index:5;inset:auto 0 var(--system-height);height:2px;overflow:hidden;background:#666be848;pointer-events:none}
 #capture-mock .import-progress::after {content:"";display:block;width:58%;height:100%;background:linear-gradient(90deg,transparent,#8878ff,#64dfff,#f591e8,transparent);animation:import-glow 1.3s linear infinite}
 @keyframes import-glow {from{transform:translateX(-100%)}to{transform:translateX(173%)}}
-#design-screen .viewer-frame .exit-like {position:absolute;z-index:2;top:8px;right:8px;padding:0 12px;border-radius:24px;background:#303b63;color:#e6eaff}
-#design-screen .viewer-controls-hidden .viewer-frame .exit-like {top:calc(var(--status-height) + 8px)}
 #design-screen .floating-thumb {position:absolute;z-index:1;font-size:38px;line-height:1;pointer-events:none}
 @media (prefers-reduced-motion:reduce) {#capture-mock .import-progress::after {animation:none;transform:translateX(36%)}}
 :is(#capture-mock,#design-screen) .preview-actions {display:grid;gap:6px;padding:10px 14px}
@@ -611,7 +609,6 @@ root.addEventListener('capture-open', event => {
     photos: () => '<div class="photo-scroll" role="region" aria-label="可滚动照片图库">'+
       body(group('最近入库','<p class="muted">'+(all.length-1)+' 张照片 · 1 个视频</p>'))+datedPhotoGroups(all,grid)+'</div>',
     viewer: () => '<div class="frame viewer-frame">'+img(photo,escape(renamed))+
-      button('退出点赞模式','class="exit-like" data-action="exit-like" hidden')+
       '<span class="like-status" role="status"></span></div><div class="preview-actions"><p class="muted">'+
       (photo+1)+' / '+images.length+'</p><div class="row">'+action('previous','上一张')+
       action('favorite',favorites.has(photo)?'已收藏':'收藏')+go('photo-detail','详情')+action('next','下一张')+'</div></div>',
@@ -700,11 +697,9 @@ root.addEventListener('capture-open', event => {
 
   function syncViewerControls(){
     const viewer=view==='viewer';
-    phone.classList.toggle('viewer-controls-hidden',viewer && !viewerControls);
     if(!viewer)return;
     app.querySelector('.top').hidden=!viewerControls;
     app.querySelector('.preview-actions').hidden=!viewerControls;
-    app.querySelector('.exit-like').hidden=!likeMode;
   }
 
   function clearPendingTap(){
@@ -716,14 +711,12 @@ root.addEventListener('capture-open', event => {
   function exitLikeMode(){
     clearTimeout(likeIdleTimer);
     likeMode=false;
-    syncViewerControls();
   }
 
   function likeAt(frame,x,y){
     likeMode=true;
     clearTimeout(likeIdleTimer);
     likeIdleTimer=setTimeout(exitLikeMode,likeIdleMillis);
-    syncViewerControls();
     const count=(likeCounts.get(photo)??0)+1;
     likeCounts.set(photo,count);
     frame.querySelector('.like-status').textContent='已点赞，共 '+count+' 个赞';
@@ -810,10 +803,6 @@ root.addEventListener('capture-open', event => {
       show(id);return;
     }
     if(!command)return;
-    if(command==='exit-like'){
-      exitLikeMode();
-      return;
-    }
     clearPendingTap();
     notice='';
     switch(command){
