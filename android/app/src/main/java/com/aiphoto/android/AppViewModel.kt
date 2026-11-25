@@ -273,6 +273,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             finally { if (generation == epoch) busy = false }
         }
     }
+    fun likePhoto(id: Long): Boolean {
+        val client = api ?: return false
+        val generation = epoch
+        viewModelScope.launch {
+            try {
+                client.write("photos/$id/like", oneShot = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == epoch) notice = "点赞失败，${readable(e)}"
+            }
+        }
+        return true
+    }
     fun updatePhoto(id: Long, values: Map<String, Any>, done: () -> Unit = {}) = mutate({ client ->
         val updated = gson.fromJson(client.write("photos/$id", "PUT", values), Photo::class.java)
         currentCoroutineContext().ensureActive()

@@ -2,8 +2,12 @@
 package com.aiphoto.android
 
 import android.net.ConnectivityManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -11,17 +15,22 @@ import androidx.compose.foundation.pager.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -37,6 +46,7 @@ import androidx.navigation.NavHostController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import java.util.Locale
+import kotlin.math.sin
 
 @Composable fun PhotoViewer(vm: AppViewModel, nav: NavHostController, source: String, initialId: Long) {
     val feed = vm.feeds[source] ?: Feed()
@@ -46,6 +56,7 @@ import java.util.Locale
     }
     val pager = rememberPagerState(initialPage = initial) { photos.size }
     var controls by rememberSaveable { mutableStateOf(true) }
+    var likeMode by rememberSaveable { mutableStateOf(false) }
     var shareOptions by remember { mutableStateOf(false) }
     var labels by remember { mutableStateOf(false) }
     var details by rememberSaveable { mutableStateOf(false) }
@@ -60,6 +71,8 @@ import java.util.Locale
         if (uri != null) pending?.let { vm.download(it, uri) }; pending = null
     }
     val photo = photos.getOrNull(pager.currentPage)
+    val canLike = !feed.offline && photo?.isVideo == false
+    BackHandler(enabled = likeMode && canLike) { likeMode = false }
     LaunchedEffect(pager.currentPage, photos.size) {
         if (pager.currentPage >= photos.size - 3 && photos.isNotEmpty() && feed.more && !feed.loading && feed.error == null && !feed.offline) vm.loadFeed(source)
     }
@@ -83,9 +96,23 @@ import java.util.Locale
         if (vm.error != null) ErrorNotice(vm.error!!, { vm.error = null })
         if (feed.error != null) ErrorNotice(feed.error, {}, { vm.loadFeed(source) })
         if (photo == null) { Text("照片已移除，请返回图库", Modifier.padding(24.dp), color = Color.White); return@Column }
-        HorizontalPager(pager, modifier = Modifier.weight(1f), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
-            val item = photos[index]
-            if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index) else ZoomPhoto(vm, item, originalId == item.id) { controls = !controls }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            HorizontalPager(pager, modifier = Modifier.fillMaxSize(), key = { photos[it].id }, beyondViewportPageCount = 0) { index ->
+                val item = photos[index]
+                if (item.isVideo) VideoContent(vm, item, active = pager.currentPage == index)
+                else ZoomPhoto(vm, item, originalId == item.id, likeMode && canLike, { controls = !controls }) {
+                    if (feed.offline) {
+                        vm.notice = "离线时无法点赞"
+                        false
+                    } else vm.likePhoto(item.id).also { sent -> if (sent) likeMode = true }
+                }
+            }
+            if (likeMode && canLike) {
+                val topInset = if (controls) Modifier else Modifier.statusBarsPadding()
+                FilledTonalButton({ likeMode = false }, Modifier.align(Alignment.TopEnd).then(topInset).padding(8.dp)) {
+                    Text("退出点赞模式")
+                }
+            }
         }
         if (controls) Text(photo.name, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = Color.LightGray, style = MaterialTheme.typography.bodySmall, maxLines = 1)
         if (controls) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 8.dp)) {
@@ -127,26 +154,73 @@ import java.util.Locale
         Text(title, Modifier.padding(top = 4.dp), color = if (enabled) Color.White else Color.Gray, style = MaterialTheme.typography.labelSmall)
     }
 }
-@Composable private fun ZoomPhoto(vm: AppViewModel, photo: Photo, original: Boolean, onTap: () -> Unit) {
+@Composable private fun ZoomPhoto(
+    vm: AppViewModel, photo: Photo, original: Boolean, likeMode: Boolean,
+    onTap: () -> Unit, onLike: () -> Boolean,
+) {
     var scale by remember(photo.id) { mutableFloatStateOf(1f) }
-    var offset by remember(photo.id) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var offset by remember(photo.id) { mutableStateOf(Offset.Zero) }
     var failed by remember(photo.id, original) { mutableStateOf(false) }
+    var likeSequence by remember(photo.id) { mutableIntStateOf(0) }
+    val floatingLikes = remember(photo.id) { mutableStateListOf<FloatingLike>() }
+    val latestTap by rememberUpdatedState(onTap)
+    val latestLike by rememberUpdatedState(onLike)
     val context = LocalContext.current
     val transform = rememberTransformableState { zoom, pan, _ ->
         scale = (scale * zoom).coerceIn(1f, 5f)
-        offset = if (scale > 1f) offset + pan else androidx.compose.ui.geometry.Offset.Zero
+        offset = if (scale > 1f) offset + pan else Offset.Zero
     }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().testTag("viewer-photo").pointerInput(photo.id, likeMode) {
+        fun like(at: Offset) {
+            if (latestLike()) floatingLikes.add(FloatingLike(likeSequence++, at))
+        }
+        if (likeMode) detectTapGestures(onTap = ::like)
+        else detectTapGestures(onTap = { latestTap() }, onDoubleTap = ::like)
+    }, contentAlignment = Alignment.Center) {
         vm.imageLoader?.let { loader ->
             AsyncImage(model = ImageRequest.Builder(context).data(if (failed) vm.mediaUrl(photo.thumbnailUrl) else if (original) vm.mediaUrl(photo.originalUrl) else vm.preview(photo)).size(2048, 2048).build(), imageLoader = loader,
                 contentDescription = photo.name, contentScale = ContentScale.FillWidth,
                 onError = { failed = true }, modifier = Modifier.fillMaxSize()
                     .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y }
-                    .pointerInput(photo.id) { detectTapGestures(onTap = { onTap() }, onDoubleTap = { scale = if (scale > 1f) 1f else 2f; offset = androidx.compose.ui.geometry.Offset.Zero }) }
                     .transformable(state = transform, canPan = { scale > 1f }))
         }
         if (failed) Text("预览不可用，使用缩略图；可下载原文件。", Modifier.align(Alignment.BottomCenter).padding(12.dp), color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+        floatingLikes.forEach { like ->
+            key(like.id) {
+                FloatingThumb(like, Modifier.align(AbsoluteAlignment.TopLeft)) { floatingLikes.remove(like) }
+            }
+        }
     }
+}
+
+private data class FloatingLike(val id: Int, val touch: Offset)
+
+@Composable
+private fun FloatingThumb(like: FloatingLike, modifier: Modifier, onFinished: () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    val latestFinished by rememberUpdatedState(onFinished)
+    LaunchedEffect(like.id) {
+        progress.animateTo(1f, tween(1050, easing = LinearEasing))
+        latestFinished()
+    }
+    val density = LocalDensity.current
+    val halfIcon = with(density) { 22.dp.toPx() }
+    val rise = with(density) { 156.dp.toPx() }
+    val drift = with(density) { 25.dp.toPx() }
+    val direction = if (like.id % 2 == 0) 1f else -1f
+    Icon(
+        Icons.Filled.ThumbUp, contentDescription = null, tint = Color(0xFFFFD476),
+        modifier = modifier.size(44.dp).graphicsLayer {
+            val fraction = progress.value
+            val curl = sin(fraction * 5.5f) * .52f + fraction * .65f
+            translationX = like.touch.x - halfIcon + direction * drift * curl
+            translationY = like.touch.y - halfIcon - rise * fraction * (1.36f - .36f * fraction)
+            rotationZ = direction * (sin(fraction * 4.6f) * 12f - fraction * 15f)
+            scaleX = .72f + .52f * (fraction * 4f).coerceAtMost(1f)
+            scaleY = scaleX
+            alpha = 1f - ((fraction - .28f) / .72f).coerceIn(0f, 1f)
+        },
+    )
 }
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable private fun VideoContent(vm: AppViewModel, photo: Photo, active: Boolean) {

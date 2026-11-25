@@ -87,6 +87,7 @@ class AppFlowTest {
                 if (path == "tags/photos/1/20" && request.method == "DELETE") { photoTagged = false; return json("{}") }
                 if (path == "categories/2/photos/1") return json("{}")
                 if (path == "photos/1/detail") return json(if (photoTagged) photo().dropLast(1) + ",\"tags\":[{\"id\":20,\"name\":\"假日\",\"source\":\"MANUAL\"}]}" else photo())
+                if (path == "photos/1/like" && request.method == "POST") return json("""{"likeCount":1}""")
                 if (path == "photos/1" && request.method == "PUT") {
                     val values = com.google.gson.JsonParser.parseString(request.body.readUtf8()).asJsonObject
                     if (values.has("favorite")) favorite = values["favorite"].asBoolean
@@ -104,6 +105,37 @@ class AppFlowTest {
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
     private fun waitText(value: String) { compose.waitUntil(15000) { compose.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() } }
     private fun back() { androidx.test.espresso.Espresso.pressBack(); compose.waitForIdle() }
+
+    @Test fun doubleTapEntersLikeModeAndEveryFurtherTapAddsOneLike() {
+        compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())
+        compose.onAllNodes(isToggleable())[0].performClick()
+        compose.onNodeWithText("连接服务器").performScrollTo().performClick()
+        waitText("用户名")
+        compose.onNodeWithText("用户名").performTextInput("tester")
+        compose.onNodeWithText("密码").performTextInput("password")
+        compose.onNodeWithText("登录", useUnmergedTree = true).performScrollTo().performClick()
+        waitText("最近入库")
+        compose.onNodeWithContentDescription("海边.jpg").performClick()
+        waitText("查看原图")
+        val preview = compose.onNodeWithTag("viewer-photo")
+        fun likeRequests() = requests.filter { it.requestUrl?.encodedPath == "/nas/api/photos/1/like" }
+        preview.performTouchInput { doubleClick() }
+        waitText("退出点赞模式")
+        compose.waitUntil(10000) { likeRequests().size == 1 }
+        preview.performTouchInput {
+            click(center)
+            advanceEventTime(40)
+            click(center)
+            advanceEventTime(40)
+            click(center)
+        }
+        compose.waitUntil(10000) { likeRequests().size == 4 }
+        Assert.assertTrue(likeRequests().all { it.method == "POST" && it.getHeader("Authorization") == "Bearer test-session" })
+        compose.onNodeWithText("退出点赞模式").performClick()
+        preview.performTouchInput { click(center) }
+        compose.waitUntil(10000) { compose.onAllNodesWithText("查看原图").fetchSemanticsNodes().isEmpty() }
+        Assert.assertEquals(4, likeRequests().size)
+    }
 
     @Test fun capturePreviewSwipesAndDisplaysProgressUntilImportCompletes() {
         compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())

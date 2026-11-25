@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -45,9 +46,16 @@ class ApiClient(val address: ServerAddress, val token: String?, val unauthorized
             gson.fromJson<T>(result.body!!.charStream(), object : TypeToken<T>() {}.type)
         }
     }
-    suspend fun write(path: String, method: String = "POST", body: Any? = emptyMap<String, String>()): String {
-        val request = Request.Builder().url(address.api(path)).method(method,
-            if (method == "DELETE" && body == null) null else gson.toJson(body).toRequestBody("application/json".toMediaType())).build()
+    suspend fun write(path: String, method: String = "POST", body: Any? = emptyMap<String, String>(), oneShot: Boolean = false): String {
+        val payload = if (method == "DELETE" && body == null) null
+            else gson.toJson(body).toRequestBody("application/json".toMediaType())
+        val requestBody = if (oneShot && payload != null) object : RequestBody() {
+            override fun contentType() = payload.contentType()
+            override fun contentLength() = payload.contentLength()
+            override fun writeTo(sink: BufferedSink) = payload.writeTo(sink)
+            override fun isOneShot() = true
+        } else payload
+        val request = Request.Builder().url(address.api(path)).method(method, requestBody).build()
         return withContext(Dispatchers.IO) { response(request).use { checkResult(it); it.body?.string().orEmpty() } }
     }
     fun checkResult(response: Response) {
