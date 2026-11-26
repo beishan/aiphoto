@@ -233,7 +233,8 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
             reviewAssets = reviewAssets.filterNot { it.id in completed }
             onRemoved(completed)
             selected = selected - completed
-            if (error == null || completed.isNotEmpty()) notice = "已${action.title} ${completed.size} 张" +
+            if ((action != CaptureAction.DELETE_SKIP || completed.size != targets.size) &&
+                (error == null || completed.isNotEmpty())) notice = "已${action.title} ${completed.size} 张" +
                 if (completed.size != targets.size) "，${targets.size - completed.size} 张待处理" else ""
             if (completed.isNotEmpty()) {
                 // Rebase offset pagination after rows are removed to avoid skipping a page.
