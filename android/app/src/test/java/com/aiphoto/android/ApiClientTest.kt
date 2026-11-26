@@ -7,6 +7,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ApiClientTest {
+    @Test fun expiredRequestSignsInAgainAndRetriesWithNewToken() = runBlocking {
+        MockWebServer().use { server ->
+            val address = ServerAddress(server.url("/nas/").toString(), true)
+            val guest = ApiClient(address, null)
+            val api = ApiClient(address, "expired", renew = {
+                guest.renewLogin("original", RememberedLogin("family", "test-password"))?.token
+            })
+            server.enqueue(MockResponse().setResponseCode(401))
+            server.enqueue(MockResponse().setBody("""{"product":"aiphoto","instanceId":"original"}"""))
+            server.enqueue(MockResponse().setBody("""{"token":"renewed","user":{"id":42}}"""))
+            server.enqueue(MockResponse().setBody("""{"id":42}"""))
+
+            assertEquals(42L, api.get<User>("users/me").id)
+            assertEquals("Bearer expired", server.takeRequest().getHeader("Authorization"))
+            assertEquals("/nas/api/mobile/server-info", server.takeRequest().path)
+            val login = server.takeRequest()
+            assertEquals("/nas/api/auth/login", login.path)
+            assertNull(login.getHeader("Authorization"))
+            assertEquals("test-password", api.gson.fromJson(login.body.readUtf8(), RememberedLogin::class.java).password)
+            assertEquals("Bearer renewed", server.takeRequest().getHeader("Authorization"))
+        }
+    }
+
     @Test fun realPagingContractCarriesBearerAndPrefix() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"content":[{"id":42,"originalFilename":"sea.jpg","favorite":true}],"nextCursor":42,"hasMore":true}"""))

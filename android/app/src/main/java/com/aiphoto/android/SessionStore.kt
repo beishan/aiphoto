@@ -11,6 +11,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+internal data class RememberedLogin(val username: String, val password: String)
+
 class SessionStore(context: Context) {
     private val prefs = context.getSharedPreferences("connection", Context.MODE_PRIVATE)
     var address: String
@@ -36,16 +38,26 @@ class SessionStore(context: Context) {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
-    fun save(login: Login) {
+    private fun encrypt(value: Any): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
-        val encrypted = cipher.doFinal(Gson().toJson(login).toByteArray(Charsets.UTF_8))
-        prefs.edit().putString("session", Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)).apply()
-        username = login.user.username
+        val encrypted = cipher.doFinal(Gson().toJson(value).toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
     }
-    fun load(): Login? = runCatching {
-        val bytes = Base64.decode(prefs.getString("session", null) ?: return null, Base64.NO_WRAP)
+    private fun <T> decrypt(name: String, type: Class<T>): T? = runCatching {
+        val bytes = Base64.decode(prefs.getString(name, null) ?: return null, Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12))) }
-        Gson().fromJson(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8), Login::class.java)
+        Gson().fromJson(String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8), type)
     }.getOrNull()
-    fun clear() { prefs.edit().remove("session").apply() }
+    @Synchronized
+    internal fun save(login: Login, credentials: RememberedLogin? = null) {
+        val editor = prefs.edit().putString("session", encrypt(login)).putString("username", login.user.username)
+        credentials?.let { editor.putString("credentials", encrypt(it)) }
+        editor.apply()
+    }
+    @Synchronized
+    internal fun remembered() = decrypt("credentials", RememberedLogin::class.java)
+    @Synchronized
+    fun load() = decrypt("session", Login::class.java)
+    @Synchronized
+    fun clear() { prefs.edit().remove("session").remove("credentials").apply() }
 }

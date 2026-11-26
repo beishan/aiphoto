@@ -73,7 +73,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun install(login: Login) {
         cacheScope = MessageDigest.getInstance("SHA-256").digest((store.address + ":" + store.instanceId + ":" + login.user.id).toByteArray()).joinToString("") { "%02x".format(it) }
         val generation = epoch
-        api = ApiClient(ServerAddress(store.address, store.allowHttp), login.token) {
+        val address = ServerAddress(store.address, store.allowHttp)
+        val instance = store.instanceId
+        val guest = ApiClient(address, null)
+        api = ApiClient(address, login.token, renew = { expired ->
+            val credentials = synchronized(store) {
+                store.remembered().takeIf { store.load()?.token == expired }
+            }
+            val renewed = credentials?.let { guest.renewLogin(instance, it) }
+            synchronized(store) {
+                if (renewed != null && renewed.token.isNotBlank() && renewed.user.id == login.user.id &&
+                    store.load()?.token == expired) {
+                    store.save(renewed)
+                    renewed.token
+                } else null
+            }
+        }) {
             viewModelScope.launch { if (epoch == generation && session != null) logout("登录已失效，请重新登录") }
         }
         capture = CaptureState(checkNotNull(api), login.user.role == "ADMIN")
@@ -112,7 +127,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (info.instanceId != store.instanceId) { logout("服务器实例已变更，请重新连接并登录"); connected = false; return@launch }
                 serverInfo = info; store.info = info
                 val user = api!!.get<User>("users/me")
-                if (generation == epoch) { session = session?.copy(user = user); session?.let(store::save) }
+                if (generation == epoch) { session = session?.copy(user = user) }
             } catch (e: Exception) { if (e !is CancellationException && generation == epoch && e !is ApiFailure) notice = "网络不可达，可查看已缓存内容" }
         }
     }
@@ -139,7 +154,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val guest = ApiClient(ServerAddress(store.address, store.allowHttp), null)
                 val result = gson.fromJson(guest.write("auth/login", body = mapOf("username" to username, "password" to password)), Login::class.java)
                 require(result.token.isNotBlank() && result.user.id > 0) { "服务器登录响应无效" }
-                epoch++; store.save(result); session = result; install(result)
+                epoch++; store.save(result, RememberedLogin(username, password)); session = result; install(result)
             } catch (e: Exception) { if (e !is CancellationException) error = readable(e) }
             finally { busy = false }
         }

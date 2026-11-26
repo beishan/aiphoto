@@ -14,18 +14,61 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class ApiClient(val address: ServerAddress, val token: String?, val unauthorized: () -> Unit = {}) {
+class ApiClient(
+    val address: ServerAddress,
+    token: String?,
+    private val renew: ((String) -> String?)? = null,
+    val unauthorized: () -> Unit = {},
+) {
     val gson = Gson()
+    @Volatile private var accessToken = token
+    private val renewalLock = Any()
     val http = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
         .followRedirects(false).followSslRedirects(false)
         .addInterceptor { chain ->
             val original = chain.request()
             require(original.url.scheme == address.base.scheme && original.url.host == address.base.host && original.url.port == address.base.port && original.url.encodedPath.startsWith(address.base.encodedPath)) { "请求超出当前服务器范围" }
+            val token = accessToken
             val request = original.newBuilder().apply {
                 if (token != null) header("Authorization", "Bearer $token")
             }.build()
-            chain.proceed(request).also { if (it.code == 401 && token != null) unauthorized() }
+            val result = chain.proceed(request)
+            if (result.code != 401 || token == null) return@addInterceptor result
+            val replacement = try {
+                synchronized(renewalLock) {
+                    if (token != accessToken) accessToken
+                    else renew?.invoke(token)?.also { accessToken = it }
+                }
+            } catch (failure: Exception) {
+                result.close()
+                throw IOException("暂时无法恢复登录，请重试", failure)
+            }
+            if (replacement == null) {
+                unauthorized()
+                return@addInterceptor result
+            }
+            if (request.body?.isOneShot() == true || request.body?.isDuplex() == true) return@addInterceptor result
+            result.close()
+            chain.proceed(request.newBuilder().header("Authorization", "Bearer $replacement").build()).also {
+                if (it.code == 401) unauthorized()
+            }
         }.build()
+
+    internal fun renewLogin(expectedInstance: String, credentials: RememberedLogin): Login? {
+        val infoRequest = Request.Builder().url(address.api("mobile/server-info")).build()
+        http.newCall(infoRequest).execute().use {
+            checkResult(it)
+            val info = gson.fromJson(it.body!!.charStream(), ServerInfo::class.java)
+            if (info.product != "aiphoto" || info.instanceId != expectedInstance) return null
+        }
+        val body = gson.toJson(credentials).toRequestBody("application/json".toMediaType())
+        val request = Request.Builder().url(address.api("auth/login")).post(body).build()
+        return http.newCall(request).execute().use {
+            if (it.code in setOf(400, 401, 403)) return null
+            checkResult(it)
+            gson.fromJson(it.body!!.charStream(), Login::class.java)
+        }
+    }
 
     suspend fun response(request: Request): Response = suspendCancellableCoroutine { continuation ->
         val call = http.newCall(request)
