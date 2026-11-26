@@ -63,6 +63,14 @@ cd android
 ```bash
 cd android
 JAVA_HOME=$(/usr/libexec/java_home -v 17) ./gradlew :app:installDebug
+
+
+// 用这个 
+
+$env:JAVA_HOME = "C:\Users\weixu\.jdks\openjdk-21.0.1"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+.\gradlew.bat :app:installDebug
+
 ```
 
 如果已经构建 APK，可在 `android/` 目录执行以下命令，仅安装现有文件。若同时连接了多个设备，将 `-d` 换成 `-s <手机序列号>`。
