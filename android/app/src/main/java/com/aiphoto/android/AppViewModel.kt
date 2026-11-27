@@ -160,7 +160,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun logout(message: String? = null) {
-        capture?.cancelPreviewImports()
+        capture?.cancelPreviewActions()
         epoch++; monthsJob?.cancel(); months = emptyList(); monthsLoading = false; monthsOffline = false; monthsError = null; authJob?.cancel(); feedJobs.values.forEach { it.cancel() }; feedJobs.clear()
         catalogJob?.cancel(); mutationJob?.cancel(); transferJobs.values.forEach { it.cancel() }; transferJobs.clear()
         api?.http?.dispatcher?.cancelAll(); api?.http?.connectionPool?.evictAll()
@@ -383,8 +383,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         withContext(Dispatchers.IO) { db.entries().clearPrefix(key) }
     }
     fun supports(feature: String) = serverInfo?.capabilities?.contains(feature) == true
-    internal fun queueCapturePreviewImport(asset: CaptureAsset): Boolean =
-        capture?.queuePreviewImport(asset, viewModelScope) == true
+    internal fun queueCapturePreviewAction(action: CaptureAction, asset: CaptureAsset): Boolean =
+        capture?.queuePreviewAction(action, asset, viewModelScope) == true
     internal suspend fun refreshCapabilities() {
         val generation = epoch
         val client = api ?: throw IllegalStateException("请重新登录")

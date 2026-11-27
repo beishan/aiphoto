@@ -6,6 +6,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.util.UUID
@@ -56,10 +58,10 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
     var jobs by mutableStateOf(emptyList<CaptureJob>())
         private set
     private var reviewAssets by mutableStateOf(emptyList<CaptureAsset>())
-    private val previewImports = mutableStateMapOf<Long, Job>()
+    private val previewActions = mutableStateMapOf<Long, Pair<CaptureAction, Job>>()
     private var importingSelection by mutableStateOf(false)
-    val importing by derivedStateOf { importingSelection || previewImports.isNotEmpty() }
-    val assets by derivedStateOf { reviewAssets.filterNot { it.id in previewImports } }
+    val importing by derivedStateOf { importingSelection || previewActions.values.any { it.first == CaptureAction.IMPORT } }
+    val assets by derivedStateOf { reviewAssets.filterNot { it.id in previewActions } }
     var count by mutableLongStateOf(0)
         private set
     var jobFilter by mutableStateOf<CaptureJob?>(null)
@@ -81,6 +83,9 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         private set
     private var page = 0
     private var reviewGeneration = 0
+    var previewRevision by mutableIntStateOf(0)
+        private set
+    private val removalMutex = Mutex()
     private val importKeys = mutableMapOf<List<Long>, String>()
 
     suspend fun refreshJobs() {
@@ -161,7 +166,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                 val result = reviewPage(next++, jobFilter?.id, 200)
                 result.content.forEach { snapshot[it.id] = it }
             } while (!result.last)
-            selected = snapshot.filterKeys { it !in previewImports }
+            selected = snapshot.filterKeys { it !in previewActions }
         } catch (failure: Exception) {
             record(failure)
         } finally {
@@ -184,7 +189,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
     }
 
     suspend fun perform(action: CaptureAction, targets: Collection<CaptureAsset>, onRemoved: (Set<Long>) -> Unit = {}): Set<Long> {
-        if (busy || targets.isEmpty() || targets.any { it.id in previewImports }) return emptySet()
+        if (busy || targets.isEmpty() || targets.any { it.id in previewActions }) return emptySet()
         busy = true
         importingSelection = action == CaptureAction.IMPORT
         error = null
@@ -205,25 +210,7 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                             }
                             completed += imported
                         } else {
-                            val suffix = when (action) {
-                                CaptureAction.SKIP -> "skip"
-                                CaptureAction.DELETE -> "delete"
-                                else -> "delete-and-skip"
-                            }
-                            val body = if (action == CaptureAction.DELETE) ids else mapOf("ids" to ids)
-                            val result = api.gson.fromJson(
-                                api.write("crawl/jobs/$job/assets/$suffix", body = body), CaptureResult::class.java,
-                            )
-                            if (result.success == ids.size) completed += ids
-                            else {
-                                val remaining = mutableSetOf<Long>()
-                                var next = 0
-                                do {
-                                    val actual = reviewPage(next++, job, 200)
-                                    remaining += actual.content.map { it.id }
-                                } while (!actual.last)
-                                completed += ids.filterNot { it in remaining }
-                            }
+                            completed += remove(action, job, ids)
                         }
                     } catch (failure: Exception) {
                         record(failure)
@@ -270,24 +257,51 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
         return completed
     }
 
-    fun queuePreviewImport(asset: CaptureAsset, scope: CoroutineScope): Boolean {
-        if (busy || asset.id in previewImports) return false
+    private suspend fun remove(action: CaptureAction, job: Long, ids: List<Long>): List<Long> = removalMutex.withLock {
+        val suffix = when (action) {
+            CaptureAction.SKIP -> "skip"
+            CaptureAction.DELETE -> "delete"
+            else -> "delete-and-skip"
+        }
+        val body = if (action == CaptureAction.DELETE) ids else mapOf("ids" to ids)
+        val result = api.gson.fromJson(
+            api.write("crawl/jobs/$job/assets/$suffix", body = body), CaptureResult::class.java,
+        )
+        if (result.success == ids.size) return@withLock ids
+        else {
+            val remaining = mutableSetOf<Long>()
+            var next = 0
+            do {
+                val actual = reviewPage(next++, job, 200)
+                remaining += actual.content.map { it.id }
+            } while (!actual.last)
+            ids.filterNot { it in remaining }
+        }
+    }
+
+    fun queuePreviewAction(action: CaptureAction, asset: CaptureAsset, scope: CoroutineScope): Boolean {
+        if (busy || asset.id in previewActions) return false
         error = null
         selected = selected - asset.id
         val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             var succeeded = false
             try {
-                val imported = withTimeoutOrNull(180_000L) { import(asset.jobId, listOf(asset.id)) }
+                val completed = if (action == CaptureAction.IMPORT) {
+                    withTimeoutOrNull(180_000L) { import(asset.jobId, listOf(asset.id)) }
+                } else {
+                    remove(action, asset.jobId, listOf(asset.id))
+                }
                 when {
-                    imported == null -> error = "暂未确认 ${asset.title} 的入库结果，可再次上滑查询。"
-                    asset.id !in imported -> error = "${asset.title} 入库失败，已留在待整理。"
+                    completed == null -> error = "暂未确认 ${asset.title} 的入库结果，可再次上滑查询。"
+                    asset.id !in completed -> error = "${asset.title}${action.title}失败，已留在待整理。"
                     else -> {
                         succeeded = true
                         reviewGeneration++
                         loading = false
                         reviewAssets = reviewAssets.filterNot { it.id == asset.id }
                         page = 0
-                        notice = "${asset.title} 已入库"
+                        previewRevision++
+                        if (action != CaptureAction.DELETE_SKIP) notice = "${asset.title}已${action.title}"
                     }
                 }
             } catch (failure: Exception) {
@@ -297,16 +311,16 @@ internal class CaptureState(private val api: ApiClient, private val admin: Boole
                     reviewAssets.none { it.id == asset.id }) {
                     reviewAssets = reviewAssets + asset
                 }
-                previewImports.remove(asset.id)
+                previewActions.remove(asset.id)
             }
         }
-        previewImports[asset.id] = job
+        previewActions[asset.id] = action to job
         job.start()
         return true
     }
 
-    fun cancelPreviewImports() {
-        previewImports.values.toList().forEach { it.cancel() }
+    fun cancelPreviewActions() {
+        previewActions.values.toList().forEach { it.second.cancel() }
     }
 
     private suspend fun import(job: Long, ids: List<Long>): Set<Long> {

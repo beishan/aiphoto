@@ -24,6 +24,7 @@ class AppFlowTest {
     private val captureDeleted = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private val captureImportRunning = AtomicBoolean(true)
     private val multipleGalleryPhotos = AtomicBoolean(false)
+    @Volatile private var deleteResponseGate: java.util.concurrent.CountDownLatch? = null
     private val image = java.io.ByteArrayOutputStream().use { stream ->
         val bitmap = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(android.graphics.Color.rgb(40, 99, 78))
@@ -50,6 +51,7 @@ class AppFlowTest {
                 if (path == "crawl/jobs/3/assets/delete-and-skip") {
                     val ids = com.google.gson.JsonParser.parseString(request.body.clone().readUtf8())
                         .asJsonObject.getAsJsonArray("ids").map { it.asLong }
+                    deleteResponseGate?.await(30, java.util.concurrent.TimeUnit.SECONDS)
                     captureDeleted.addAll(ids)
                     return json("""{"success":${ids.size}}""")
                 }
@@ -219,11 +221,18 @@ class AppFlowTest {
         compose.waitUntil(15000) { compose.onAllNodesWithContentDescription("采集海岸.jpg").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("采集海岸.jpg").performClick()
         waitText("1 / 2")
-        compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
-        waitText("1 / 1")
-        compose.onNodeWithTag("capture-preview-image").assertExists()
-        compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
-        waitText("待整理区没有照片")
+        val gate = java.util.concurrent.CountDownLatch(1)
+        deleteResponseGate = gate
+        try {
+            compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
+            waitText("1 / 1")
+            compose.onNodeWithTag("capture-preview-image").performTouchInput { swipeDown() }
+            waitText("待整理区没有照片")
+            Assert.assertTrue(captureDeleted.isEmpty())
+        } finally {
+            gate.countDown()
+        }
+        compose.waitUntil(15000) { captureDeleted.containsAll(listOf(12L, 13L)) }
     }
     @Test fun connectsLogsInBrowsesAndUsesAuthenticatedApiWithoutMediaPermissions() {
         compose.onNodeWithText("服务器地址").performTextReplacement(server.url("/nas/").toString())

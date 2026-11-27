@@ -23,15 +23,40 @@ class CaptureStateTest {
             val photo = state.assets.single()
             assertFalse(state.importing)
             kotlinx.coroutines.coroutineScope {
-                assertTrue(state.queuePreviewImport(photo, this))
+                assertTrue(state.queuePreviewAction(CaptureAction.IMPORT, photo, this))
                 assertTrue(state.importing)
                 assertTrue(state.assets.isEmpty())
                 assertTrue(!state.busy)
-                assertTrue(!state.queuePreviewImport(photo, this))
+                assertTrue(!state.queuePreviewAction(CaptureAction.IMPORT, photo, this))
             }
             assertFalse(state.importing)
             assertEquals(photo, state.assets.single())
             assertTrue(state.error.orEmpty().contains("入库失败"))
+        }
+    }
+
+    @Test fun previewDeletesQueueWithoutBlockingAndRestoreOnlyFailedPhoto() = runBlocking {
+        MockWebServer().use { server ->
+            val api = ApiClient(ServerAddress(server.url("/").toString(), true), "token")
+            val state = CaptureState(api, admin = false)
+            val other = """{"id":13,"jobId":3}"""
+            server.enqueue(MockResponse().setBody("""{"content":[$asset,$other],"last":true,"totalElements":2}"""))
+            server.enqueue(MockResponse().setBody("""{"success":1}"""))
+            server.enqueue(MockResponse().setResponseCode(400))
+
+            state.loadReview()
+            val (first, second) = state.assets
+            kotlinx.coroutines.coroutineScope {
+                assertTrue(state.queuePreviewAction(CaptureAction.DELETE_SKIP, first, this))
+                assertEquals(listOf(second), state.assets)
+                assertTrue(state.queuePreviewAction(CaptureAction.DELETE_SKIP, second, this))
+                assertTrue(state.assets.isEmpty())
+                assertFalse(state.busy)
+            }
+
+            assertEquals(listOf(second), state.assets)
+            assertTrue(state.error.orEmpty().isNotEmpty())
+            assertNull(state.notice)
         }
     }
 

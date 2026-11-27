@@ -231,8 +231,8 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
                         ?: state.assets.firstOrNull()?.id
                 }
             }
-            val completed = if (operation == CaptureAction.IMPORT && originalPreview != null && targets.singleOrNull()?.id == originalPreview) {
-                if (vm.queueCapturePreviewImport(targets.single())) setOf(originalPreview) else emptySet()
+            val completed = if (originalPreview != null && targets.singleOrNull()?.id == originalPreview) {
+                if (vm.queueCapturePreviewAction(operation, targets.single())) setOf(originalPreview) else emptySet()
             } else {
                 state.perform(operation, targets, ::advancePreview)
             }
@@ -243,14 +243,16 @@ internal fun CaptureScreen(vm: AppViewModel, nav: NavHostController) {
 
     BackHandler { back() }
     LaunchedEffect(tab) {
-        if (tab == "review") {
-            if (state.assets.isEmpty() && state.more && !state.loading) state.loadReview()
-        } else {
+        if (tab != "review") {
             while (true) {
                 state.refreshJobs()
                 delay(8_000)
             }
         }
+    }
+    val reviewEmpty = state.assets.isEmpty()
+    LaunchedEffect(tab, reviewEmpty, state.more, state.previewRevision) {
+        if (tab == "review" && reviewEmpty && state.more) state.loadReview()
     }
     LaunchedEffect(grid, tab, state) {
         if (tab == "review") snapshotFlow {
@@ -499,7 +501,7 @@ private fun CapturePreview(
         }
     }
     val nearEnd = index >= assets.lastIndex - 5
-    LaunchedEffect(nearEnd, assets.size, state.more) {
+    LaunchedEffect(nearEnd, assets.size, state.more, state.previewRevision) {
         if (nearEnd && state.more) state.loadReview()
     }
 
@@ -623,7 +625,7 @@ private fun CapturePreviewPage(
             latestSetAnimating(true)
             scope.launch {
                 try {
-                    animate(0f, 1f, animationSpec = tween(if (dismiss) 370 else 160)) { fraction, _ ->
+                    animate(0f, 1f, animationSpec = tween(if (dismiss) 180 else 160)) { fraction, _ ->
                         drag = from + (end - from) * fraction
                         if (dismiss) dismissProgress = fraction else travelFraction = fromFraction * (1f - fraction)
                     }
@@ -637,7 +639,7 @@ private fun CapturePreviewPage(
             }
         }
     }) {
-        if (next != null && travelFraction != 0f) {
+        if (active && next != null) {
             PhotoImage(vm, state.media(next.id), Modifier.fillMaxSize().graphicsLayer {
                 val reveal = (abs(travelFraction) * 2.5f + dismissProgress).coerceIn(0f, 1f)
                 alpha = reveal
