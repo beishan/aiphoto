@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from '@/utils/feedback'
@@ -251,8 +252,9 @@ function getBboxStyle(bboxJson: string) {
             @click="setCoverFace(face.id)"
             :title="person?.coverFaceId === face.id ? '当前封面' : '设为封面'"
           >
-            <img v-if="face.photoUrl" :src="face.photoUrl" alt="" />
-            <div v-if="face.bboxJson" class="face-crop" :style="getBboxStyle(face.bboxJson)"></div>
+            <img v-if="!hideImages && face.photoUrl" :src="face.photoUrl" alt="" />
+            <span v-else-if="hideImages" class="image-placeholder">图片已隐藏</span>
+            <div v-if="!hideImages && face.bboxJson" class="face-crop" :style="getBboxStyle(face.bboxJson)"></div>
             <div v-if="person?.coverFaceId === face.id" class="face-badge">封面</div>
           </div>
         </div>

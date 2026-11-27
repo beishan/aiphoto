@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -244,9 +245,10 @@ onBeforeUnmount(clearImage)
           <div class="crop-body">
             <div class="crop-workbench">
               <div class="crop-stage">
+                <span v-if="hideImages" class="image-placeholder crop-placeholder">图片已隐藏</span>
                 <canvas
                   ref="cropCanvas"
-                  class="crop-canvas"
+                  class="crop-canvas" :style="{ visibility: hideImages ? 'hidden' : undefined }"
                   width="512"
                   height="512"
                   tabindex="0"
@@ -267,7 +269,7 @@ onBeforeUnmount(clearImage)
 
             <aside class="crop-panel">
               <div class="result-preview">
-                <canvas ref="previewCanvas" width="64" height="64" :class="shape" aria-hidden="true" />
+                <canvas v-show="!hideImages" ref="previewCanvas" width="64" height="64" :class="shape" aria-hidden="true" />
                 <div><strong>{{ previewTitle }}</strong><span>{{ previewDescription }}</span></div>
               </div>
               <div class="source-meta"><span>原图</span><strong>{{ imageWidth }} × {{ imageHeight }}</strong></div>

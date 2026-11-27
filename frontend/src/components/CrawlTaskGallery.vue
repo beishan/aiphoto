@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { crawlApi } from '@/api/crawlApi'
@@ -32,6 +33,7 @@ const visibleItems = computed(() => items.value.filter(canImport))
 const pageSelectable = visibleItems
 const pageSelected = computed(() => pageSelectable.value.length > 0 && pageSelectable.value.every(asset => selected.value.has(asset.id)))
 const queue = createThumbnailQueue(async (id, signal) => {
+  if (hideImages.value) return
   const { data } = await crawlApi.thumbnail(id, signal)
   if (signal.aborted || !alive) return
   thumbs[id] = URL.createObjectURL(data)
@@ -94,7 +96,7 @@ async function importImages(all: boolean) {
   finally { submitting.value = false; if (alive) void load() }
 }
 async function openPreview(asset: CrawlAsset) {
-  if (!thumbs[asset.id]) return
+  if (hideImages.value || !thumbs[asset.id]) return
   previewController?.abort()
   if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl)
   previewObjectUrl = ''

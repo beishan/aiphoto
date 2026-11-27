@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from '@/utils/feedback'
@@ -250,7 +251,8 @@ async function handleReclassify() {
                 :class="{ selected: selectedPhotoIds.includes(photo.id) }"
                 @click="togglePhotoSelection(photo.id)"
               >
-                <img :src="photo.thumbnailUrl || undefined" :alt="photo.originalFilename || ''" />
+                <img v-if="!hideImages" :src="photo.thumbnailUrl || undefined" :alt="photo.originalFilename || ''" />
+                <span v-else class="image-placeholder">图片已隐藏</span>
                 <div v-if="selectedPhotoIds.includes(photo.id)" class="picker-check">
                   <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />

@@ -9,6 +9,7 @@ import { folderApi, type BrowseItem } from '@/api/folderApi'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, FolderOpened, Key, Lock, Plus, Unlock, UserFilled } from '@element-plus/icons-vue'
 import type { User, Tag, ScanFolder } from '@/types'
+import DisplaySettingsPanel from '@/components/DisplaySettingsPanel.vue'
 import PersonalSettingsPanel from '@/components/PersonalSettingsPanel.vue'
 import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
@@ -28,6 +29,7 @@ async function confirmAction(content: string, title = '确认操作') {
 // ===== Settings menu structure =====
 const navItems = [
   { key: 'profile', label: '个人设置', icon: '👤' },
+  { key: 'display', label: '显示设置', icon: '🖼️' },
   { key: 'general', label: '主题风格', icon: '🎨' },
   { key: 'favicon', label: '网站图标', icon: '🌐' },
   { key: 'users', label: '用户管理', icon: '👥' },
@@ -52,7 +54,7 @@ const isCurrentUserAdmin = sessionUser?.role === 'ADMIN'
 
 const navGroups = computed(() => [
   { label: '个人', keys: ['profile'] },
-  { label: '外观与偏好', keys: isCurrentUserAdmin ? ['general', 'favicon', 'crawler-display'] : ['general', 'crawler-display'] },
+  { label: '外观与偏好', keys: isCurrentUserAdmin ? ['display', 'general', 'favicon', 'crawler-display'] : ['display', 'general', 'crawler-display'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
   { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
   { label: '管理', keys: isCurrentUserAdmin ? ['users', 'proxy', 'storage'] : ['storage'] },
@@ -727,6 +729,10 @@ const systemStorageFolders = computed(() => [
         <!-- ====== 个人设置 ====== -->
         <div v-if="activeSection === 'profile'" class="content-panel">
           <PersonalSettingsPanel />
+        </div>
+
+        <div v-if="activeSection === 'display'" class="content-panel">
+          <DisplaySettingsPanel />
         </div>
 
         <div v-if="activeSection === 'crawler-display'" class="content-panel">

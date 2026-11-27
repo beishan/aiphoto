@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import { userApi } from '@/api/userApi'
@@ -155,7 +156,7 @@ onMounted(loadProfile)
     <template v-else-if="user">
       <section class="avatar-section">
         <div class="profile-avatar">
-          <img v-if="user.avatar" :src="user.avatar" alt="当前头像" />
+          <img v-if="!hideImages && user.avatar" :src="user.avatar" alt="当前头像" />
           <span v-else>{{ userInitial }}</span>
         </div>
         <div class="avatar-copy">

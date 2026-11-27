@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { clampPhotoOffset, photoWheelScale, zoomPhotoOffset } from '@/utils/photoTransform'
@@ -351,14 +352,15 @@ onUnmounted(() => {
 
           <div class="viewer-image-wrapper">
             <video
-              v-if="isVideo && currentPhoto"
-              :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || ''"
+              v-if="isVideo && currentPhoto && (!hideImages || currentPhoto.originalUrl)"
+              :src="currentPhoto.originalUrl || (hideImages ? '' : currentPhoto.thumbnailUrl || '')"
               class="viewer-video"
               controls
               autoplay
               playsinline
               preload="auto"
             />
+            <span v-else-if="currentPhoto && hideImages" class="image-placeholder">图片已隐藏</span>
             <img v-else-if="currentPhoto" ref="imageElement" :key="currentPhoto.id" :style="imageTransform" :draggable="false" @dragstart.prevent @load="clampImagePosition" @pointerdown="startImageDrag" @pointermove="moveImage" @pointerup="stopImageDrag" @pointercancel="stopImageDrag" @lostpointercapture="stopImageDrag" :src="currentPhoto.originalUrl || currentPhoto.thumbnailUrl || '/placeholder.png'" class="viewer-img" />
           </div>
 
@@ -433,7 +435,7 @@ onUnmounted(() => {
                   :disabled="addingToAlbum"
                 >
                   <div class="album-thumb">
-                    <img v-if="album.coverPhotoUrl" :src="album.coverPhotoUrl" alt="" />
+                    <img v-if="!hideImages && album.coverPhotoUrl" :src="album.coverPhotoUrl" alt="" />
                     <svg v-else viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
                       <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z" />
                     </svg>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getStaticFrame, cacheStaticFrame } from '@/utils/staticFrameCache'
 import { queueStaticFrame } from '@/utils/staticFrameQueue'
@@ -10,6 +11,7 @@ let controller: AbortController | undefined
 let visible = false
 let generation = 0
 function load() {
+  if (hideImages.value) return
   const request = ++generation
   controller?.abort()
   const current = new AbortController()
@@ -23,7 +25,7 @@ function load() {
     return
   }
   void queueStaticFrame(async () => {
-    if (current.signal.aborted) return
+    if (hideImages.value || current.signal.aborted) return
     try {
       if (props.remote) {
         // Drawing a remote image is permitted without CORS when the canvas is never exported.
@@ -52,7 +54,7 @@ function load() {
       const response = await fetch(src, { signal: current.signal })
       if (!response.ok) throw new Error('Image unavailable')
       const blob = await response.blob()
-      if (current.signal.aborted) return
+      if (hideImages.value || current.signal.aborted) return
       const bitmap = await createImageBitmap(blob)
       try {
         const target = canvas.value
@@ -70,7 +72,10 @@ function load() {
     }
   })
 }
-watch(() => props.src, () => { if (visible) load() })
+watch([() => props.src, hideImages], ([, hidden]) => {
+  if (hidden) controller?.abort()
+  else if (visible) load()
+})
 onMounted(() => {
   if (props.eager) { visible = true; load(); return }
   observer = new IntersectionObserver(entries => {
@@ -85,4 +90,4 @@ onMounted(() => {
 onBeforeUnmount(() => { generation++; controller?.abort(); observer?.disconnect() })
 </script>
 
-<template><canvas ref="canvas" role="img" :aria-label="alt" /></template>
+<template><canvas v-show="!hideImages" ref="canvas" role="img" :aria-label="alt" /></template>

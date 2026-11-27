@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, inject, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import TaskFloat from '@/components/TaskFloat.vue'
@@ -353,7 +354,7 @@ function getDockItemStyle(index: number) {
       <div class="user-avatar-entry">
         <el-button text ref="userAvatarRef" class="ep-control dock-item user-avatar-btn" :style="getDockItemStyle(tabs.length + 1)" @click.stop="toggleUserMenu">
           <div class="avatar-circle">
-            <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
+            <img v-if="!hideImages && currentUser?.avatar" :src="currentUser.avatar" class="avatar-img" />
             <span v-else class="avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
           </div>
           <span class="dock-label" role="tooltip">账户</span>
@@ -366,7 +367,7 @@ function getDockItemStyle(index: number) {
       <div v-if="showUserMenu" class="user-popup-menu glass" :style="userMenuStyle">
         <div class="popup-header">
           <div class="popup-avatar">
-            <img v-if="currentUser?.avatar" :src="currentUser.avatar" class="popup-avatar-img" />
+            <img v-if="!hideImages && currentUser?.avatar" :src="currentUser.avatar" class="popup-avatar-img" />
             <span v-else class="popup-avatar-text">{{ (currentUser?.username || '?').charAt(0).toUpperCase() }}</span>
           </div>
           <div class="popup-user-info">

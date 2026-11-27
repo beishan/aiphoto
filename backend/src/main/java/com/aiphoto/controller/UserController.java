@@ -67,6 +67,14 @@ public class UserController {
                 authentication.getName(), request.get("showImages")));
     }
 
+    @PutMapping("/me/image-display")
+    public ResponseEntity<UserDTO> updateCurrentImageDisplay(
+            Authentication authentication,
+            @RequestBody Map<String, Boolean> request) {
+        return ResponseEntity.ok(userService.updateCurrentImageDisplay(
+                authentication.getName(), request.get("hideImages")));
+    }
+
     @PutMapping("/me/theme")
     public ResponseEntity<UserDTO> updateCurrentTheme(
             Authentication authentication,

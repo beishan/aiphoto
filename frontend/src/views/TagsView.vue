@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { tagApi } from '@/api/tagApi'
@@ -119,7 +120,7 @@ function openViewer(photos: Photo[], index: number) {
               @click.stop="openViewer(coverPhotos[tag.id], i)"
             >
               <img
-                v-if="photo.thumbnailUrl"
+                v-if="!hideImages && photo.thumbnailUrl"
                 :src="photo.thumbnailUrl"
                 :alt="tag.name"
                 loading="lazy"

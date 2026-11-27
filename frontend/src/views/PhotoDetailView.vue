@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage, useDialog } from '@/utils/feedback'
@@ -173,7 +174,7 @@ const availableTags = computed(() => {
 })
 
 function downloadPhoto() {
-  if (!photo.value?.originalUrl) return
+  if (!photo.value?.originalUrl || (hideImages.value && !isVideo.value)) return
   const a = document.createElement('a')
   a.href = photo.value.originalUrl
   a.download = photo.value.originalFilename || 'photo'
@@ -194,7 +195,7 @@ function downloadPhoto() {
       </el-button>
       <div class="header-info"><h2 class="header-title">照片详情</h2></div>
       <div class="header-actions">
-        <el-button class="header-btn" circle text aria-label="下载" @click="downloadPhoto">
+        <el-button class="header-btn" circle text aria-label="下载" :disabled="hideImages && !isVideo" @click="downloadPhoto">
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
         </el-button>
         <el-button class="header-btn danger" circle text type="danger" aria-label="删除" @click="confirmDelete">
@@ -206,7 +207,8 @@ function downloadPhoto() {
     <div class="detail-scroll" v-if="photo">
       <!-- Photo preview -->
       <div class="photo-preview" @click="showViewer = true">
-        <video v-if="isVideo" :src="photo.originalUrl || photo.thumbnailUrl || ''" class="preview-media" controls playsinline />
+        <video v-if="isVideo && (!hideImages || photo.originalUrl)" :src="photo.originalUrl || (hideImages ? '' : photo.thumbnailUrl || '')" class="preview-media" controls playsinline />
+        <span v-else-if="hideImages && (isImage || isVideo)" class="image-placeholder">图片已隐藏</span>
         <img v-else-if="isImage" :src="photo.originalUrl || photo.thumbnailUrl || '/placeholder.png'" class="preview-media" />
       </div>
 
@@ -224,7 +226,7 @@ function downloadPhoto() {
           </svg>
           <span>{{ photo.inTimeline ? '已加入' : '加入时间线' }}</span>
         </el-button>
-        <el-button class="action-btn" text @click="downloadPhoto">
+        <el-button class="action-btn" text :disabled="hideImages && !isVideo" @click="downloadPhoto">
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
           <span>下载</span>
         </el-button>

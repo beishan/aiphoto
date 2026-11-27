@@ -19,6 +19,8 @@ public class UserDTO {
     private String theme;
 
     private Boolean crawlerShowImages = true;
+
+    private Boolean hideImages = true;
     private DockConfigDTO dockConfig;
     private Boolean enabled;
     private LocalDateTime createdAt;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from '@/utils/feedback'
@@ -90,7 +91,7 @@ const albumTypeIcons: Record<string, string> = {
         @click="goToAlbum(album)"
       >
         <div class="album-cover">
-          <img v-if="album.coverPhotoUrl" :src="album.coverPhotoUrl" alt="" />
+          <img v-if="!hideImages && album.coverPhotoUrl" :src="album.coverPhotoUrl" alt="" />
           <div v-else class="album-cover-placeholder">
             <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
               <path :d="albumTypeIcons[album.type] || albumTypeIcons.VIRTUAL" />
@@ -117,7 +118,7 @@ const albumTypeIcons: Record<string, string> = {
       </header>
       <div class="album-grid">
         <router-link :to="album.path" class="album-cover smart-album">
-          <img v-if="album.cover" :src="album.cover" alt="" />
+          <img v-if="!hideImages && album.cover" :src="album.cover" alt="" />
           <div v-else class="album-cover-placeholder" aria-hidden="true">{{ album.icon }}</div>
           <span class="album-badge" :class="{ favorite: album.path === '/favorites' }" aria-hidden="true">{{ album.icon }}</span>
           <div class="album-overlay">

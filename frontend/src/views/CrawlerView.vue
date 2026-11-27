@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { defineAsyncComponent, computed, onMounted, onUnmounted, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { onBeforeRouteLeave } from 'vue-router'
@@ -29,7 +30,8 @@ import type { Album, CrawlAsset, CrawlImageSkip, CrawlJob, CrawlPage, CrawlRule,
 const CrawlStatisticsPanel = defineAsyncComponent(() => import('@/components/CrawlStatisticsPanel.vue'))
 const statisticsPanel = ref<{ refresh: () => Promise<void> } | null>(null)
 
-const { showCrawlerImages } = useCrawlerImageVisibility()
+const { showCrawlerImages: crawlerImagesEnabled } = useCrawlerImageVisibility()
+const showCrawlerImages = computed(() => !hideImages.value && crawlerImagesEnabled.value)
 
 const inspectionProxies = ref<InspectionProxy[]>([])
 const inspectionBusy = ref<'edit' | 'create' | ''>('')
@@ -187,6 +189,7 @@ function clearSkipThumbnails() {
 const skipPage = ref(0)
 const skipLoading = ref(false)
 let skipRequest = 0
+let skipThumbnailController: AbortController | undefined
 const skipTotal = ref(0)
 const pageAssetsDialogVisible = ref(false)
 const taskDrawerVisible = ref(false)
@@ -528,6 +531,7 @@ async function reloadVisibleAssets() {
 }
 async function loadImageSkips() {
   const request = ++skipRequest
+  skipThumbnailController?.abort()
   skipLoading.value = true
   try {
     const { data } = await crawlApi.imageSkips(skipPage.value, 50, skipQuery.value)
@@ -542,12 +546,15 @@ async function loadImageSkips() {
     skipImageErrors.clear()
     clearSkipThumbnails()
     imageSkips.value = data.content
+    if (hideImages.value) return
+    const controller = new AbortController()
+    skipThumbnailController = controller
     for (const skip of data.content) void queueStaticFrame(async () => {
-      if (request !== skipRequest) return
+      if (hideImages.value || controller.signal.aborted) return
       try {
-        const response = await http.get<Blob>('/crawl/image-skips/' + skip.id + '/thumbnail', { responseType: 'blob' })
-        if (request === skipRequest) skipThumbnailUrls[skip.id] = URL.createObjectURL(response.data)
-      } catch { if (request === skipRequest) skipImageErrors.add(skip.id) }
+        const response = await http.get<Blob>('/crawl/image-skips/' + skip.id + '/thumbnail', { responseType: 'blob', signal: controller.signal })
+        if (!controller.signal.aborted) skipThumbnailUrls[skip.id] = URL.createObjectURL(response.data)
+      } catch { if (!controller.signal.aborted) skipImageErrors.add(skip.id) }
     })
   } catch {
     if (request === skipRequest) ElMessage.error('跳过图片加载失败，请重试')
@@ -691,6 +698,15 @@ async function loadJobDetail() {
   selectedAssets.value = new Set([...selectedAssets.value].filter(id => assets.value.some(asset => asset.id === id)))
   await loadPreviews()
 }
+
+watch(hideImages, hidden => {
+  if (hidden) {
+    skipThumbnailController?.abort()
+    clearSkipThumbnails()
+  } else {
+    void loadImageSkips()
+  }
+})
 
 watch(showCrawlerImages, visible => {
   if (!visible) {
@@ -1637,6 +1653,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   skipRequest++
+  skipThumbnailController?.abort()
   clearSkipThumbnails()
   importPolling.abort()
   thumbnailQueue.dispose()
@@ -1879,7 +1896,8 @@ onUnmounted(() => {
           <el-empty v-if="!imageSkips.length && !skipLoading" description="暂无永久跳过的图片" />
           <div v-else class="skip-card-grid">
             <article v-for="skip in imageSkips" :key="skip.id" class="skip-image-card">
-              <span v-if="skipImageErrors.has(skip.id)" class="skip-image-placeholder">暂无本地缩略图</span>
+              <span v-if="hideImages" class="skip-image-placeholder">图片已隐藏</span>
+              <span v-else-if="skipImageErrors.has(skip.id)" class="skip-image-placeholder">暂无本地缩略图</span>
               <StaticPhotoImage v-else-if="skipThumbnailUrls[skip.id]" :key="skipThumbnailUrls[skip.id]" class="skip-card-image" :src="skipThumbnailUrls[skip.id]" alt="跳过的图片缩略图" @error="skipImageErrors.add(skip.id)" style="object-fit:contain" />
               <div class="skip-card-copy">
                 <el-link :href="skip.imageUrl" target="_blank" rel="noopener noreferrer" type="primary" class="skip-card-url" :title="skip.imageUrl">{{ skip.imageUrl }}</el-link>

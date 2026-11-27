@@ -163,6 +163,16 @@ public class UserService implements UserDetailsService {
     }
 
     @Transactional
+    public UserDTO updateCurrentImageDisplay(String username, Boolean hideImages) {
+        if (hideImages == null) {
+            throw new IllegalArgumentException("请指定是否全局隐藏图片");
+        }
+        User user = findByUsername(username);
+        user.setHideImages(hideImages);
+        return toDTO(userRepository.save(user));
+    }
+
+    @Transactional
     public UserDTO updateCurrentTheme(String username, String theme) {
         if (!Set.of("dark", "light", "macos26").contains(theme)) {
             throw new IllegalArgumentException("不支持的主题风格");
@@ -356,6 +366,7 @@ public class UserService implements UserDetailsService {
         dto.setPhotoPreferences(user.getPhotoPreferences());
         dto.setNotes(user.getProfileNotes());
         dto.setTheme(user.getTheme());
+        dto.setHideImages(!Boolean.FALSE.equals(user.getHideImages()));
         dto.setCrawlerShowImages(!Boolean.FALSE.equals(user.getCrawlerShowImages()));
         if (user.getDockOpacity() != null) {
             DockConfigDTO dockConfig = new DockConfigDTO();

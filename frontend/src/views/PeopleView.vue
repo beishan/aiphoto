@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, onActivated, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDialog, useMessage } from '@/utils/feedback'
@@ -223,8 +224,9 @@ function getBboxStyle(bboxJson: string) {
             @click="openAssignDialog(face)"
           >
             <div class="face-thumb">
-              <img v-if="face.photoUrl" :src="face.photoUrl" alt="" />
-              <div v-if="face.bboxJson" class="face-crop" :style="getBboxStyle(face.bboxJson)"></div>
+              <img v-if="!hideImages && face.photoUrl" :src="face.photoUrl" alt="" />
+              <span v-else-if="hideImages" class="image-placeholder">图片已隐藏</span>
+              <div v-if="!hideImages && face.bboxJson" class="face-crop" :style="getBboxStyle(face.bboxJson)"></div>
             </div>
             <span class="face-label">未命名</span>
           </div>
@@ -245,7 +247,7 @@ function getBboxStyle(bboxJson: string) {
           >
             <div class="person-avatar-wrapper">
               <div class="person-avatar">
-                <img v-if="person.coverPhotoUrl" :src="person.coverPhotoUrl" alt="" />
+                <img v-if="!hideImages && person.coverPhotoUrl" :src="person.coverPhotoUrl" alt="" />
                 <span v-else class="avatar-fallback">{{ person.name?.[0] || '?' }}</span>
               </div>
               <el-button type="danger" class="ep-control person-delete-btn" @click="confirmDelete($event, person)" title="删除">
@@ -298,7 +300,7 @@ function getBboxStyle(bboxJson: string) {
                   @click="assignToPerson(person.id)"
                 >
                   <div class="assign-avatar">
-                    <img v-if="person.coverPhotoUrl" :src="person.coverPhotoUrl" alt="" />
+                    <img v-if="!hideImages && person.coverPhotoUrl" :src="person.coverPhotoUrl" alt="" />
                     <span v-else class="assign-fallback">{{ person.name?.[0] || '?' }}</span>
                   </div>
                   <span class="assign-name">{{ person.name || '未命名' }}</span>

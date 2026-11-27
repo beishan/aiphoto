@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, ref, watch } from 'vue'
 import type { Photo } from '@/types'
 import StaticPhotoImage from './StaticPhotoImage.vue'
@@ -49,7 +50,8 @@ function handleClick() {
 
 <template>
   <div class="photo-cell" :class="{ selected }" @click="handleClick">
-    <StaticPhotoImage :eager="eagerPreview" v-if="thumbnailSrc && !/\.(jpe?g)(?:[?#]|$)/i.test(thumbnailSrc)" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" class="photo-img" @error="handleImageError" />
+    <span v-if="hideImages" class="photo-unavailable">图片已隐藏</span>
+    <StaticPhotoImage :eager="eagerPreview" v-else-if="thumbnailSrc && !/\.(jpe?g)(?:[?#]|$)/i.test(thumbnailSrc)" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" class="photo-img" @error="handleImageError" />
     <img v-else-if="thumbnailSrc" :key="thumbnailSrc" :src="thumbnailSrc" :alt="photo.note || ''" :loading="eagerPreview ? 'eager' : 'lazy'" decoding="async" class="photo-img" @error="handleImageError" />
     <span v-else class="photo-unavailable" role="status">{{ isVideo ? '视频封面不可用' : '图片加载失败，点击预览' }}</span>
     <div v-if="isVideo" class="badge video-badge">

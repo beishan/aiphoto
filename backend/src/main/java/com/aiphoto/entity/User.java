@@ -49,6 +49,9 @@ public class User {
 
     private Boolean crawlerShowImages = true;
 
+    @Column(nullable = false)
+    private Boolean hideImages = true;
+
     private Double dockOpacity;
 
     private Integer dockBlurStrength;

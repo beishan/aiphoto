@@ -31,6 +31,10 @@ export const userApi = {
     return http.delete<User>('/users/me/avatar')
   },
 
+  updateImageDisplay(hideImages: boolean) {
+    return http.put<User>('/users/me/image-display', { hideImages })
+  },
+
   updateCrawlerDisplay(showImages: boolean) {
     return http.put<User>('/users/me/crawler-display', { showImages })
   },

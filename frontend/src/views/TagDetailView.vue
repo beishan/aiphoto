@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { tagApi } from '@/api/tagApi'
@@ -90,7 +91,7 @@ watch(sortBy, updateSort)
         @click="openViewer(index)"
       >
         <img
-          v-if="photo.thumbnailUrl"
+          v-if="!hideImages && photo.thumbnailUrl"
           :src="photo.thumbnailUrl"
           :alt="photo.originalFilename || ''"
           loading="lazy"

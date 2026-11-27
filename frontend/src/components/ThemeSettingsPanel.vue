@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, inject, onMounted, ref, watch, type Ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus'
 import { Brush, Monitor, Operation, Picture } from '@element-plus/icons-vue'
@@ -350,7 +351,7 @@ onMounted(() => void dockIconStore.hydrate().catch(() => undefined))
         <div class="preset-heading background-heading"><strong>自定义 Dock 图标</strong><small>支持 JPG、PNG、WebP，单张不超过 5MB</small></div>
         <div class="custom-icon-grid">
           <article v-for="item in customIconItems" :key="item.name" class="custom-icon-card">
-            <div class="custom-icon-image"><img v-if="dockIconStore.iconUrls[item.name]" :src="dockIconStore.iconUrls[item.name]" :alt="item.label" /><DockIcon v-else :name="item.name" variant="minimal" /></div>
+            <div class="custom-icon-image"><img v-if="!hideImages && dockIconStore.iconUrls[item.name]" :src="dockIconStore.iconUrls[item.name]" :alt="item.label" /><DockIcon v-else :name="item.name" variant="minimal" /></div>
             <strong>{{ item.label }}</strong>
             <div class="custom-icon-actions">
               <el-upload action="#" accept="image/jpeg,image/png,image/webp" :show-file-list="false" :http-request="(options: UploadRequestOptions) => uploadDockIcon(item.name, options)"><el-button size="small" :loading="dockIconStore.uploading[item.name]">上传</el-button></el-upload>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Grid as GridIcon, List as ListIcon } from '@element-plus/icons-vue'
@@ -172,7 +173,7 @@ onMounted(loadTrash)
     <div v-else class="trash-list" :class="`is-${viewMode}`">
       <article v-for="photo in photos" :key="photo.id" class="trash-item" :class="{ selected: isSelected(photo.id) }" @click="viewMode === 'card' && toggleSelection(photo.id)">
         <div class="trash-thumb">
-          <img v-if="photo.thumbnailUrl" :src="photo.thumbnailUrl" alt="" />
+          <img v-if="!hideImages && photo.thumbnailUrl" :src="photo.thumbnailUrl" alt="" />
           <el-icon v-else><Picture /></el-icon>
           <el-button class="select-photo" :class="{ selected: isSelected(photo.id) }" circle size="small" :type="isSelected(photo.id) ? 'primary' : 'default'" :aria-label="isSelected(photo.id) ? '取消选择' : '选择图片'" @click.stop="toggleSelection(photo.id)">
             <el-icon v-if="isSelected(photo.id)"><Check /></el-icon>

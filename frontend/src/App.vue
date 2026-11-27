@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
-import { checkSession } from '@/utils/authSession'
+import { restoreImageVisibility } from '@/composables/imageVisibility'
+import { checkSession, isSessionTokenValid } from '@/utils/authSession'
 import { ElMessage } from 'element-plus'
 import { applyThemeAppearance, type AppTheme, type DockConfig } from '@/utils/themeAppearance'
 import { userApi } from '@/api/userApi'
@@ -32,6 +33,7 @@ onMounted(() => {
   sessionCheckTimer = setInterval(checkSession, 1000)
   window.addEventListener('focus', checkSession)
   window.addEventListener('storage', checkSession)
+  window.addEventListener('storage', onSessionStorageChange)
   document.addEventListener('visibilitychange', checkSession)
   document.documentElement.dataset.theme = theme.value
   applyThemeAppearance(theme.value)
@@ -42,10 +44,17 @@ onUnmounted(() => {
   if (sessionCheckTimer) clearInterval(sessionCheckTimer)
   window.removeEventListener('focus', checkSession)
   window.removeEventListener('storage', checkSession)
+  window.removeEventListener('storage', onSessionStorageChange)
   document.removeEventListener('visibilitychange', checkSession)
   window.removeEventListener('dock-config-updated', onDockConfigUpdated)
   if (dockSyncTimer) clearTimeout(dockSyncTimer)
 })
+
+function onSessionStorageChange(event: StorageEvent) {
+  if (event.key !== 'token' && event.key !== null) return
+  const token = localStorage.getItem('token')
+  restoreImageVisibility(isSessionTokenValid(token) ? token : null)
+}
 
 function updateSessionUser(updates: Partial<User>) {
   try {

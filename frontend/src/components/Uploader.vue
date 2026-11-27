@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { ref, computed } from 'vue'
 import type { UploadFile as ElementUploadFile } from 'element-plus'
 import { isAxiosError } from 'axios'
@@ -255,7 +256,7 @@ function getObjectUrl(file: File): string {
             <!-- Thumbnail preview -->
             <div class="file-thumb">
               <img
-                v-if="item.file.type.startsWith('image/')"
+                v-if="!hideImages && item.file.type.startsWith('image/')"
                 :src="getObjectUrl(item.file)"
                 class="thumb-img"
               />

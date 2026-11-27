@@ -1,3 +1,4 @@
+import { restoreImageVisibility } from '@/composables/imageVisibility'
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { clearSession, isSessionTokenValid } from '@/utils/authSession'
@@ -132,6 +133,7 @@ router.beforeEach(async (to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth !== false && !isSessionTokenValid(token)) {
     clearSession()
+    restoreImageVisibility(null)
     next('/login')
   } else {
     if (to.meta.requiresAuth !== false && token) {
@@ -154,6 +156,7 @@ router.beforeEach(async (to, _from, next) => {
       wsInitialized = true
       connectWebSocket()
     }
+    restoreImageVisibility(to.meta.requiresAuth === false ? null : token)
     next()
   }
 })

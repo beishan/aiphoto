@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { hideImages } from '@/composables/imageVisibility'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import http from '@/api/http'
@@ -107,7 +108,7 @@ onMounted(loadStatus)
     <el-skeleton v-if="loading" :rows="3" animated />
     <div v-else class="favicon-content">
       <div class="favicon-preview-wrap">
-        <div class="favicon-preview"><img :src="previewUrl" alt="当前网站图标" /></div>
+        <div class="favicon-preview"><img v-if="!hideImages" :src="previewUrl" alt="当前网站图标" /><span v-else class="image-placeholder">图片已隐藏</span></div>
         <div>
           <strong>{{ status.hasCustom ? '当前自定义图标' : '当前默认图标' }}</strong>
           <p>选择图片后可拖动、缩放和旋转，最终生成 512 × 512 PNG。</p>

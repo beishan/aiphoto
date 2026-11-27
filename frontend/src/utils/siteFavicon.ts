@@ -1,8 +1,13 @@
+import { watch } from 'vue'
+import { hideImages } from '@/composables/imageVisibility'
+
 export interface SiteFaviconStatus {
   hasCustom: boolean
   url?: string
   version: number
 }
+
+const placeholderUrl = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E'
 
 export const DEFAULT_FAVICON_URL = '/vite.svg'
 
@@ -12,7 +17,14 @@ export function faviconUrl(status: SiteFaviconStatus) {
     : DEFAULT_FAVICON_URL
 }
 
+let currentUrl = DEFAULT_FAVICON_URL
+
 export function applySiteFavicon(url: string) {
+  currentUrl = url
+  updateFaviconLink()
+}
+
+function updateFaviconLink() {
   let link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
   if (!link) {
     link = document.createElement('link')
@@ -20,8 +32,10 @@ export function applySiteFavicon(url: string) {
     document.head.appendChild(link)
   }
   link.removeAttribute('type')
-  link.href = url
+  link.href = hideImages.value ? placeholderUrl : currentUrl
 }
+
+watch(hideImages, updateFaviconLink)
 
 export async function loadSiteFavicon() {
   try {

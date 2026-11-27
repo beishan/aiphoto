@@ -90,6 +90,7 @@ export interface User {
   mood: string | null
   birthDate: string | null
   crawlerShowImages: boolean
+  hideImages?: boolean
   photoPreferences: string | null
   notes: string | null
   theme: 'dark' | 'light' | 'macos26' | null
