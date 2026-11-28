@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { hideImages } from '@/composables/imageVisibility'
 import { computed, type Component } from 'vue'
 import { Clock, Collection, Connection, Delete, DeleteFilled, PictureFilled, PriceTag, Search, Setting, User, UserFilled } from '@element-plus/icons-vue'
 
@@ -25,7 +24,7 @@ const icon = computed(() => icons[props.name])
 
 <template>
   <span class="dock-glyph" :class="`dock-glyph--${variant}`">
-    <img v-if="!hideImages && variant === 'custom' && customSrc" :src="customSrc" alt="" draggable="false" />
+    <img v-if="variant === 'custom' && customSrc" :src="customSrc" alt="" draggable="false" />
     <el-icon v-else><component :is="icon" /></el-icon>
   </span>
 </template>
