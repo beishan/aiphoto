@@ -128,6 +128,7 @@ const previewUrls = ref<string[]>([])
 const previewImageUrls = ref<string[]>([])
 const previewImageError = ref('')
 const previewImages = reactive<Record<number, string>>({})
+const missingThumbnails = reactive(new Set<number>())
 const busy = ref('')
 const siteDialogVisible = ref(false)
 const siteConfigurationVisible = ref(false)
@@ -310,6 +311,8 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let downloadClockTimer: ReturnType<typeof setInterval> | null = null
 let detailRequest = 0
 let reviewRequest = 0
+let reviewController: AbortController | undefined
+const reviewLoading = ref(false)
 let polling = false
 
 type TabKey = 'statistics' | 'overview' | 'sites' | 'pages' | 'collected-pages' | 'tasks' | 'review' | 'skips'
@@ -476,24 +479,30 @@ async function updateJobPriority(job: CrawlJob, priority: number | null) {
     prioritySaving.value = new Set([...prioritySaving.value].filter(id => id !== job.id))
   }
 }
-let reviewPagesLoading = false
+const reviewPagesLoading = ref(false)
+const reviewPageOptions = computed(() => reviewSourcePages.value.map(page => ({
+  value: page.id, label: `${page.name || page.url}（${page.assetCount} 张）`,
+})))
+async function loadReviewSourceOptions(open: boolean) {
+  if (!open || reviewPagesLoading.value) return
+  reviewPagesLoading.value = true
+  try {
+    const { data } = await crawlApi.reviewPages()
+    reviewSourcePages.value = data
+  } catch { /* Keep existing options if the statistics request fails. */ }
+  finally { reviewPagesLoading.value = false }
+}
+
 async function loadReviewData() {
   if (previewViewerVisible.value) return
   const request = ++reviewRequest
+  reviewController?.abort()
+  const controller = new AbortController()
+  reviewController = controller
+  reviewLoading.value = true
   try {
-    if (!reviewPagesLoading) {
-      reviewPagesLoading = true
-      void crawlApi.reviewPages().then(({ data }) => {
-      if (activeTab.value !== 'review') return
-      reviewSourcePages.value = data
-      if (reviewSourcePageId.value && !data.some(page => page.id === reviewSourcePageId.value)) {
-        reviewSourcePageId.value = null
-      }
-      }).catch(() => { /* Keep the existing page options if the statistics request fails. */ })
-        .finally(() => { reviewPagesLoading = false })
-    }
     const assetsResult = await crawlApi.reviewAssets(assetPage.value, assetPageSize.value, assetStatus.value,
-      exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
+      exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value, controller.signal)
     if (request !== reviewRequest) return
     const lastPage = Math.max(0, assetsResult.data.totalPages - 1)
     if (assetPage.value > lastPage) {
@@ -505,23 +514,30 @@ async function loadReviewData() {
     let nextPage = assetPage.value + 1
     while (visibleAssets.length < assetPageSize.value && nextPage < assetsResult.data.totalPages) {
       const { data } = await crawlApi.reviewAssets(nextPage++, assetPageSize.value, assetStatus.value,
-        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value)
+        exactDuplicateOnly.value, similarOnly.value, reviewSourcePageId.value, reviewImportStatus.value, controller.signal)
       if (request !== reviewRequest) return
       visibleAssets.push(...data.content.filter(asset => !pendingImportAssetIds.value.has(asset.id)))
     }
     assets.value = visibleAssets.slice(0, assetPageSize.value)
     assetTotal.value = assetsResult.data.totalElements
-    selectedAssets.value = new Set([...selectedAssets.value].filter(id => assets.value.some(asset => asset.id === id)))
+    const currentIds = new Set(assets.value.map(asset => asset.id))
+    selectedAssets.value = new Set([...selectedAssets.value].filter(id => currentIds.has(id)))
+    for (const id of missingThumbnails) if (!currentIds.has(id)) missingThumbnails.delete(id)
     for (const key of Object.keys(previewImages)) {
       const id = Number(key)
-      if (!assets.value.some(asset => asset.id === id)) {
+      if (!currentIds.has(id)) {
         URL.revokeObjectURL(previewImages[id])
         delete previewImages[id]
       }
     }
     void loadPreviews()
   } catch (error: any) {
-    if (request === reviewRequest) ElMessage.error(error?.response?.data?.message || '待整理图片加载失败')
+    if (request === reviewRequest && !controller.signal.aborted) ElMessage.error(error?.response?.data?.message || '待整理图片加载失败')
+  } finally {
+    if (reviewController === controller) {
+      reviewController = undefined
+      reviewLoading.value = false
+    }
   }
 }
 async function reloadVisibleAssets() {
@@ -530,6 +546,7 @@ async function reloadVisibleAssets() {
   else await loadJobDetail()
 }
 async function loadImageSkips() {
+  if (activeTab.value !== 'skips') return
   const request = ++skipRequest
   skipThumbnailController?.abort()
   skipLoading.value = true
@@ -546,7 +563,7 @@ async function loadImageSkips() {
     skipImageErrors.clear()
     clearSkipThumbnails()
     imageSkips.value = data.content
-    if (hideImages.value) return
+    if (hideImages.value || activeTab.value !== 'skips') return
     const controller = new AbortController()
     skipThumbnailController = controller
     for (const skip of data.content) void queueStaticFrame(async () => {
@@ -564,10 +581,13 @@ async function loadImageSkips() {
 }
 
 async function refresh() {
+  if (activeTab.value === 'review' && !taskDrawerVisible.value) {
+    await loadReviewData()
+    return
+  }
   await Promise.all([loadSites(), loadJobs(), loadImageSkips()])
   if (activeTab.value === 'statistics') await statisticsPanel.value?.refresh()
-  else if (activeTab.value === 'review') await loadReviewData()
-  else if (activeJobId.value) await loadJobDetail()
+  else if (taskDrawerVisible.value) await loadJobDetail()
 }
 
 function openJob(job: CrawlJob, tab: TabKey = 'tasks') {
@@ -660,20 +680,19 @@ function formatTime(value?: string) {
 }
 
 async function loadJobDetail() {
-  if (!activeJobId.value) return
+  if (!activeJobId.value || !taskDrawerVisible.value) return
   const jobId = activeJobId.value
   const request = ++detailRequest
-  const showTaskAssets = taskDrawerVisible.value || activeTab.value !== 'review'
   const [jobResult, pageResult, assetResult, progressResult, scanResult, retriesResult] = await Promise.all([
     crawlApi.job(jobId),
     crawlApi.pages(jobId, pagePage.value, pagePageSize, pageQuery.value),
-    showTaskAssets ? crawlApi.assets(jobId, assetPage.value, assetPageSize.value, taskDrawerVisible.value ? '' : assetStatus.value, taskDrawerVisible.value ? false : exactDuplicateOnly.value, taskDrawerVisible.value ? false : similarOnly.value) : Promise.resolve(null),
+    crawlApi.assets(jobId, assetPage.value, assetPageSize.value),
     taskDrawerVisible.value ? crawlApi.imageProgress(jobId) : Promise.resolve(null),
     taskDrawerVisible.value && activeJob.value && ['DISCOVERY', 'AWAITING_CONFIRMATION'].includes(activeJob.value.phase)
       ? crawlApi.scanResults(jobId, scanResultPage.value) : Promise.resolve(null),
     crawlApi.retries(jobId),
   ])
-  if (request !== detailRequest || jobId !== activeJobId.value) return
+  if (request !== detailRequest || jobId !== activeJobId.value || !taskDrawerVisible.value) return
   retryHistory.value = retriesResult.data
   if (scanResult) scanResults.value = scanResult.data
   const index = jobs.value.findIndex(job => job.id === jobResult.data.id)
@@ -756,42 +775,13 @@ function thumbnailStillWanted(id: number) {
     || (pageAssetsDialogVisible.value && pageAssets.value.some(asset => asset.id === id)))
 }
 const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
-  if (!thumbnailStillWanted(id) || previewImages[id]) return
-  const { data } = await crawlApi.thumbnail(id, signal)
-  if (signal.aborted || !thumbnailStillWanted(id)) return
-  let url = ''
+  if (!thumbnailStillWanted(id) || previewImages[id] || missingThumbnails.has(id)) return
   try {
-    // The thumbnail endpoint can fall back to an animated original.
-    let thumbnail = data
-    if (data.type !== 'image/jpeg') {
-      const bitmap = await createImageBitmap(data)
-      try {
-        if (signal.aborted || !thumbnailStillWanted(id)) return
-        const scale = Math.min(1, 400 / Math.max(bitmap.width, bitmap.height))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-        canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-        const context = canvas.getContext('2d')
-        if (!context) return
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-        const frame = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve))
-        if (!frame || signal.aborted || !thumbnailStillWanted(id)) return
-        thumbnail = frame
-      } finally {
-        bitmap.close()
-      }
-    }
-    url = URL.createObjectURL(thumbnail)
-    // Decode in the bounded queue rather than making every card decode at once.
-    const image = new Image()
-    image.src = url
-    await image.decode()
-    if (!signal.aborted && thumbnailStillWanted(id) && !previewImages[id]) {
-      previewImages[id] = url
-      return
-    }
-  } catch { /* Keep the placeholder when the thumbnail cannot be decoded. */ }
-  if (url) URL.revokeObjectURL(url)
+    const { data } = await crawlApi.thumbnail(id, signal, true)
+    if (!signal.aborted && thumbnailStillWanted(id)) previewImages[id] = URL.createObjectURL(data)
+  } catch (error: any) {
+    if (!signal.aborted && error?.response?.status === 404) missingThumbnails.add(id)
+  }
 })
 const nearbyReviewAssets = new Set<number>()
 const reviewThumbnailElements = new Map<Element, number>()
@@ -832,8 +822,11 @@ const vReviewThumbnail = {
   },
 }
 
+function canPreviewAsset(asset: CrawlAsset) {
+  return ['DOWNLOADED', 'IMPORTED', 'DUPLICATE'].includes(asset.status)
+}
 function canLoadThumbnail(asset: CrawlAsset) {
-  return !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]
+  return canPreviewAsset(asset) && !previewImages[asset.id] && !missingThumbnails.has(asset.id)
 }
 
 async function loadPreviews() {
@@ -901,7 +894,7 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
   previewViewerLoading.value = true
   try {
     if (!previewViewerUrl.value) {
-      void crawlApi.thumbnail(asset.id, controller.signal).then(({ data }) => {
+      void crawlApi.thumbnail(asset.id, controller.signal, true).then(({ data }) => {
         if (request !== previewViewerRequest || previewViewerUrl.value) return
         previewViewerObjectUrl = URL.createObjectURL(data)
         previewViewerUrl.value = previewViewerObjectUrl
@@ -927,8 +920,9 @@ async function loadPreviewViewerAsset(asset: CrawlAsset, index: number) {
 
 function openAssetPreview(asset: CrawlAsset) {
   const indexInPage = assets.value.findIndex(item => item.id === asset.id)
-  if (!showCrawlerImages.value || indexInPage < 0 || !previewImages[asset.id]) return
+  if (!showCrawlerImages.value || indexInPage < 0 || !canPreviewAsset(asset)) return
   reviewRequest++
+  reviewController?.abort()
   previewSession++
   previewPageRequests.clear()
   previewRemovedIndices.clear()
@@ -1619,7 +1613,7 @@ function imageTypeLabel(asset: CrawlAsset | null) {
   return labels[type] || type.toUpperCase() || '图片'
 }
 
-watch(activeJobId, () => { scanResultPage.value = 0; scanResults.value = { content: [], totalElements: 0, newCount: 0, duplicateCount: 0 }; imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
+watch(activeJobId, () => { if (activeTab.value === 'review' && !taskDrawerVisible.value) return; scanResultPage.value = 0; scanResults.value = { content: [], totalElements: 0, newCount: 0, duplicateCount: 0 }; imageProgress.value = { total: 0, processed: 0, downloaded: 0, runningAsset: null, currentProxyName: null }; assetPage.value = 0; pagePage.value = 0; pageQuery.value = ''; selectedAssets.value = new Set(); void loadJobDetail() })
 watch(taskAssetView, value => {
   if (taskAssetViewCacheKey) {
     try { localStorage.setItem(taskAssetViewCacheKey, value) } catch { /* View preference remains active for this page. */ }
@@ -1631,6 +1625,9 @@ watch([taskPage, taskPageSize, taskKind, taskSiteId, taskStatus, taskPageNameApp
 watch([taskKind, taskSiteId, taskStatus], () => { taskPage.value = 1 })
 watch(activeTab, tab => {
   thumbnailQueue.cancel()
+  missingThumbnails.clear()
+  if (tab === 'skips') void loadImageSkips()
+  else { skipRequest++; skipThumbnailController?.abort(); clearSkipThumbnails() }
   if (tab === 'statistics') {
     if (statisticsVisited.value) void statisticsPanel.value?.refresh()
     else statisticsVisited.value = true
@@ -1640,6 +1637,7 @@ watch(activeTab, tab => {
     void loadReviewData()
   } else {
     reviewRequest++
+    reviewController?.abort()
     if (tab === 'tasks' && !activeJobId.value && jobs.value.length) activeJobId.value = jobs.value[0].id
   }
 })
@@ -1648,7 +1646,7 @@ watch(taskDrawerVisible, () => {
   assetPage.value = 0
   if (activeTab.value === 'review' && !taskDrawerVisible.value) void loadReviewData()
   else {
-    if (taskDrawerVisible.value) reviewRequest++
+    if (taskDrawerVisible.value) { reviewRequest++; reviewController?.abort() }
     void loadJobDetail()
   }
 })
@@ -1675,10 +1673,13 @@ function startAutoRefresh() {
     if (polling) return
     polling = true
     try {
-      await loadJobs()
       if (previewViewerVisible.value) return
-      else if (taskDrawerVisible.value) await loadJobDetail()
-      else if (activeTab.value === 'review') await loadReviewData()
+      if (activeTab.value === 'review' && !taskDrawerVisible.value) {
+        if (!reviewController) await loadReviewData()
+      } else {
+        await loadJobs()
+        if (taskDrawerVisible.value) await loadJobDetail()
+      }
     } catch { /* A transient polling failure is retried on the next interval. */ }
     finally { polling = false }
   }, autoRefreshInterval.value)
@@ -1690,15 +1691,16 @@ watch(autoRefreshInterval, value => {
   startAutoRefresh()
 })
 onMounted(async () => {
-  const [,,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), loadImageSkips(), albumApi.list(), tagApi.list()])
+  const [,, albumResult, tagResult] = await Promise.all([loadSites(), loadJobs(), albumApi.list(), tagApi.list()])
   await loadInspectionProxies()
   albums.value = albumResult.data
   tags.value = tagResult.data
-  await loadJobDetail()
   startAutoRefresh()
   window.addEventListener('keydown', handlePreviewViewerKeydown)
 })
 onUnmounted(() => {
+  reviewRequest++
+  reviewController?.abort()
   skipRequest++
   skipThumbnailController?.abort()
   clearSkipThumbnails()
@@ -1848,11 +1850,13 @@ onUnmounted(() => {
       <el-pagination v-if="filteredJobs.length" class="pagination" v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20, 50, 100]" :total="filteredJobs.length" layout="total, sizes, prev, pager, next, jumper" @size-change="taskPage = 1" />
     </section>
 
-    <section v-else-if="activeTab === 'review'" class="review-workspace" role="tabpanel">
+    <section v-else-if="activeTab === 'review'" class="review-workspace" role="tabpanel" :aria-busy="reviewLoading">
       <el-card class="review-toolbar surface-card" shadow="never">
         <div class="card-heading review-heading">
           <div><p class="eyebrow">CURATION WORKSPACE</p><h2>待整理区</h2><p>筛选、去重和标注后，再将图片导入私人图库。</p></div>
-          <el-space wrap><el-button :icon="EditPen" @click="batchOrganizeVisible = true">批量整理</el-button><el-button :icon="List" :disabled="!recentImportBatch" @click="importBatchVisible = true">最近导入批次</el-button><el-button :icon="MagicStick" :disabled="!reviewJobs.length" @click="imageAnalysisVisible = true">图片分析</el-button><el-select v-model="reviewSourcePageId" class="review-job-select" clearable filterable placeholder="全部采集页面"><template #prefix><el-icon><Collection /></el-icon></template><el-option v-for="page in reviewSourcePages" :key="page.id" :label="`${page.name || page.url}（${page.assetCount} 张）`" :value="page.id" /></el-select></el-space>
+          <el-space wrap><el-button :icon="EditPen" @click="batchOrganizeVisible = true">批量整理</el-button><el-button :icon="List" :disabled="!recentImportBatch" @click="importBatchVisible = true">最近导入批次</el-button><el-button :icon="MagicStick" :disabled="!assetTotal && !reviewJobs.length" @click="imageAnalysisVisible = true; loadJobs().catch(() => {})">图片分析</el-button><el-select-v2 v-model="reviewSourcePageId" class="review-job-select" clearable filterable
+            placeholder="全部采集页面" :options="reviewPageOptions" :loading="reviewPagesLoading"
+            @visible-change="loadReviewSourceOptions"><template #prefix><el-icon><Collection /></el-icon></template></el-select-v2></el-space>
         </div>
       </el-card>
       <el-dialog v-model="batchOrganizeVisible" title="批量整理" width="min(960px, 94vw)" append-to-body class="crawler-controls">
@@ -1897,7 +1901,7 @@ onUnmounted(() => {
         </el-card>
         <template #footer><el-button @click="imageAnalysisVisible = false">返回待整理区</el-button></template>
       </el-dialog>
-      <el-empty v-if="!reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
+      <el-empty v-if="!reviewLoading && !assetTotal && !reviewJobs.length" class="surface-card review-empty" description="暂无待整理图片，完成图片采集后会出现在这里" :image-size="110" />
       <template v-else>
 
         <el-card class="selection-bar surface-card" shadow="never">
@@ -1906,11 +1910,11 @@ onUnmounted(() => {
         </el-card>
 
         <div class="asset-grid">
-          <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id), 'is-importing': pendingImportAssetIds.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && !pendingImportAssetIds.has(asset.id) && toggleAsset(asset.id)">
-            <div v-review-thumbnail="asset.id" class="asset-preview">
-              <el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
-              <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
-              <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
+          <el-card v-for="asset in reviewAssets" :key="asset.id" v-review-thumbnail="asset.id" class="asset-card surface-card review-asset-card" :class="{ selected: selectedAssets.has(asset.id), 'is-importing': pendingImportAssetIds.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && !pendingImportAssetIds.has(asset.id) && toggleAsset(asset.id)">
+            <div class="asset-preview">
+              <img v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" class="review-thumbnail" alt="" decoding="async" />
+              <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ missingThumbnails.has(asset.id) ? '可打开原图' : assetStatusLabel(asset) }}</span></div>
+              <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!canPreviewAsset(asset)" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
               <el-checkbox v-if="asset.status === 'DOWNLOADED'" class="asset-check" :disabled="pendingImportAssetIds.has(asset.id)" :model-value="selectedAssets.has(asset.id)" @click.stop @change="toggleAsset(asset.id)" />
               <div class="asset-badges"><el-tag v-if="asset.exactDuplicateCount > 1" size="small" type="warning" effect="dark" round>重复 × {{ asset.exactDuplicateCount }}</el-tag><el-tag v-if="asset.similarityCount > 1" size="small" type="primary" effect="dark" round>相似 × {{ asset.similarityCount }}</el-tag></div>
 
@@ -2169,7 +2173,7 @@ onUnmounted(() => {
                 <span class="task-image-info-tag task-image-type-tag">{{ imageTypeLabel(asset) }}</span>
                 <span class="task-image-info-tag task-image-dimensions-tag">{{ asset.width && asset.height ? `${asset.width} × ${asset.height}` : '未知尺寸' }} · {{ asset.fileSize ? formatBytes(asset.fileSize) : '未知大小' }}</span>
                 <span v-if="asset.id === imageProgress.runningAsset?.id && imageProgress.currentProxyName" class="task-image-info-tag task-image-proxy-tag">代理：{{ imageProgress.currentProxyName }}</span>
-                <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
+                <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!canPreviewAsset(asset)" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
                 <div v-if="asset.status === 'RUNNING' && activeJob.status === 'RUNNING'" class="task-image-download-mask"><el-icon class="is-loading"><Loading /></el-icon><strong>正在下载</strong><span class="download-timer is-running" role="timer" aria-live="off"><i class="download-timer-dot" aria-hidden="true" />{{ imageElapsedLabel(asset) }}</span><span class="task-image-progress-track"><i /></span></div>
               </div>
               <el-space class="task-image-timing-row"><el-checkbox :model-value="selectedAssets.has(asset.id)" :disabled="!!busy || !taskAssetSelectable(asset)" :aria-label="`选择图片 ${asset.id}`" @change="toggleAsset(asset.id)">选择</el-checkbox><el-tag v-if="taskAssetImported(asset)" type="success" size="small">已入库</el-tag><el-tag v-else-if="pendingImportAssetIds.has(asset.id)" size="small">入库中</el-tag></el-space>
@@ -2280,6 +2284,8 @@ onUnmounted(() => {
 @media(prefers-reduced-motion:reduce){.crawler-tab-indicator{transition:none}}
 </style>
 <style scoped>
+.review-asset-card { content-visibility: auto; contain-intrinsic-block-size: auto 150px; }
+.asset-preview .review-thumbnail { display: block; width: 100%; height: 100%; object-fit: cover; }
 .asset-grid article.is-importing { cursor: progress; opacity: .62; }
 </style>
 <style scoped src="../assets/crawler-view.css"></style>

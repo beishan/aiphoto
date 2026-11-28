@@ -107,7 +107,7 @@ export const crawlApi = {
   assets: (id: number, page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, pageId?: number) => http.get<SpringPage<CrawlAsset>>(`/crawl/jobs/${id}/assets`, { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, pageId } })
     .then(response => ({ ...response, data: normalizePage(response.data) })),
   reviewPages: () => http.get<CrawlReviewPageGroup[]>('/crawl/review/pages'),
-  reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null, importStatus = 'NOT_IMPORTED') => http.get<SpringPage<CrawlAsset>>('/crawl/review/assets', { params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined, importStatus } })
+  reviewAssets: (page = 0, size = 60, status = '', exactDuplicates = false, similarOnly = false, sourcePageId?: number | null, importStatus = 'NOT_IMPORTED', signal?: AbortSignal) => http.get<SpringPage<CrawlAsset>>('/crawl/review/assets', { signal, params: { page, size, status: status || undefined, exactDuplicates, similarOnly, sourcePageId: sourcePageId ?? undefined, importStatus } })
     .then(response => ({ ...response, data: normalizePage(response.data) })),
   skipAssets: (jobId: number, ids: number[], reason: string) => http.post<{ success: number }>(`/crawl/jobs/${jobId}/assets/skip`, { ids, reason }),
   imageSkips: (page = 0, size = 50, query = '') => http.get<SpringPage<CrawlImageSkip>>('/crawl/image-skips', { params: { page, size, query: query || undefined } })
@@ -124,5 +124,5 @@ export const crawlApi = {
   importItems: (batchId: number, page = 0, size = 50, status = '', signal?: AbortSignal) => http.get<PageResponse<CrawlImportItem>>(`/crawl/imports/${batchId}/items`, { signal, params: { page, size, status: status || undefined } }),
   purgeJob: (jobId: number) => http.delete<{ success: number; fileFail: number }>(`/crawl/jobs/${jobId}`),
   content: (assetId: number, signal?: AbortSignal) => http.get<Blob>(`/crawl/assets/${assetId}/content`, { responseType: 'blob', signal }),
-  thumbnail: (assetId: number, signal?: AbortSignal) => http.get<Blob>(`/crawl/assets/${assetId}/thumbnail`, { responseType: 'blob', signal }),
+  thumbnail: (assetId: number, signal?: AbortSignal, bounded = false) => http.get<Blob>(`/crawl/assets/${assetId}/thumbnail`, { responseType: 'blob', signal, params: bounded ? { bounded } : undefined }),
 }

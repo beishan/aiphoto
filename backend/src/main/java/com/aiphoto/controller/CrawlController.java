@@ -416,9 +416,11 @@ public class CrawlController {
 
     @GetMapping("/assets/{assetId}/thumbnail")
     public ResponseEntity<byte[]> assetThumbnail(
-            @PathVariable Long assetId, Authentication authentication) throws Exception {
+            @PathVariable Long assetId,
+            @RequestParam(defaultValue = "false") boolean bounded,
+            Authentication authentication) throws Exception {
         CrawlAsset asset = crawlService.getAsset(assetId, userId(authentication));
-        var content = assetMediaService.read(asset, true);
+        var content = assetMediaService.read(asset, true, bounded);
         return ResponseEntity.ok().contentType(content.type()).body(content.bytes());
     }
 
