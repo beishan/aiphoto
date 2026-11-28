@@ -30,6 +30,7 @@ export interface ModelCatalogItem {
   label: string
   defaultModel: string
   category: string
+  modelName: ModelName | ''
 }
 
 export interface OnlineModel {
@@ -37,6 +38,8 @@ export interface OnlineModel {
   name: string
   typeKey: string
   typeLabel: string
+  modelName: ModelName
+  installedArtifact: string
   version: string
   size: number
   device: string

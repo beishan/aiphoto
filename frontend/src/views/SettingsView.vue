@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useSettingStore } from '@/stores/settingStore'
 import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
 import { taskApi, type AiTask } from '@/api/taskApi'
@@ -389,6 +389,8 @@ async function saveModelDownloadProxy(proxyId: number) {
 }
 
 const modelCatalog = ref<ModelCatalogItem[]>([])
+const configuredModels = ref<ModelStatus[]>([])
+const onlineCapability = ref<ModelCatalogItem | null>(null)
 const onlineModels = ref<OnlineModel[]>([])
 const downloadTasks = ref<DownloadTask[]>([])
 const downloadPollTimer = ref<number | null>(null)
@@ -400,33 +402,56 @@ const modelLabels: Record<ModelName, string> = {
   blip: 'BLIP-2 图片描述模型',
 }
 
-// Extended model type labels (for catalog)
-const modelTypeLabels: Record<string, string> = {
-  face_detection: '人脸检测模型',
-  face_recognition: '人脸识别模型',
-  image_classification: '图片分类模型',
-  image_caption: '图片描述模型',
-  ocr: 'OCR 文字识别模型',
-  image_vector: '图片向量模型',
-  similar_image: '相似图片识别模型',
-  duplicate_detection: '重复照片检测模型',
-  content_safety: '内容安全识别模型',
-  object_detection: '目标检测模型',
+const typeToAiName = computed(() => Object.fromEntries(modelCatalog.value.map(item => [item.key, item.modelName])))
+const visibleOnlineModels = computed(() => onlineCapability.value
+  ? onlineModels.value.filter(model => model.modelName === onlineCapability.value?.modelName)
+  : onlineModels.value)
+
+function supportedTypes(modelName: ModelName) {
+  return modelCatalog.value.filter(item => item.modelName === modelName)
 }
 
-// Map catalog type keys to AI service model names
-const typeToAiName: Record<string, ModelName | null> = {
-  image_vector: 'clip',
-  face_detection: 'insightface',
-  face_recognition: 'insightface',
-  object_detection: 'yolo',
-  image_classification: 'yolo',
-  image_caption: 'blip',
-  ocr: null,
-  similar_image: 'clip',
-  duplicate_detection: null,
-  content_safety: null,
+function findOnlineModels(item: ModelCatalogItem) {
+  onlineCapability.value = item
+  modelViewMode.value = 'online'
 }
+
+async function viewLocalModel(model: OnlineModel) {
+  modelViewMode.value = 'local'
+  await nextTick()
+  document.getElementById('local-model-' + model.typeKey)?.scrollIntoView({ block: 'nearest' })
+}
+
+function getConfiguredModel(modelName: ModelName) {
+  return configuredModels.value.find(model => model.name === modelName)
+}
+
+function isConfiguredOnlineModel(model: OnlineModel) {
+  const path = getConfiguredModel(model.modelName)?.path ?? ''
+  const installed = path.replace(/\\/g, '/').match(/(?:^|\/)installed\/dl-[0-9a-f-]+\/(.+)$/i)
+  return !!installed && installed[1] === model.installedArtifact
+}
+
+function getOnlineModelState(model: OnlineModel) {
+  if (isConfiguredOnlineModel(model)) {
+    const status = getConfiguredModel(model.modelName)!
+    if (!status.enabled) return '当前配置 · 未启用'
+    if (status.error || !status.exists) return '当前配置 · 不可用'
+    return status.loaded ? '当前使用' : '当前配置 · 按需加载'
+  }
+  const downloaded = getReadyDownload(model.id)
+  return downloaded?.status === 'INSTALLED' ? '已安装 · 未设为当前' : downloaded ? '已下载 · 待启用' : ''
+}
+
+function getReadyDownload(modelId: string) {
+  return downloadTasks.value.find(task => task.modelId === modelId &&
+    (task.status === 'COMPLETED' || task.status === 'INSTALLED'))
+}
+
+function recordConfiguredModel(model: ModelStatus) {
+  configuredModels.value = configuredModels.value.map(current => current.name === model.name ? { ...model } : current)
+}
+
 
 async function loadModels() {
   modelLoading.value = true
@@ -439,6 +464,7 @@ async function loadModels() {
     ])
     modelRoot.value = statusRes.data.root
     models.value = statusRes.data.models
+    configuredModels.value = statusRes.data.models.map(model => ({ ...model }))
     modelCatalog.value = catalogRes.data
     onlineModels.value = onlineRes.data
     downloadTasks.value = Object.values(downloadsRes.data)
@@ -476,6 +502,7 @@ async function saveModel(model: ModelStatus) {
   try {
     const { data } = await settingApi.configureModel(model.name, model.path, model.enabled)
     Object.assign(model, data)
+    recordConfiguredModel(data)
     data.loaded ? message.success(`${modelLabels[model.name]} 已加载`) : message.warning(data.error || '配置已保存')
   } catch (e: any) {
     message.error(e.response?.data?.message || '保存失败')
@@ -487,6 +514,7 @@ async function reloadModel(model: ModelStatus) {
   try {
     const { data } = await settingApi.reloadModel(model.name)
     Object.assign(model, data)
+    recordConfiguredModel(data)
     data.loaded ? message.success('模型重新加载成功') : message.error(data.error || '加载失败')
   } finally { modelLoading.value = false }
 }
@@ -598,35 +626,19 @@ function getDownloadStatusClass(status: DownloadStatus): string {
 }
 
 // Check if online model is already downloaded
-function isModelDownloaded(modelId: string): boolean {
-  return downloadTasks.value.some(t => t.modelId === modelId && (t.status === 'COMPLETED' || t.status === 'INSTALLED'))
-}
-
 function getActiveDownloadForModel(modelId: string): DownloadTask | null {
   return downloadTasks.value.find(t => t.modelId === modelId && (t.status === 'DOWNLOADING' || t.status === 'PENDING' || t.status === 'PAUSED')) || null
 }
 
-// Get model status for catalog type
-function getModelStatusForType(typeKey: string): { loaded: boolean; exists: boolean; enabled: boolean; error: string | null } {
-  const aiName = typeToAiName[typeKey]
-  if (!aiName) return { loaded: false, exists: false, enabled: false, error: null }
-  const model = models.value.find(m => m.name === aiName)
-  if (!model) return { loaded: false, exists: false, enabled: false, error: null }
-  return { loaded: model.loaded, exists: model.exists, enabled: model.enabled, error: model.error }
-}
-
 function getModelStatusText(typeKey: string): string {
   if (typeKey === 'duplicate_detection') return '内置功能'
-  if (!typeToAiName[typeKey]) return '暂未支持'
-  const status = getModelStatusForType(typeKey)
-  if (!status.enabled) return '未启用'
+  const name = typeToAiName.value[typeKey]
+  if (!name) return '暂未支持'
+  const status = getConfiguredModel(name)
+  if (!status?.enabled) return '未启用'
   if (status.loaded) return '使用中'
   if (status.error) return '加载失败'
-  if (status.exists && status.enabled) return '已安装'
-  if (status.exists) return '已安装'
-  const aiName = typeToAiName[typeKey]
-  if (!aiName) return '未配置'
-  return '未下载'
+  return status.exists ? '已安装' : '未配置'
 }
 
 function getModelStatusClass(typeKey: string): string {
@@ -909,13 +921,17 @@ const systemStorageFolders = computed(() => [
 
           <!-- Local Models Tab -->
           <div v-if="modelViewMode === 'local'" class="local-model-grid">
-            <div v-for="item in modelCatalog" :key="item.key" class="panel-card model-type-card">
+            <div v-for="item in modelCatalog" :id="'local-model-' + item.key" :key="item.key" class="panel-card model-type-card">
               <div class="model-type-header">
                 <div class="model-type-info">
                   <strong>{{ item.label }}</strong>
                   <span class="model-default-name">{{ item.defaultModel }}</span>
                 </div>
                 <span class="model-type-status" :class="getModelStatusClass(item.key)">{{ getModelStatusText(item.key) }}</span>
+              </div>
+              <div v-if="item.modelName && onlineModels.some(model => model.modelName === item.modelName)" class="model-catalog-link">
+                <span class="info-label">共用 {{ modelLabels[item.modelName] }}</span>
+                <el-button link type="primary" size="small" @click="findOnlineModels(item)">查找在线模型</el-button>
               </div>
               <!-- Local path config for AI-service-supported models -->
               <template v-if="typeToAiName[item.key]">
@@ -969,15 +985,26 @@ const systemStorageFolders = computed(() => [
               <el-button link type="primary" @click="activeSection = 'proxy'">系统代理配置</el-button>
             </div>
             <p class="info-label">这里只列出可安装并运行的模型。BLIP-2 请在本地模型页配置完整模型目录。</p>
+            <div v-if="onlineCapability" class="model-catalog-link">
+              <span>{{ onlineCapability.label }}可用的在线模型</span>
+              <el-button link type="primary" @click="onlineCapability = null">查看全部</el-button>
+            </div>
             <div class="online-models-grid">
-              <div v-for="om in onlineModels" :key="om.id" class="panel-card online-model-card">
+              <div v-for="om in visibleOnlineModels" :key="om.id" class="panel-card online-model-card">
                 <div class="online-model-top">
                   <div class="online-model-name-row">
                     <strong>{{ om.name }}</strong>
-                    <span class="online-model-type-tag">{{ om.typeLabel }}</span>
                   </div>
-                  <span v-if="isModelDownloaded(om.id)" class="model-type-status installed">已下载</span>
+                  <span v-if="getOnlineModelState(om)" class="model-type-status installed">{{ getOnlineModelState(om) }}</span>
                 </div>
+                <div class="model-uses">
+                  <span class="info-label">可用于</span>
+                  <span v-for="item in supportedTypes(om.modelName)" :key="item.key" class="online-model-type-tag">{{ item.label }}</span>
+                </div>
+                <p v-if="getConfiguredModel(om.modelName)?.path" class="model-current-path">
+                  <span class="info-label">该功能组当前路径</span>
+                  <code>{{ getConfiguredModel(om.modelName)?.path }}</code>
+                </p>
                 <div class="online-model-meta">
                   <div><span class="info-label">版本</span><span>v{{ om.version }}</span></div>
                   <div><span class="info-label">大小</span><span>{{ om.size > 0 ? formatSize(om.size) : '下载时获取' }}</span></div>
@@ -1003,8 +1030,10 @@ const systemStorageFolders = computed(() => [
                 </div>
                 <!-- Download button -->
                 <div v-else class="online-model-actions">
-                  <el-button v-if="!isModelDownloaded(om.id)" type="primary" @click="startDownload(om)">下载</el-button>
-                  <el-button v-else disabled>已下载</el-button>
+                  <el-button @click="viewLocalModel(om)">查看本地配置</el-button>
+                  <el-button v-if="!isConfiguredOnlineModel(om) && getReadyDownload(om.id)" type="primary"
+                    @click="setCurrentModel(getReadyDownload(om.id)!.taskId)">设为当前模型</el-button>
+                  <el-button v-else-if="!isConfiguredOnlineModel(om)" type="primary" @click="startDownload(om)">下载</el-button>
                 </div>
               </div>
             </div>
@@ -1017,7 +1046,7 @@ const systemStorageFolders = computed(() => [
               <div class="download-task-header">
                 <div>
                   <strong>{{ task.modelName }}</strong>
-                  <span class="download-task-type">{{ modelTypeLabels[task.typeKey] || task.typeKey }}</span>
+                  <span class="download-task-type">{{ modelCatalog.find(item => item.key === task.typeKey)?.label || task.typeKey }}</span>
                 </div>
                 <span class="download-status-badge" :class="getDownloadStatusClass(task.status)">{{ getDownloadStatusText(task.status) }}</span>
               </div>
@@ -1990,6 +2019,28 @@ const systemStorageFolders = computed(() => [
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   align-items: start;
   gap: 10px;
+}
+
+.model-catalog-link,
+.model-uses {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.model-catalog-link { margin-top: 6px; }
+
+.model-current-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.model-current-path code {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .model-type-card.panel-card {

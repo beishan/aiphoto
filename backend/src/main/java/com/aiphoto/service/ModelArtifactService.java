@@ -13,14 +13,16 @@ import org.springframework.stereotype.Service;
 public class ModelArtifactService {
     private final ModelManagementService modelManagementService;
 
+    static String artifactPath(String modelName, String filename) {
+        return "insightface".equals(modelName) ? "insightface/models/buffalo_l" : filename;
+    }
+
     public String install(Path source, String taskId, String modelName, String filename) throws IOException {
-        String base = "installed/" + taskId + "/";
+        String target = "installed/" + taskId + "/" + artifactPath(modelName, filename);
         if (!"insightface".equals(modelName)) {
-            String target = base + filename;
             modelManagementService.copyDownloadedFile(source, target);
             return target;
         }
-        String target = base + "insightface/models/buffalo_l";
         int count = 0;
         long bytes = 0;
         boolean detection = false;

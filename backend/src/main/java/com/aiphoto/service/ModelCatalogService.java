@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Provides a catalog of all supported AI model types and online downloadable models.
- * Each model type can be independently configured with either a local path or an online download.
+ * Multiple capabilities can share one configured model in the AI service.
  */
 @Slf4j
 @Service
@@ -52,7 +52,8 @@ public class ModelCatalogService {
                 "key", t.getKey(),
                 "label", t.getLabel(),
                 "defaultModel", t.getDefaultModel(),
-                "category", t.getCategory()
+                "category", t.getCategory(),
+                "modelName", java.util.Objects.toString(getAiServiceModelName(t.getKey()), "")
         )).toList();
     }
 
@@ -80,8 +81,11 @@ public class ModelCatalogService {
 
     private Map<String, Object> online(String id, String name, ModelType type,
             String url, String filename, long size, String source) {
+        String modelName = getAiServiceModelName(type.getKey());
         return Map.ofEntries(
                 Map.entry("id", id), Map.entry("name", name), Map.entry("typeKey", type.getKey()),
+                Map.entry("modelName", modelName),
+                Map.entry("installedArtifact", ModelArtifactService.artifactPath(modelName, filename)),
                 Map.entry("typeLabel", type.getLabel()), Map.entry("version", "官方权重"),
                 Map.entry("size", size), Map.entry("device", "CPU/GPU"), Map.entry("precision", "FP32"),
                 Map.entry("performance", "取决于硬件"), Map.entry("source", source),
