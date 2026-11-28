@@ -24,6 +24,8 @@ public class StorageMigrationService {
     private static final String CONTROL_DIRECTORY = ".aiphoto-storage";
     private final EnumMap<Kind, String> defaults = new EnumMap<>(Kind.class);
     private final String poolDirectory;
+    private final java.util.Set<String> poolNames;
+    private final boolean legacyPool;
     private final java.util.concurrent.ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile Job job;
 
@@ -32,12 +34,46 @@ public class StorageMigrationService {
             @Value("${app.storage.thumbs-dir:./data/thumbs}") String thumbs,
             @Value("${app.storage.crawl-dir:./data/crawl}") String crawl,
             @Value("${app.ai-model-root:/models}") String models,
-            @Value("${app.storage.pool-directory:}") String poolDirectory) {
+            @Value("${app.storage.pool-directory:}") String poolDirectory,
+            @Value("${STORAGE_POOL_NAMES:}") String poolNames,
+            @Value("${STORAGE_POOL_LEGACY:false}") boolean legacyPool) {
         defaults.put(Kind.PHOTOS, photos);
         defaults.put(Kind.THUMBNAILS, thumbs);
         defaults.put(Kind.CRAWL, crawl);
         defaults.put(Kind.MODELS, models);
         this.poolDirectory = poolDirectory;
+        this.poolNames = poolNames.isBlank() ? java.util.Set.of() : java.util.Set.copyOf(List.of(poolNames.split(",")));
+        this.legacyPool = legacyPool || this.poolNames.isEmpty();
+    }
+
+    public DirectoryView browse(String directory) throws IOException {
+        Path root = poolRoot();
+        Path current = directory.isEmpty() ? root : resolvePoolPath(root, directory, false);
+        try (var entries = Files.list(current)) {
+            var children = entries
+                    .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(path -> !path.getFileName().toString().startsWith("."))
+                    .filter(path -> !directory.isEmpty() || legacyPool || poolNames.contains(path.getFileName().toString()))
+                    .map(path -> new DirectoryEntry(path.getFileName().toString(), relative(root, path)))
+                    .sorted(java.util.Comparator.comparing(DirectoryEntry::name, String.CASE_INSENSITIVE_ORDER))
+                    .toList();
+            boolean rootOnly = directory.isEmpty() || isNamedPoolRoot(root, current);
+            return new DirectoryView(directory, children, !rootOnly && empty(current),
+                    !directory.isEmpty() || legacyPool);
+        }
+    }
+
+    public synchronized DirectoryEntry createDirectory(String parent, String name) throws IOException {
+        if (name == null || name.isBlank() || name.contains("/") || name.contains("\\") || name.startsWith(".")) {
+            throw new IllegalArgumentException("请输入单级目录名");
+        }
+        Path root = poolRoot();
+        Path directory = parent.isEmpty() ? root : resolvePoolPath(root, parent, false);
+        String relative = relative(root, directory.resolve(name));
+        Path target = target(relative, true);
+        requireUnassigned(target);
+        Files.createDirectory(target);
+        return new DirectoryEntry(name, relative);
     }
 
     public synchronized Overview overview() throws IOException {
@@ -65,15 +101,7 @@ public class StorageMigrationService {
 
     public synchronized void add(Kind kind, String directory) throws IOException {
         Path target = target(directory, true);
-        for (Kind existing : Kind.values()) {
-            Path current = active(existing);
-            requireSeparate(target, Files.exists(current) ? current.toRealPath() : current);
-            Path original = Path.of(defaults.get(existing)).toAbsolutePath().normalize();
-            requireSeparate(target, Files.exists(original) ? original.toRealPath() : original);
-            for (String registered : locations(existing)) {
-                requireSeparate(target, target(registered, true));
-            }
-        }
+        requireUnassigned(target);
         Files.createDirectories(target);
         requireEmpty(target);
         var locations = loadLocations();
@@ -89,6 +117,19 @@ public class StorageMigrationService {
             Files.move(temporary, registry, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporary);
+        }
+    }
+
+    private void requireUnassigned(Path target) throws IOException {
+        Path pool = poolRoot();
+        for (Kind existing : Kind.values()) {
+            Path current = active(existing);
+            requireSeparate(target, Files.exists(current) ? current.toRealPath() : current);
+            Path original = Path.of(defaults.get(existing)).toAbsolutePath().normalize();
+            requireSeparate(target, Files.exists(original) ? original.toRealPath() : original);
+            for (String registered : locations(existing)) {
+                requireSeparate(target, pool.resolve(registered).normalize());
+            }
         }
     }
 
@@ -206,14 +247,30 @@ public class StorageMigrationService {
     }
 
     private Path target(String directory, boolean allowMissing) throws IOException {
+        Path root = poolRoot();
+        Path target = resolvePoolPath(root, directory, allowMissing);
+        if (isNamedPoolRoot(root, target)) throw new IllegalArgumentException("请选择挂载位置下的子目录");
+        return target;
+    }
+
+    private boolean isNamedPoolRoot(Path root, Path path) {
+        return root.equals(path.getParent()) && poolNames.contains(path.getFileName().toString());
+    }
+
+    private Path poolRoot() throws IOException {
         if (poolDirectory.isBlank()) throw new IllegalStateException("请先挂载存储池");
-        if (directory == null || directory.isBlank() || directory.contains("\n") || directory.contains("\r")) {
+        return Path.of(poolDirectory).toRealPath();
+    }
+
+    private Path resolvePoolPath(Path pool, String directory, boolean allowMissing) throws IOException {
+        if (directory == null || directory.isBlank() || directory.contains("\n") || directory.contains("\r")
+                || directory.contains("\\")) {
             throw new IllegalArgumentException("请输入存储池内的目录名");
         }
-        Path pool = Path.of(poolDirectory).toRealPath();
         Path relative = Path.of(directory);
         if (relative.isAbsolute() || !relative.equals(relative.normalize()) || relative.startsWith("..")
-                || !directory.equals(relative.toString())) {
+                || !directory.equals(relative.toString().replace('\\', '/'))
+                || (!legacyPool && !poolNames.contains(relative.getName(0).toString()))) {
             throw new IllegalArgumentException("目录必须位于存储池内");
         }
         Path current = pool;
@@ -229,6 +286,10 @@ public class StorageMigrationService {
         return current;
     }
 
+    private static String relative(Path root, Path path) {
+        return root.relativize(path).toString().replace('\\', '/');
+    }
+
     private static void requireSeparate(Path first, Path second) {
         if (first.startsWith(second) || second.startsWith(first)) {
             throw new IllegalArgumentException("存储位置不能与现有目录重叠");
@@ -236,8 +297,12 @@ public class StorageMigrationService {
     }
 
     private static void requireEmpty(Path directory) throws IOException {
+        if (!empty(directory)) throw new IllegalArgumentException("目标目录必须为空");
+    }
+
+    private static boolean empty(Path directory) throws IOException {
         try (var entries = Files.list(directory)) {
-            if (entries.findAny().isPresent()) throw new IllegalArgumentException("目标目录必须为空");
+            return entries.findAny().isEmpty();
         }
     }
 
@@ -267,6 +332,8 @@ public class StorageMigrationService {
     public enum Status { WAITING, COPYING, COMPLETED, FAILED }
     public record Job(Kind kind, String source, String target, Status status, long files, long total, String error) {}
     public record Location(String directory, boolean ready) {}
+    public record DirectoryEntry(String name, String path) {}
+    public record DirectoryView(String path, List<DirectoryEntry> children, boolean selectable, boolean creatable) {}
     public record Category(Kind kind, String active, List<Location> locations) {}
     public record Overview(boolean enabled, String pool, List<Category> categories, Job job) {}
 }

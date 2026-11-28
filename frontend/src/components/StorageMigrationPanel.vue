@@ -12,6 +12,8 @@ type Overview = {
   categories: { kind: Kind; active: string; locations: { directory: string; ready: boolean }[] }[]
   job: Job | null
 }
+type Folder = { name: string; path: string }
+type DirectoryView = { path: string; children: Folder[]; selectable: boolean; creatable: boolean }
 
 const emit = defineEmits<{ migrated: [] }>()
 const labels: Record<Kind, string> = { PHOTOS: '照片原图', THUMBNAILS: '缩略图', CRAWL: '采集文件', MODELS: 'AI 模型' }
@@ -20,7 +22,12 @@ const overview = ref<Overview>()
 const error = ref('')
 const saving = ref(false)
 const dialog = ref(false)
-const form = ref<{ kind: Kind; directory: string }>({ kind: 'PHOTOS', directory: '' })
+const kindToAdd = ref<Kind>('PHOTOS')
+const directory = ref<DirectoryView>()
+const browsing = ref(false)
+const folderName = ref('')
+const directoryError = ref('')
+let browseRequest = 0
 const selected = ref<Partial<Record<Kind, string>>>({})
 let timer: ReturnType<typeof setTimeout> | undefined
 let mounted = true
@@ -58,17 +65,59 @@ async function refresh() {
 }
 
 function openAdd(kind: Kind) {
-  form.value = { kind, directory: '' }
+  kindToAdd.value = kind
+  directory.value = undefined
+  folderName.value = ''
   dialog.value = true
+  void browse('')
+}
+
+const breadcrumbs = computed(() => {
+  const segments = directory.value?.path.split('/').filter(Boolean) ?? []
+  return segments.map((name, index) => ({ name, path: segments.slice(0, index + 1).join('/') }))
+})
+
+async function browse(path: string) {
+  const request = ++browseRequest
+  browsing.value = true
+  directoryError.value = ''
+  try {
+    const { data } = await http.get<DirectoryView>(endpoint + '/directories', { params: { directory: path } })
+    if (request === browseRequest) {
+      directory.value = data
+      folderName.value = ''
+    }
+  } catch (failure) {
+    if (request === browseRequest) directoryError.value = messageOf(failure, '读取目录失败')
+  } finally {
+    if (request === browseRequest) browsing.value = false
+  }
+}
+
+async function createFolder() {
+  if (!directory.value?.creatable || !folderName.value.trim()) return
+  saving.value = true
+  try {
+    const { data } = await http.post<Folder>(endpoint + '/directories', {
+      parent: directory.value.path, name: folderName.value.trim(),
+    })
+    await browse(data.path)
+  } catch (failure) {
+    ElMessage.error(messageOf(failure, '新建目录失败'))
+  } finally {
+    saving.value = false
+  }
 }
 
 async function addLocation() {
+  const target = directory.value
+  if (!target?.selectable) return
   saving.value = true
   try {
-    const directory = form.value.directory.trim()
-    const { data } = await http.post<Overview>(endpoint, { ...form.value, directory })
+    const kind = kindToAdd.value
+    const { data } = await http.post<Overview>(endpoint, { kind, directory: target.path })
     overview.value = data
-    selected.value[form.value.kind] = directory
+    selected.value[kind] = target.path
     dialog.value = false
   } catch (failure) {
     ElMessage.error(messageOf(failure, '添加存储位置失败'))
@@ -100,7 +149,7 @@ async function migrate(kind: Kind) {
 }
 
 onMounted(refresh)
-onUnmounted(() => { mounted = false; clearTimeout(timer) })
+onUnmounted(() => { mounted = false; browseRequest++; clearTimeout(timer) })
 </script>
 
 <template>
@@ -109,7 +158,7 @@ onUnmounted(() => { mounted = false; clearTimeout(timer) })
     <el-alert v-if="error" type="error" :title="error" :closable="false" />
     <el-button v-if="error" link type="primary" @click="refresh">重新加载</el-button>
     <p v-else-if="!overview" class="migration-note">正在读取存储位置…</p>
-    <p v-else-if="!overview.enabled" class="migration-note">请先将 NAS 上的新硬盘目录挂载为应用存储池，再添加迁移位置。</p>
+    <p v-else-if="!overview.enabled" class="migration-note">请在 Jenkins 发版参数「STORAGE_POOL_MAPPINGS」中配置 NAS 目录映射。</p>
     <template v-if="overview">
       <div v-for="category in overview.categories" :key="category.kind" class="migration-row">
         <div class="migration-path">
@@ -135,14 +184,33 @@ onUnmounted(() => { mounted = false; clearTimeout(timer) })
         <p v-if="job.error" class="migration-note">{{ job.error }}</p>
       </div>
     </template>
-    <el-dialog v-model="dialog" title="新增存储位置" width="min(460px, 92vw)">
-      <el-form @submit.prevent="addLocation">
-        <el-form-item label="目录名">
-          <el-input v-model="form.directory" placeholder="例如 photos-archive" />
-        </el-form-item>
-        <p class="migration-note">在 {{ overview?.pool }} 下新建目录，或添加已存在的空目录。</p>
-        <el-button native-type="submit" type="primary" :loading="saving" :disabled="!form.directory.trim()">添加</el-button>
+    <el-dialog v-model="dialog" :title="'新增' + labels[kindToAdd] + '存储位置'" width="min(580px, 92vw)">
+      <nav class="folder-breadcrumbs" aria-label="当前目录">
+        <el-button link type="primary" :disabled="browsing || saving" @click="browse('')">已挂载位置</el-button>
+        <template v-for="crumb in breadcrumbs" :key="crumb.path">
+          <span aria-hidden="true">/</span>
+          <el-button link type="primary" :disabled="browsing || saving" @click="browse(crumb.path)">{{ crumb.name }}</el-button>
+        </template>
+      </nav>
+      <div v-loading="browsing" class="folder-list" :aria-busy="browsing">
+        <el-alert v-if="directoryError" type="error" :title="directoryError" :closable="false" />
+        <template v-else-if="directory">
+          <button v-for="folder in directory.children" :key="folder.path" type="button" class="folder-item"
+            :disabled="browsing || saving" @click="browse(folder.path)">
+            <span>{{ folder.name }}</span><span aria-hidden="true">›</span>
+          </button>
+          <p v-if="!directory.children.length" class="migration-note">没有子目录</p>
+        </template>
+      </div>
+      <el-form v-if="directory?.creatable" class="folder-create" @submit.prevent="createFolder">
+        <el-input v-model="folderName" aria-label="新目录名" placeholder="新目录名" :disabled="browsing || saving" />
+        <el-button native-type="submit" :disabled="browsing || saving || !folderName.trim()">新建目录</el-button>
       </el-form>
+      <p class="migration-note">{{ directory?.selectable ? '当前目录为空，可以添加。' : '进入一个空目录，或先新建目录。' }}</p>
+      <template #footer>
+        <el-button @click="dialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" :disabled="browsing || !directory?.selectable" @click="addLocation">添加当前目录</el-button>
+      </template>
     </el-dialog>
   </section>
 </template>
@@ -157,4 +225,9 @@ h3 { margin: 0 0 12px; }
 .migration-actions .el-button { margin-left: 0; }
 .migration-note { color: var(--el-text-color-secondary); font-size: 13px; }
 .migration-task { display: grid; gap: 8px; margin-top: 16px; }
+.folder-breadcrumbs, .folder-create { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.folder-list { min-height: 80px; max-height: 260px; overflow: auto; margin: 12px 0; border-block: 1px solid var(--el-border-color-lighter); }
+.folder-item { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 10px; border: 0; background: transparent; color: var(--el-text-color-primary); text-align: left; cursor: pointer; }
+.folder-item:hover, .folder-item:focus-visible { background: var(--el-fill-color-light); }
+.folder-create .el-input { flex: 1; }
 </style>

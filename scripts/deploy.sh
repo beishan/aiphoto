@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
 COMPOSE_GPU_FILE="${PROJECT_DIR}/docker/docker-compose.gpu.yml"
-COMPOSE_STORAGE_FILE="${PROJECT_DIR}/docker/docker-compose.storage.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.aiphoto-previous-images}"
@@ -94,13 +93,90 @@ validate_configuration() {
     fi
 }
 
-compose() {
+storage_mounts() {
+    docker inspect --format '{{range .Mounts}}{{printf "%s=%s\n" .Destination .Source}}{{end}}' aiphoto-backend 2>/dev/null |
+        awk -F= '$1 == "/storage-pools" || $1 ~ /^\/storage-pools\/[^/]+$/'
+}
+
+storage_mappings() {
+    local configured line
+    configured="${STORAGE_POOL_MAPPINGS:-}"
+    if [[ -n "${configured//[[:space:]]/}" ]]; then
+        printf '%s\n' "${configured}"
+    else
+        while IFS= read -r line; do
+            if [[ "${line}" == /storage-pools/* ]]; then printf '%s\n' "${line#/storage-pools/}"; fi
+        done < <(storage_mounts || true)
+    fi
+}
+
+render_storage_override() {
+    local mappings="$1" legacy="$2" line name source names="" legacy_enabled=false
+    local -A seen=()
+    local -a sources=() targets=()
+    if [[ -n "${legacy}" ]]; then sources+=("${legacy}"); targets+=(/storage-pools); legacy_enabled=true; fi
+    while IFS= read -r line; do
+        line="${line%$'\r'}"
+        [[ "${line}" =~ ^[[:space:]]*$ ]] && continue
+        name="${line%%=*}"
+        source="${line#*=}"
+        if [[ "${line}" != *=* || ! "${name}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$ || -n "${seen[$name]:-}" ]]; then
+            echo "错误：存储映射必须使用唯一别名，每行格式为 别名=/NAS/目录。" >&2
+            return 1
+        fi
+        seen["${name}"]=1
+        names+="${names:+,}${name}"
+        sources+=("${source}")
+        targets+=("/storage-pools/${name}")
+    done <<< "${mappings}"
+
+    local index
+    for source in "${sources[@]}"; do
+        if [[ "${source}" != /* || "${source}" == / || "${source}" == *//* ||
+              "${source}" == *'/../'* || "${source}" == */.. || "${source}" == *'/./'* ||
+              "${source}" == */. || "${source}" == *$'\r'* || "${source}" == *$'\n'* || "${source}" == *$'\t'* ]]; then
+            echo "错误：存储映射必须指向安全的 NAS 绝对目录。" >&2
+            return 1
+        fi
+    done
+    printf '%s\n' 'x-pool-env: &pool-env' '  STORAGE_POOL_DIRECTORY: /storage-pools' '  STORAGE_CONTROL_DIRECTORY: /storage-control'
+    printf "  STORAGE_POOL_NAMES: '%s'\n  STORAGE_POOL_LEGACY: '%s'\n" "${names}" "${legacy_enabled}"
+    printf '%s\n' 'x-pool-volumes: &pool-volumes' '  - storage_control:/storage-control'
+    for index in "${!sources[@]}"; do
+        source="${sources[index]}"
+        source="${source//\$/\$\$}"
+        source="${source//\'/\'\'}"
+        printf "  - type: bind\n    source: '%s'\n    target: '%s'\n    bind:\n      create_host_path: false\n" "${source}" "${targets[index]}"
+    done
+    printf '%s\n' 'services:' '  backend:' '    environment: *pool-env' '    volumes: *pool-volumes' \
+        '  ai-service:' '    environment: *pool-env' '    volumes: *pool-volumes' 'volumes:' '  storage_control:' '    name: aiphoto-storage-control'
+}
+
+legacy_storage_pool() {
+    local path
+    path="$(effective_value STORAGE_POOL_PATH)"
+    if [[ -n "${path}" ]]; then
+        if [[ -z "${STORAGE_POOL_PATH:-}" && ( "${path}" == \"*\" || "${path}" == \'*\' ) ]]; then
+            path="${path:1:-1}"
+        fi
+        printf '%s' "${path}"
+    else storage_mounts | sed -n 's|^/storage-pools=||p' || true
+    fi
+}
+
+compose() (
     local compose_files=(--file "${COMPOSE_FILE}")
     if gpu_enabled; then
         compose_files+=(--file "${COMPOSE_GPU_FILE}")
     fi
-    if [[ -n "$(effective_value STORAGE_POOL_PATH)" ]]; then
-        compose_files+=(--file "${COMPOSE_STORAGE_FILE}")
+    local mappings legacy override
+    mappings="$(storage_mappings)"
+    legacy="$(legacy_storage_pool)"
+    if [[ -n "${mappings}" || -n "${legacy}" ]]; then
+        override="$(mktemp)"
+        trap 'rm -f -- "${override}"' EXIT
+        render_storage_override "${mappings}" "${legacy}" > "${override}" || exit 1
+        compose_files+=(--file "${override}")
     fi
 
     "${COMPOSE_COMMAND[@]}" \
@@ -108,7 +184,7 @@ compose() {
         --env-file "${ENV_FILE}" \
         "${compose_files[@]}" \
         "$@"
-}
+)
 
 container_image() {
     docker inspect --format '{{.Config.Image}}' "$1" 2>/dev/null || true
@@ -120,15 +196,41 @@ validate_migrated_storage() {
         return 0
     fi
     active="$(docker run --rm --pull never -v aiphoto-storage-control:/storage-control:ro alpine:3.20 \
-        sh -c 'for file in /storage-control/*.active; do if [ -f "$file" ]; then echo yes; break; fi; done')" || return 1
-    [[ "${active}" == yes ]] || return 0
-    pool="$(effective_value STORAGE_POOL_PATH)"
-    mounted_pool="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/storage-pools"}}{{.Source}}{{end}}{{end}}' \
-        aiphoto-backend 2>/dev/null || true)"
-    if [[ -z "${pool}" || ( -n "${mounted_pool}" && "${pool%/}" != "${mounted_pool%/}" ) ]]; then
-        echo "错误：已有完成的存储迁移，请保留后端现有的 STORAGE_POOL_PATH 挂载。" >&2
+        sh -c 'for file in /storage-control/*.active; do if [ -f "$file" ]; then cat "$file" || exit 1; printf "\\n"; fi; done')" || return 1
+    [[ -n "${active}" ]] || return 0
+    pool="$(legacy_storage_pool)"
+    local mappings line name source
+    mappings="$(storage_mappings)"
+    mounted_pool="$(storage_mounts)" || return 1
+    if [[ -z "${mounted_pool}" ]]; then
+        echo "错误：无法确认已迁移数据使用的存储映射。" >&2
         return 1
     fi
+    while IFS='=' read -r name source; do
+        if [[ "${name}" == /storage-pools && "${pool%/}" == "${source%/}" ]]; then continue; fi
+        line="${name#/storage-pools/}=${source%/}"
+        if [[ "${name}" == /storage-pools/* ]] && printf '%s\n' "${mappings}" | sed 's/\r$//;s|/$||' | grep -Fx -- "${line}" >/dev/null; then
+            continue
+        fi
+        echo "错误：已有存储迁移，不能移除或更换现有路径映射：${name}" >&2
+        return 1
+    done <<< "${mounted_pool}"
+    local mapping alias existing active_path
+    while IFS= read -r mapping; do
+        alias="${mapping%%=*}"
+        [[ -n "${alias}" ]] || continue
+        existing=false
+        while IFS='=' read -r name source; do
+            if [[ "${name}" == "/storage-pools/${alias}" ]]; then existing=true; break; fi
+        done <<< "${mounted_pool}"
+        [[ "${existing}" == true ]] && continue
+        while IFS= read -r active_path; do
+            if [[ "${active_path}" == "/storage-pools/${alias}" || "${active_path}" == "/storage-pools/${alias}/"* ]]; then
+                echo "错误：新挂载别名会遮盖已迁移数据：${alias}" >&2
+                return 1
+            fi
+        done <<< "${active}"
+    done <<< "${mappings}"
     for image in "$@"; do
         if [[ "$(docker image inspect --format '{{index .Config.Labels "com.aiphoto.storage-migration"}}' "${image}")" != true ]]; then
             echo "错误：镜像 ${image} 不支持已迁移的存储位置，无法安全回滚。" >&2

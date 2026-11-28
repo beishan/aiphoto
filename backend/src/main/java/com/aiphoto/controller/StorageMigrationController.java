@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,6 +27,17 @@ public class StorageMigrationController {
     @GetMapping
     public StorageMigrationService.Overview overview() throws IOException {
         return service.overview();
+    }
+
+    @GetMapping("/directories")
+    public StorageMigrationService.DirectoryView browse(@RequestParam(defaultValue = "") String directory) throws IOException {
+        return service.browse(directory);
+    }
+
+    @PostMapping("/directories")
+    @ResponseStatus(HttpStatus.CREATED)
+    public StorageMigrationService.DirectoryEntry create(@Valid @RequestBody DirectoryRequest request) throws IOException {
+        return service.createDirectory(request.parent(), request.name());
     }
 
     @PostMapping
@@ -42,4 +54,5 @@ public class StorageMigrationController {
     }
 
     public record Location(@NotNull Kind kind, @NotBlank String directory) {}
+    public record DirectoryRequest(@NotNull String parent, @NotBlank String name) {}
 }

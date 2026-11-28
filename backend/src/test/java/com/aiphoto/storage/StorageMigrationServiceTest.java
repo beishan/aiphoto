@@ -92,9 +92,36 @@ class StorageMigrationServiceTest {
         assertThat(StorageRoots.active(models.toString(), Kind.MODELS)).isEqualTo(pool.resolve("weights"));
     }
 
+    @Test
+    void namedPoolsCanBeBrowsedAndNewDirectoriesCanBecomeMigrationTargets() throws Exception {
+        Files.createDirectory(pool.resolve("disk1"));
+        Files.createDirectory(pool.resolve("disk2"));
+        Files.createDirectory(pool.resolve("unmapped"));
+        var named = new StorageMigrationService(photos.toString(), thumbs.toString(), staging.toString(),
+                models.toString(), pool.toString(), "disk1,disk2", false);
+        try {
+            assertThat(named.browse("").children()).extracting(StorageMigrationService.DirectoryEntry::name)
+                    .containsExactly("disk1", "disk2");
+            assertThat(named.browse("disk2").selectable()).isFalse();
+            assertThat(named.browse("disk2").creatable()).isTrue();
+            var created = named.createDirectory("disk2", "家庭照片");
+            assertThat(created.path()).isEqualTo("disk2/家庭照片");
+            assertThat(named.browse(created.path()).selectable()).isTrue();
+            named.add(Kind.PHOTOS, created.path());
+            assertThat(named.overview().categories().getFirst().locations())
+                    .containsExactly(new StorageMigrationService.Location(created.path(), true));
+            assertThatThrownBy(() -> named.createDirectory("", "unmapped-child")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> named.browse("disk2/../unmapped")).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> named.createDirectory(created.path(), "inside-registered"))
+                    .isInstanceOf(IllegalArgumentException.class);
+        } finally {
+            named.shutdown();
+        }
+    }
+
     private StorageMigrationService newService() {
         return new StorageMigrationService(photos.toString(), thumbs.toString(), staging.toString(),
-                models.toString(), pool.toString());
+                models.toString(), pool.toString(), "", true);
     }
 
     private RestartedService reusableService() {

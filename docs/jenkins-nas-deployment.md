@@ -95,7 +95,7 @@ Pipeline 中可在每次“Build with Parameters”时填写：
 | `PHOTO_LIBRARY_PATH` | NAS 宿主机照片库绝对路径 |
 | `AI_MODELS_PATH` | NAS 宿主机 AI 模型根目录绝对路径 |
 | `STORAGE_DATA_PATH` | NAS 宿主机上传照片和缩略图存储目录 |
-| `STORAGE_POOL_PATH` | 可选。在生产凭据文件中填写新硬盘上用于网页迁移的目录 |
+| `STORAGE_POOL_MAPPINGS` | 可选。每行一个 `别名=/NAS/绝对路径`，留空沿用当前映射 |
 | `FRONTEND_PORT` | 前端对外端口 |
 | `BACKEND_PORT` | 后端对外端口 |
 | `ENABLE_GPU` | 是否申请 NVIDIA GPU；未安装 Container Toolkit 时不要勾选 |
@@ -125,26 +125,34 @@ http://192.168.31.155:8392/actuator/health
 
 ## 在网页上迁移存储
 
-先在新硬盘上创建一个应用专用目录，例如 `/vol2/1000/aiphoto-pool`。
-Jenkins 部署在现有的生产环境凭据文件中添加 `STORAGE_POOL_PATH=/vol2/1000/aiphoto-pool`，
-随首次支持该功能的版本部署。Compose 会将同一目录挂载到后端和 AI 服务。
-直接使用根目录 Compose 的部署，在 `.env` 设置同名变量，并使用：
+先在各个 NAS 存储卷上创建应用专用目录。Jenkins 读取新版 Jenkinsfile 后，
+在「Build with Parameters」的 `STORAGE_POOL_MAPPINGS` 文本框填写，每行一条：
+
+```text
+disk1=/vol1/1000/aiphoto-pool
+disk2=/vol2/1000/aiphoto-pool
+```
+
+别名由英文字母、数字、下划线和短横线组成。目录必须在 Docker 宿主机上已存在。
+部署会把所有映射挂载到后端和 AI 服务。后续发版留空会沿用当前容器的映射，
+要增加映射时填写已有和新增的完整列表。生产凭据中的旧 `STORAGE_POOL_PATH` 仍可继续使用。
+直接使用根目录 Compose、只需要单个存储池时，仍可在 `.env` 设置 `STORAGE_POOL_PATH`，并使用：
 
 ```bash
 docker compose -f docker-compose.yml -f docker/docker-compose.storage.yml up -d --build
 ```
 
 挂载完成后，用管理员账号进入「系统设置 → 存储管理 → 存储位置与迁移」。
-在照片原图、缩略图、采集文件或 AI 模型下面选择「新增位置」，填写存储池内的相对目录，
-如 `gallery/photos`。新目录会自动创建，也可选用已存在且为空的目录。选中它后点「迁移」。
+在照片原图、缩略图、采集文件或 AI 模型下面选择「新增位置」，在目录浏览器中点开一个映射，
+例如 `disk2`，进入现有空目录或点「新建目录」。点「添加当前目录」登记后，再点击「迁移」。
 每次迁移都可以在网页上完成，无需重新部署。
 
 任务会等该类文件正在进行的写入结束，再复制并逐文件校验。复制期间新写入会等待，
 校验成功后自动切换，旧目录里的文件保留。建议选在上传、采集入库或模型下载较少时操作。
 数据库和仅链接的外部扫描图库保持原位。进度显示在设置页，关闭浏览器不会中止后台任务。
 
-存储池路径和 `aiphoto-storage-control` Docker 卷需要随部署保留。该卷记录当前目录和已添加的位置。
-迁移完成后，Jenkins 会拦住移除或更换存储池挂载，以及回滚到不支持迁移的旧镜像。
+存储映射和 `aiphoto-storage-control` Docker 卷需要随部署保留。该卷记录当前目录和已添加的位置。
+迁移完成后，Jenkins 会拦住移除或更换已有挂载、遮盖已迁移路径的新增映射，以及回滚到不支持迁移的旧镜像。
 
 ## 镜像构建缓存（0.16.1）
 
