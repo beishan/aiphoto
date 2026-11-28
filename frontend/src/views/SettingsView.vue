@@ -908,7 +908,7 @@ const systemStorageFolders = computed(() => [
           ]" aria-label="模型管理分类" />
 
           <!-- Local Models Tab -->
-          <div v-if="modelViewMode === 'local'">
+          <div v-if="modelViewMode === 'local'" class="local-model-grid">
             <div v-for="item in modelCatalog" :key="item.key" class="panel-card model-type-card">
               <div class="model-type-header">
                 <div class="model-type-info">
@@ -920,19 +920,21 @@ const systemStorageFolders = computed(() => [
               <!-- Local path config for AI-service-supported models -->
               <template v-if="typeToAiName[item.key]">
                 <div v-for="model in models.filter(m => m.name === typeToAiName[item.key])" :key="model.name" class="model-local-config">
-                  <label class="model-toggle"><el-switch v-model="model.enabled" /> 启用</label>
                   <div class="model-path-row">
-                    <el-input v-model.trim="model.path" class="model-path-input" placeholder="模型文件路径" clearable />
+                    <label class="model-toggle"><el-switch v-model="model.enabled" size="small" /> 启用</label>
+                    <el-input v-model.trim="model.path" class="model-path-input" size="small" placeholder="模型文件路径" clearable />
                   </div>
-                  <div class="model-meta-row">
-                    <span v-if="model.loaded" class="model-meta-tag ok">已加载</span>
-                    <span v-else-if="model.exists" class="model-meta-tag">文件存在</span>
-                    <span v-else class="model-meta-tag warn">文件不存在</span>
-                    <span v-if="model.error" class="model-meta-tag err">{{ model.error }}</span>
-                  </div>
-                  <div class="model-actions">
-                    <el-button type="primary" :loading="modelLoading" @click="saveModel(model)">保存并加载</el-button>
-                    <el-button :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</el-button>
+                  <div class="model-config-footer">
+                    <div class="model-meta-row">
+                      <span v-if="model.loaded" class="model-meta-tag ok">已加载</span>
+                      <span v-else-if="model.exists" class="model-meta-tag">文件存在</span>
+                      <span v-else class="model-meta-tag warn">文件不存在</span>
+                      <span v-if="model.error" class="model-meta-tag err">{{ model.error }}</span>
+                    </div>
+                    <div class="model-actions">
+                      <el-button type="primary" size="small" :loading="modelLoading" @click="saveModel(model)">保存并加载</el-button>
+                      <el-button size="small" :disabled="modelLoading || !model.enabled" @click="reloadModel(model)">重新加载</el-button>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -1962,9 +1964,8 @@ const systemStorageFolders = computed(() => [
 
 .model-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* Model Tab Bar */
@@ -1984,15 +1985,23 @@ const systemStorageFolders = computed(() => [
 }
 
 /* Model Type Card (Local tab) */
-.model-type-card {
-  margin-bottom: 12px;
+.local-model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+.model-type-card.panel-card {
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px;
 }
 
 .model-type-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 10px;
 }
 
 .model-type-info {
@@ -2002,7 +2011,7 @@ const systemStorageFolders = computed(() => [
 }
 
 .model-type-info strong {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-primary);
 }
 
@@ -2028,8 +2037,35 @@ const systemStorageFolders = computed(() => [
 .model-local-config {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
+}
+
+.model-path-row,
+.model-config-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-config-footer {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.model-path-row .model-path-input {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.model-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .model-meta-row {
@@ -2056,7 +2092,7 @@ const systemStorageFolders = computed(() => [
   justify-content: space-between;
   gap: 12px;
   margin-top: 8px;
-  padding: 10px;
+  padding: 6px 8px;
   background: var(--bg-tertiary);
   border-radius: 8px;
 }
