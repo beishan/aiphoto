@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="aiphoto AI Service",
     description="AI inference service for Chinese-CLIP, InsightFace, YOLOv8, and BLIP-2",
-    version=os.getenv("APP_VERSION", "0.26.58"),
+    version=os.getenv("APP_VERSION", "0.26.59"),
     lifespan=lifespan,
 )
 

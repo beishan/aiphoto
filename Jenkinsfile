@@ -1,4 +1,4 @@
-def configureReleaseParameters(String storageMappings) {
+def configureReleaseParameters(String storageMappings, boolean enableGpu) {
     properties([parameters([
         string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名'),
         string(name: 'PHOTO_LIBRARY_PATH', defaultValue: '/vol2/1000/aiphotoslib', description: 'NAS 宿主机照片库绝对路径（必须已存在）'),
@@ -7,7 +7,7 @@ def configureReleaseParameters(String storageMappings) {
         text(name: 'STORAGE_POOL_MAPPINGS', defaultValue: storageMappings, description: '每行填写 别名=/NAS/绝对路径。发版成功后，下次自动填入。'),
         string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口'),
         string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口'),
-        booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速'),
+        booleanParam(name: 'ENABLE_GPU', defaultValue: enableGpu, description: '启用 GPU 加速。发版成功后记住本次选择。'),
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试'),
     ])])
 }
@@ -32,7 +32,6 @@ pipeline {
         string(name: 'STORAGE_DATA_PATH', defaultValue: '/vol1/1000/aiphotos/storage', description: 'NAS 宿主机上传照片和缩略图存储目录（必须已存在）')
         string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口')
-        booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速')
         booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 
@@ -49,10 +48,9 @@ pipeline {
             steps {
                 echo '执行节点已就绪，正在初始化发版参数。'
                 script {
-                    // Register the storage field before checkout. It stays outside the declarative
-                    // parameters block so successful releases can persist its default.
-                    if (!params.containsKey('STORAGE_POOL_MAPPINGS')) {
-                        configureReleaseParameters('')
+                    // Keep persisted defaults outside the declarative parameters block.
+                    if (!params.containsKey('STORAGE_POOL_MAPPINGS') || !params.containsKey('ENABLE_GPU')) {
+                        configureReleaseParameters(params.STORAGE_POOL_MAPPINGS ?: '', params.ENABLE_GPU == true)
                     }
                 }
                 echo '正在从 GitHub 拉取 main 分支。'
@@ -156,7 +154,7 @@ pipeline {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', catchInterruptions: false,
                             message: '部署已成功，但存储映射或 Jenkins 参数默认值保存失败。') {
                         def mappings = sh(script: './scripts/deploy.sh save-storage-mappings "$AIPHOTO_ENV_FILE"', returnStdout: true)
-                        configureReleaseParameters(mappings)
+                        configureReleaseParameters(mappings, params.ENABLE_GPU == true)
                     }
                     if (sh(script: './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE"', returnStatus: true) != 0) {
                         unstable('部署已成功，但历史镜像清理未完成，请查看 Jenkins 清理日志。')
