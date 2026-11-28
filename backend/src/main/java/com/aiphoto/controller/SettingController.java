@@ -157,7 +157,7 @@ public class SettingController {
 
     @PostMapping("/models/downloads/{taskId}/set-current")
     public ResponseEntity<ModelDownloadService.DownloadTask> setCurrentModel(@PathVariable String taskId) {
-        return ResponseEntity.ok(modelDownloadService.setAsCurrent(taskId));
+        return ResponseEntity.accepted().body(modelDownloadService.setAsCurrent(taskId));
     }
 
     // ===== System Info & Storage =====

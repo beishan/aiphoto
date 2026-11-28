@@ -56,6 +56,7 @@ export interface DownloadTask {
   modelId: string
   modelName: string
   typeKey: string
+  installedPath?: string | null
   url: string
   totalSize: number
   downloadedSize: number

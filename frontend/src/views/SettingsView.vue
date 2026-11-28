@@ -394,6 +394,11 @@ const onlineCapability = ref<ModelCatalogItem | null>(null)
 const onlineModels = ref<OnlineModel[]>([])
 const downloadTasks = ref<DownloadTask[]>([])
 const downloadPollTimer = ref<number | null>(null)
+const submittingActivation = ref<string | null>(null)
+const modelActivationBusy = computed(() => submittingActivation.value !== null
+  || downloadTasks.value.some(task => task.status === 'INSTALLING'))
+let pollingDownloads = false
+let downloadRevision = 0
 
 const modelLabels: Record<ModelName, string> = {
   clip: 'Chinese-CLIP 语义模型',
@@ -433,6 +438,7 @@ function isConfiguredOnlineModel(model: OnlineModel) {
 }
 
 function getOnlineModelState(model: OnlineModel) {
+  if (isActivatingModel(model.id)) return '正在启用'
   if (isConfiguredOnlineModel(model)) {
     const status = getConfiguredModel(model.modelName)!
     if (!status.enabled) return '当前配置 · 未启用'
@@ -446,6 +452,18 @@ function getOnlineModelState(model: OnlineModel) {
 function getReadyDownload(modelId: string) {
   return downloadTasks.value.find(task => task.modelId === modelId &&
     (task.status === 'COMPLETED' || task.status === 'INSTALLED'))
+}
+
+function isActivatingModel(modelId: string) {
+  return downloadTasks.value.some(task => task.modelId === modelId &&
+    (task.status === 'INSTALLING' || submittingActivation.value === task.taskId))
+}
+
+function getOnlineModelSize(model: OnlineModel) {
+  const task = downloadTasks.value.find(item => item.modelId === model.id &&
+    ['COMPLETED', 'INSTALLING', 'INSTALLED'].includes(item.status))
+  const bytes = task?.totalSize || task?.downloadedSize || model.size
+  return bytes > 0 ? formatSize(bytes) : '下载时获取'
 }
 
 function recordConfiguredModel(model: ModelStatus) {
@@ -479,14 +497,19 @@ async function loadModels() {
 function startDownloadPolling() {
   if (downloadPollTimer.value) return
   downloadPollTimer.value = window.setInterval(async () => {
+    if (pollingDownloads) return
+    pollingDownloads = true
+    const revision = downloadRevision
     try {
       const { data } = await settingApi.getAllDownloads()
+      if (revision !== downloadRevision) return
       downloadTasks.value = Object.values(data)
       // Stop polling if no active downloads
       if (!downloadTasks.value.some(t => t.status === 'DOWNLOADING' || t.status === 'PENDING' || t.status === 'INSTALLING')) {
         stopDownloadPolling()
       }
-    } catch { /* ignore */ }
+    } catch { /* Retry on the next poll. */ }
+    finally { pollingDownloads = false }
   }, 2000)
 }
 
@@ -553,17 +576,51 @@ async function retryDownload(taskId: string) {
 }
 
 async function setCurrentModel(taskId: string) {
+  if (modelActivationBusy.value) return
+  submittingActivation.value = taskId
+  downloadRevision++
   try {
     const { data } = await settingApi.setCurrentModel(taskId)
-    if (data.status !== 'INSTALLED') throw new Error(data.errorMessage || '模型未成功加载')
-    message.success('已设为当前模型')
-    await refreshDownloads()
-    await loadModels()
+    downloadRevision++
+    const wasInstalling = downloadTasks.value.some(task => task.taskId === taskId && task.status === 'INSTALLING')
+    downloadTasks.value = downloadTasks.value.map(task => task.taskId === taskId ? data : task)
+    if (data.status === 'INSTALLING') startDownloadPolling()
+    else if (!wasInstalling) void showActivationResult(data)
   } catch (error: any) {
     message.error(error.response?.data?.message || error.message || '模型激活失败')
     await refreshDownloads()
-  }
+    if (downloadTasks.value.some(task => task.status === 'INSTALLING')) startDownloadPolling()
+  } finally { submittingActivation.value = null }
 }
+
+async function showActivationResult(task: DownloadTask) {
+  if (task.status !== 'INSTALLED') {
+    message.error(task.errorMessage || '模型未成功加载')
+    return
+  }
+  message.success('已设为当前模型')
+  const name = typeToAiName.value[task.typeKey]
+  if (name && task.installedPath) {
+    const active: ModelStatus = { name, path: task.installedPath, enabled: true, exists: true, loaded: true, error: null }
+    recordConfiguredModel(active)
+    models.value = models.value.map(model => model.name === name ? active : model)
+  }
+  try {
+    const { data } = await settingApi.getModels()
+    configuredModels.value = data.models.map(model => ({ ...model }))
+    const active = data.models.find(model => model.name === name)
+    if (active) models.value = models.value.map(model => model.name === name ? active : model)
+  } catch { message.warning('模型已启用，暂时无法刷新本地配置') }
+}
+
+watch(downloadTasks, (current, previous) => {
+  for (const task of current) {
+    if (task.status !== 'INSTALLED' && !(task.status === 'COMPLETED' && task.errorMessage)) continue
+    if (previous.some(item => item.taskId === task.taskId && item.status === 'INSTALLING')) {
+      void showActivationResult(task)
+    }
+  }
+})
 
 async function refreshDownloads() {
   try {
@@ -1007,7 +1064,7 @@ const systemStorageFolders = computed(() => [
                 </p>
                 <div class="online-model-meta">
                   <div><span class="info-label">版本</span><span>v{{ om.version }}</span></div>
-                  <div><span class="info-label">大小</span><span>{{ om.size > 0 ? formatSize(om.size) : '下载时获取' }}</span></div>
+                  <div><span class="info-label">大小</span><span>{{ getOnlineModelSize(om) }}</span></div>
                   <div><span class="info-label">设备</span><span>{{ om.device }}</span></div>
                   <div><span class="info-label">精度</span><span>{{ om.precision }}</span></div>
                   <div><span class="info-label">性能</span><span>{{ om.performance }}</span></div>
@@ -1031,10 +1088,12 @@ const systemStorageFolders = computed(() => [
                 <!-- Download button -->
                 <div v-else class="online-model-actions">
                   <el-button @click="viewLocalModel(om)">查看本地配置</el-button>
-                  <el-button v-if="!isConfiguredOnlineModel(om) && getReadyDownload(om.id)" type="primary"
+                  <el-button v-if="isActivatingModel(om.id)" type="primary" loading>正在启用</el-button>
+                  <el-button v-else-if="!isConfiguredOnlineModel(om) && getReadyDownload(om.id)" type="primary" :disabled="modelActivationBusy"
                     @click="setCurrentModel(getReadyDownload(om.id)!.taskId)">设为当前模型</el-button>
                   <el-button v-else-if="!isConfiguredOnlineModel(om)" type="primary" @click="startDownload(om)">下载</el-button>
                 </div>
+                <p v-if="getReadyDownload(om.id)?.errorMessage" class="download-error-msg">{{ getReadyDownload(om.id)?.errorMessage }}</p>
               </div>
             </div>
           </div>
@@ -1064,8 +1123,9 @@ const systemStorageFolders = computed(() => [
                 <el-button link v-if="task.status === 'DOWNLOADING' || task.status === 'PENDING'" class="ep-control action-link" @click="pauseDownload(task.taskId)">暂停</el-button>
                 <el-button link v-if="task.status === 'PAUSED'" class="ep-control action-link" @click="resumeDownload(task.taskId)">继续</el-button>
                 <el-button link v-if="task.status === 'FAILED' || task.status === 'CANCELLED'" class="ep-control action-link" @click="retryDownload(task.taskId)">重试</el-button>
-                <el-button link type="danger" v-if="task.status !== 'COMPLETED' && task.status !== 'INSTALLED'" class="ep-control action-link danger" @click="cancelDownload(task.taskId)">取消</el-button>
-                <el-button link v-if="task.status === 'COMPLETED'" class="ep-control action-link" @click="setCurrentModel(task.taskId)">设为当前模型</el-button>
+                <el-button link type="danger" v-if="!['COMPLETED', 'INSTALLING', 'INSTALLED'].includes(task.status)" class="ep-control action-link danger" @click="cancelDownload(task.taskId)">取消</el-button>
+                <el-button link v-if="task.status === 'INSTALLING' || submittingActivation === task.taskId" loading>正在启用</el-button>
+                <el-button link v-else-if="task.status === 'COMPLETED'" :disabled="modelActivationBusy" class="ep-control action-link" @click="setCurrentModel(task.taskId)">设为当前模型</el-button>
               </div>
             </div>
           </div>

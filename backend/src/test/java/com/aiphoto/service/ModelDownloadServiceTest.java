@@ -93,7 +93,8 @@ class ModelDownloadServiceTest {
         ModelCatalogService catalog = mock(ModelCatalogService.class);
         ModelManagementService management = mock(ModelManagementService.class);
         ModelArtifactService artifacts = mock(ModelArtifactService.class);
-        var service = new ModelDownloadService(catalog, management, artifacts, action -> {}, "", mock(ModelDownloadProxyService.class));
+        List<Runnable> queue = new ArrayList<>();
+        var service = new ModelDownloadService(catalog, management, artifacts, queue::add, "", mock(ModelDownloadProxyService.class));
         var task = new ModelDownloadService.DownloadTask();
         task.setTaskId("dl-example");
         task.setTypeKey("image_vector");
@@ -102,16 +103,22 @@ class ModelDownloadServiceTest {
         when(catalog.getOnlineModels()).thenReturn(List.of(Map.of("id", "clip", "name", "clip",
                 "typeKey", "image_vector", "filename", "model.pt", "url", "https://example.com/model.pt")));
         var actual = service.startDownload("clip", "clip", "image_vector", "", 0);
+        queue.clear(); // Use the already-downloaded fixture below.
         actual.setInstalledPath(task.getInstalledPath());
         actual.setStatus(ModelDownloadService.DownloadStatus.COMPLETED);
         when(catalog.getAiServiceModelName("image_vector")).thenReturn("clip");
         when(management.configure("clip", task.getInstalledPath(), true))
                 .thenReturn(Map.of("loaded", false, "error", "invalid checkpoint"));
-        assertThatThrownBy(() -> service.setAsCurrent(actual.getTaskId()))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("invalid checkpoint");
+        assertThat(service.setAsCurrent(actual.getTaskId()).getStatus())
+                .isEqualTo(ModelDownloadService.DownloadStatus.INSTALLING);
+        service.setAsCurrent(actual.getTaskId());
+        assertThat(queue).hasSize(1);
+        queue.removeFirst().run();
         assertThat(actual.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.COMPLETED);
+        assertThat(actual.getErrorMessage()).contains("invalid checkpoint");
         when(management.configure("clip", task.getInstalledPath(), true)).thenReturn(Map.of("loaded", true));
         service.setAsCurrent(actual.getTaskId());
+        queue.removeFirst().run();
         assertThat(actual.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.INSTALLED);
     }
 }

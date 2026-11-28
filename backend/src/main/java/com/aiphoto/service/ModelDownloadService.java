@@ -175,36 +175,46 @@ public class ModelDownloadService {
         return task;
     }
 
-    public DownloadTask setAsCurrent(String taskId) {
+    public synchronized DownloadTask setAsCurrent(String taskId) {
+        DownloadTask task = required(taskId);
+        if (task.getStatus() == DownloadStatus.INSTALLING) return task;
+        if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED) {
+            throw new IllegalArgumentException("模型尚未下载完成");
+        }
+        if (tasks.values().stream().anyMatch(item -> item.getStatus() == DownloadStatus.INSTALLING)) {
+            throw new IllegalStateException("已有模型正在启用，请稍后重试");
+        }
+        DownloadStatus previous = task.getStatus();
+        task.setErrorMessage(null);
+        task.setStatus(DownloadStatus.INSTALLING);
+        try {
+            executor.execute(() -> activate(task));
+        } catch (RuntimeException exception) {
+            task.setStatus(previous);
+            throw new IllegalStateException("启用队列已满，请稍后重试", exception);
+        }
+        return task;
+    }
+
+    private void activate(DownloadTask task) {
         try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
-            DownloadTask task = required(taskId);
-            synchronized (task) {
-                if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED) {
-                    throw new IllegalArgumentException("模型尚未下载完成");
-                }
-                task.setStatus(DownloadStatus.INSTALLING);
-                try {
-                    String name = modelCatalogService.getAiServiceModelName(task.getTypeKey());
-                    if (name == null) throw new IllegalArgumentException("该模型尚未接入推理服务");
-                    if (task.getInstalledPath() == null) {
-                        Path source = partial(task);
-                        task.setInstalledPath(artifactService.install(source, task.getTaskId(), name, task.getFilename()));
-                    }
-                    var state = modelManagementService.configure(name, task.getInstalledPath(), true);
-                    if (state == null || !Boolean.TRUE.equals(state.get("loaded")) || state.get("error") != null) {
-                        throw new IllegalStateException(state == null ? "AI 服务未返回加载状态"
-                                : state.get("error") == null ? "模型未加载" : String.valueOf(state.get("error")));
-                    }
-                    task.setStatus(DownloadStatus.INSTALLED);
-                    task.setErrorMessage(null);
-                    task.setEndTime(LocalDateTime.now());
-                } catch (Exception exception) {
-                    task.setStatus(DownloadStatus.COMPLETED);
-                    task.setErrorMessage(message(exception));
-                    throw new IllegalArgumentException("模型激活失败: " + message(exception), exception);
-                }
+            String name = modelCatalogService.getAiServiceModelName(task.getTypeKey());
+            if (name == null) throw new IllegalArgumentException("该模型尚未接入推理服务");
+            if (task.getInstalledPath() == null) {
+                Path source = partial(task);
+                task.setInstalledPath(artifactService.install(source, task.getTaskId(), name, task.getFilename()));
             }
-            return task;
+            var state = modelManagementService.configure(name, task.getInstalledPath(), true);
+            if (state == null || !Boolean.TRUE.equals(state.get("loaded")) || state.get("error") != null) {
+                throw new IllegalStateException(state == null ? "AI 服务未返回加载状态"
+                        : state.get("error") == null ? "模型未加载" : String.valueOf(state.get("error")));
+            }
+            task.setEndTime(LocalDateTime.now());
+            task.setStatus(DownloadStatus.INSTALLED);
+        } catch (Exception exception) {
+            log.warn("Model activation failed: {}", task.getModelId(), exception);
+            task.setErrorMessage(message(exception));
+            task.setStatus(DownloadStatus.COMPLETED);
         }
     }
 
