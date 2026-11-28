@@ -40,10 +40,13 @@ pipeline {
                         configureReleaseParameters('')
                     }
                     // A new job's first run can be queued before parameter defaults exist.
-                    ['NAS_HOST', 'PHOTO_LIBRARY_PATH', 'AI_MODELS_PATH', 'STORAGE_DATA_PATH',
-                        'FRONTEND_PORT', 'BACKEND_PORT', 'ENABLE_GPU'].each { name ->
-                        if (env[name] == null) env[name] = params[name].toString()
-                    }
+                    if (env.NAS_HOST == null) env.NAS_HOST = params.NAS_HOST
+                    if (env.PHOTO_LIBRARY_PATH == null) env.PHOTO_LIBRARY_PATH = params.PHOTO_LIBRARY_PATH
+                    if (env.AI_MODELS_PATH == null) env.AI_MODELS_PATH = params.AI_MODELS_PATH
+                    if (env.STORAGE_DATA_PATH == null) env.STORAGE_DATA_PATH = params.STORAGE_DATA_PATH
+                    if (env.FRONTEND_PORT == null) env.FRONTEND_PORT = params.FRONTEND_PORT
+                    if (env.BACKEND_PORT == null) env.BACKEND_PORT = params.BACKEND_PORT
+                    if (env.ENABLE_GPU == null) env.ENABLE_GPU = params.ENABLE_GPU ? 'true' : 'false'
                     def appVersion = readFile('VERSION').trim()
                     if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
                         error("VERSION 必须使用语义化版本号（例如 0.2.2），当前值：${appVersion}")
