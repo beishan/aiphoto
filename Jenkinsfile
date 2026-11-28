@@ -17,6 +17,7 @@ pipeline {
 
     options {
         disableConcurrentBuilds()
+        quietPeriod(0)
         timestamps()
         skipDefaultCheckout()
         timeout(time: 120, unit: 'MINUTES')
@@ -46,6 +47,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                echo '执行节点已就绪，正在初始化发版参数。'
                 script {
                     // Register the storage field before checkout. It stays outside the declarative
                     // parameters block so successful releases can persist its default.
@@ -53,6 +55,7 @@ pipeline {
                         configureReleaseParameters('')
                     }
                 }
+                echo '正在从 GitHub 拉取 main 分支。'
                 git branch: 'main', url: 'git@github.com:beishan/aiphoto.git'
                 script {
                     // A new job's first run can be queued before parameter defaults exist.
