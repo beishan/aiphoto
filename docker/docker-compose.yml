@@ -95,6 +95,7 @@ services:
       STORAGE_THUMBS_DIR: /data/thumbs
       STORAGE_CRAWL_DIR: /data/crawl
       JWT_SECRET: ${JWT_SECRET:?please configure JWT_SECRET}
+      MODEL_DOWNLOAD_PROXY: ${MODEL_DOWNLOAD_PROXY:-}
       CRAWLER_PROXY_SECRET: ${CRAWLER_PROXY_SECRET:-}
     ports:
       - "${BACKEND_PORT:-8392}:8080"

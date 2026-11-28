@@ -1,6 +1,8 @@
 package com.aiphoto.service;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -17,6 +19,7 @@ import java.util.regex.Pattern;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -27,17 +30,36 @@ public class ModelDownloadService {
     private final ModelManagementService modelManagementService;
     private final ModelArtifactService artifactService;
     private final TaskExecutor executor;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(20)).followRedirects(HttpClient.Redirect.ALWAYS).build();
+    private final HttpClient httpClient;
     private final Map<String, DownloadTask> tasks = new ConcurrentHashMap<>();
     private static final Pattern CONTENT_RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
     public ModelDownloadService(ModelCatalogService catalog, ModelManagementService management,
-            ModelArtifactService artifacts, @Qualifier("modelDownloadExecutor") TaskExecutor executor) {
+            ModelArtifactService artifacts, @Qualifier("modelDownloadExecutor") TaskExecutor executor,
+            @Value("${MODEL_DOWNLOAD_PROXY:}") String proxyUrl) {
         this.modelCatalogService = catalog;
         this.modelManagementService = management;
         this.artifactService = artifacts;
         this.executor = executor;
+        var client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(20))
+                .followRedirects(HttpClient.Redirect.ALWAYS);
+        if (!proxyUrl.isBlank()) {
+            URI proxy;
+            try {
+                proxy = URI.create(proxyUrl.trim());
+            } catch (IllegalArgumentException ignored) {
+                throw new IllegalArgumentException("MODEL_DOWNLOAD_PROXY must use http://host:port");
+            }
+            if (!"http".equalsIgnoreCase(proxy.getScheme()) || proxy.getHost() == null
+                    || proxy.getPort() < 1 || proxy.getPort() > 65535
+                    || proxy.getUserInfo() != null || proxy.getQuery() != null || proxy.getFragment() != null
+                    || (!proxy.getPath().isEmpty() && !"/".equals(proxy.getPath()))) {
+                throw new IllegalArgumentException("MODEL_DOWNLOAD_PROXY must use http://host:port");
+            }
+            client.proxy(ProxySelector.of(InetSocketAddress.createUnresolved(proxy.getHost(), proxy.getPort())));
+        }
+        this.httpClient = client.build();
     }
 
     public enum DownloadStatus {

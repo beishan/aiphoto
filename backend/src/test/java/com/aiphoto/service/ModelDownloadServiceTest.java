@@ -11,13 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class ModelDownloadServiceTest {
     @TempDir Path directory;
 
-    @Test
-    void schedulesDownloadAndTruncatesWhenServerIgnoresRange() throws Exception {
+    @Timeout(30)
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void schedulesDownloadAndTruncatesWhenServerIgnoresRange(boolean viaProxy) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         byte[] body = new byte[]{1, 2, 3, 4};
         server.createContext("/weights", exchange -> {
@@ -28,14 +33,17 @@ class ModelDownloadServiceTest {
         try {
             ModelCatalogService catalog = mock(ModelCatalogService.class);
             ModelManagementService management = mock(ModelManagementService.class);
+            String localUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            String downloadUrl = viaProxy ? "http://models.invalid/weights" : localUrl + "/weights";
             when(catalog.getOnlineModels()).thenReturn(List.of(Map.of(
                     "id", "yolov8n", "name", "YOLO", "typeKey", "object_detection",
-                    "filename", "yolov8n.pt", "url", "http://127.0.0.1:" + server.getAddress().getPort() + "/weights")));
+                    "filename", "yolov8n.pt", "url", downloadUrl)));
             Path partial = directory.resolve("weights.part");
             Files.write(partial, new byte[]{9, 9});
             when(management.prepareDownloadedTarget(anyString())).thenReturn(partial);
             List<Runnable> queue = new ArrayList<>();
-            var service = new ModelDownloadService(catalog, management, mock(ModelArtifactService.class), queue::add);
+            var service = new ModelDownloadService(catalog, management, mock(ModelArtifactService.class),
+                    queue::add, viaProxy ? localUrl : "");
             var task = service.startDownload("yolov8n", "ignored", "ignored", "ignored", 999);
             assertThat(task.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.PENDING);
             assertThat(queue).hasSize(1);
@@ -53,7 +61,7 @@ class ModelDownloadServiceTest {
         ModelCatalogService catalog = mock(ModelCatalogService.class);
         ModelManagementService management = mock(ModelManagementService.class);
         ModelArtifactService artifacts = mock(ModelArtifactService.class);
-        var service = new ModelDownloadService(catalog, management, artifacts, action -> {});
+        var service = new ModelDownloadService(catalog, management, artifacts, action -> {}, "");
         var task = new ModelDownloadService.DownloadTask();
         task.setTaskId("dl-example");
         task.setTypeKey("image_vector");
