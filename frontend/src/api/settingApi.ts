@@ -204,6 +204,14 @@ export const settingApi = {
     return http.get<OnlineModel[]>('/settings/models/online')
   },
 
+  getModelDownloadProxy() {
+    return http.get<{ proxyId: number | null; options: { id: number; name: string }[] }>('/settings/models/download-proxy')
+  },
+
+  setModelDownloadProxy(proxyId: number | null) {
+    return http.put<void>('/settings/models/download-proxy', { proxyId })
+  },
+
   // Model download management
   startDownload(modelId: string) {
     return http.post<DownloadTask>('/settings/models/download', { modelId })

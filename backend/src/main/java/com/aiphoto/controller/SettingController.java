@@ -6,6 +6,8 @@ import com.aiphoto.service.SettingService;
 import com.aiphoto.service.ModelManagementService;
 import com.aiphoto.service.ModelCatalogService;
 import com.aiphoto.service.ModelDownloadService;
+import com.aiphoto.service.ModelDownloadProxyService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.aiphoto.service.SystemInfoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,7 @@ public class SettingController {
     private final ModelManagementService modelManagementService;
     private final ModelCatalogService modelCatalogService;
     private final ModelDownloadService modelDownloadService;
+    private final ModelDownloadProxyService modelDownloadProxyService;
     private final SystemInfoService systemInfoService;
 
     @GetMapping
@@ -81,6 +84,21 @@ public class SettingController {
     public ResponseEntity<List<Map<String, Object>>> getModelCatalog() {
         return ResponseEntity.ok(modelCatalogService.getCatalog());
     }
+
+    @GetMapping("/models/download-proxy")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ModelDownloadProxyService.Configuration getModelDownloadProxy() {
+        return modelDownloadProxyService.getConfiguration();
+    }
+
+    @PutMapping("/models/download-proxy")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> setModelDownloadProxy(@RequestBody ModelDownloadProxyRequest request) {
+        modelDownloadProxyService.select(request.proxyId());
+        return ResponseEntity.noContent().build();
+    }
+
+    public record ModelDownloadProxyRequest(Long proxyId) {}
 
     @GetMapping("/models/online")
     public ResponseEntity<List<Map<String, Object>>> getOnlineModels() {

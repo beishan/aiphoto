@@ -3,7 +3,12 @@ package com.aiphoto.service;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import com.aiphoto.entity.CrawlerProxy;
+import com.aiphoto.entity.CrawlerSetting;
+import com.aiphoto.repository.CrawlerProxyRepository;
+import com.aiphoto.repository.CrawlerSettingRepository;
 import com.sun.net.httpserver.HttpServer;
+import java.util.Optional;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,11 +26,19 @@ class ModelDownloadServiceTest {
 
     @Timeout(30)
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void schedulesDownloadAndTruncatesWhenServerIgnoresRange(boolean viaProxy) throws Exception {
+    @ValueSource(strings = {"direct", "deployment", "system"})
+    void schedulesDownloadAndTruncatesWhenServerIgnoresRange(String route) throws Exception {
+        boolean viaProxy = !"direct".equals(route);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         byte[] body = new byte[]{1, 2, 3, 4};
         server.createContext("/weights", exchange -> {
+            if ("system".equals(route) && !"Basic dGVzdDpzZWNyZXQ=".equals(
+                    exchange.getRequestHeaders().getFirst("Proxy-Authorization"))) {
+                exchange.getResponseHeaders().set("Proxy-Authenticate", "Basic realm=\"model-test\"");
+                exchange.sendResponseHeaders(407, -1);
+                exchange.close();
+                return;
+            }
             exchange.sendResponseHeaders(200, body.length);
             try (var output = exchange.getResponseBody()) { output.write(body); }
         });
@@ -42,8 +55,27 @@ class ModelDownloadServiceTest {
             Files.write(partial, new byte[]{9, 9});
             when(management.prepareDownloadedTarget(anyString())).thenReturn(partial);
             List<Runnable> queue = new ArrayList<>();
+            var settings = mock(CrawlerSettingRepository.class);
+            var proxies = mock(CrawlerProxyRepository.class);
+            var secrets = mock(CrawlerSecretService.class);
+            var proxyService = new ModelDownloadProxyService(settings, proxies, secrets);
+            var globalSetting = new CrawlerSetting();
+            when(settings.findById(1L)).thenReturn(Optional.of(globalSetting));
+            if ("system".equals(route)) {
+                var proxy = new CrawlerProxy();
+                proxy.setId(42L);
+                proxy.setHost("127.0.0.1");
+                proxy.setPort(server.getAddress().getPort());
+                proxy.setUsername("test");
+                proxy.setPasswordCiphertext("encrypted");
+                when(secrets.decrypt("encrypted")).thenReturn("secret");
+                when(proxies.findById(42L)).thenReturn(Optional.of(proxy));
+                proxyService.select(42L);
+                verify(settings).save(globalSetting);
+                assertThat(proxyService.getConfiguration().proxyId()).isEqualTo(42L);
+            }
             var service = new ModelDownloadService(catalog, management, mock(ModelArtifactService.class),
-                    queue::add, viaProxy ? localUrl : "");
+                    queue::add, "deployment".equals(route) ? localUrl : "", proxyService);
             var task = service.startDownload("yolov8n", "ignored", "ignored", "ignored", 999);
             assertThat(task.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.PENDING);
             assertThat(queue).hasSize(1);
@@ -61,7 +93,7 @@ class ModelDownloadServiceTest {
         ModelCatalogService catalog = mock(ModelCatalogService.class);
         ModelManagementService management = mock(ModelManagementService.class);
         ModelArtifactService artifacts = mock(ModelArtifactService.class);
-        var service = new ModelDownloadService(catalog, management, artifacts, action -> {}, "");
+        var service = new ModelDownloadService(catalog, management, artifacts, action -> {}, "", mock(ModelDownloadProxyService.class));
         var task = new ModelDownloadService.DownloadTask();
         task.setTaskId("dl-example");
         task.setTypeKey("image_vector");

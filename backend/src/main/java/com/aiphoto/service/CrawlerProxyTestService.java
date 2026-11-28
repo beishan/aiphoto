@@ -35,21 +35,9 @@ public class CrawlerProxyTestService {
                 return new TestResult(false, false, "连接测试被中断");
             } catch (Exception exception) { controllerOk = false; }
         }
-        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .proxy(ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort())));
-        if (proxy.getUsername() != null && !proxy.getUsername().isBlank()) {
-            if (System.getProperty("jdk.http.auth.tunneling.disabledSchemes") == null) {
-                System.setProperty("jdk.http.auth.tunneling.disabledSchemes", "");
-            }
-            builder.authenticator(new Authenticator() {
-                protected PasswordAuthentication getPasswordAuthentication() {
-                    if (getRequestorType() != RequestorType.PROXY) return null;
-                    String password = secrets.decrypt(proxy.getPasswordCiphertext());
-                    return new PasswordAuthentication(proxy.getUsername(), password == null ? new char[0] : password.toCharArray());
-                }
-            });
-        }
+        HttpClient.Builder builder = SystemProxyHttpClient.configureProxy(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                        .followRedirects(HttpClient.Redirect.NEVER), proxy, secrets);
         try (HttpClient client = builder.build()) {
             var request = HttpRequest.newBuilder(URI.create("https://www.gstatic.com/generate_204"))
                     .timeout(Duration.ofSeconds(10)).GET().build();

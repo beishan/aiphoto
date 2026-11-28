@@ -43,6 +43,7 @@ public class CrawlerSetting {
     private com.aiphoto.service.CrawlDiskGuard.Mode diskLimitMode =
             com.aiphoto.service.CrawlDiskGuard.Mode.OFF;
     private double diskLimitValue;
+    private Long modelDownloadProxyId;
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 }

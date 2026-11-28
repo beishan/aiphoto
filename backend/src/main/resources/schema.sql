@@ -788,3 +788,5 @@ CREATE INDEX IF NOT EXISTS idx_crawl_retries_job ON crawl_retries(job_id, id DES
 
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS disk_limit_mode VARCHAR(16) NOT NULL DEFAULT 'OFF';
 ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS disk_limit_value DOUBLE PRECISION NOT NULL DEFAULT 0;
+
+ALTER TABLE crawler_settings ADD COLUMN IF NOT EXISTS model_download_proxy_id BIGINT;

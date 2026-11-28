@@ -31,12 +31,14 @@ public class ModelDownloadService {
     private final ModelArtifactService artifactService;
     private final TaskExecutor executor;
     private final HttpClient httpClient;
+    private final ModelDownloadProxyService proxyService;
     private final Map<String, DownloadTask> tasks = new ConcurrentHashMap<>();
     private static final Pattern CONTENT_RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
     public ModelDownloadService(ModelCatalogService catalog, ModelManagementService management,
             ModelArtifactService artifacts, @Qualifier("modelDownloadExecutor") TaskExecutor executor,
-            @Value("${MODEL_DOWNLOAD_PROXY:}") String proxyUrl) {
+            @Value("${MODEL_DOWNLOAD_PROXY:}") String proxyUrl, ModelDownloadProxyService proxyService) {
+        this.proxyService = proxyService;
         this.modelCatalogService = catalog;
         this.modelManagementService = management;
         this.artifactService = artifacts;
@@ -224,6 +226,54 @@ public class ModelDownloadService {
         }
     }
 
+    private void downloadResponse(DownloadTask task, Path target, long offset,
+            HttpClient client, HttpRequest request) throws IOException, InterruptedException {
+        var response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try (var input = response.body()) {
+            if (response.statusCode() != 200 && response.statusCode() != 206) {
+                throw new IOException("HTTP " + response.statusCode());
+            }
+            long length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+            boolean append = response.statusCode() == 206;
+            if (append) {
+                var range = CONTENT_RANGE.matcher(response.headers().firstValue("Content-Range").orElse(""));
+                if (!range.matches() || Long.parseLong(range.group(1)) != offset) {
+                    throw new IOException("断点续传响应范围无效");
+                }
+                task.setTotalSize(Long.parseLong(range.group(3)));
+            } else {
+                // A server ignoring Range sends a complete object; truncate instead of appending.
+                offset = 0;
+                task.setTotalSize(length > 0 ? length : 0);
+            }
+            task.setDownloadedSize(offset);
+            try (var output = Files.newOutputStream(target, StandardOpenOption.CREATE,
+                    append ? StandardOpenOption.APPEND : StandardOpenOption.TRUNCATE_EXISTING)) {
+                byte[] buffer = new byte[65536];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    if (task.isCancelled() || task.isPaused()) return;
+                    output.write(buffer, 0, read);
+                    task.setDownloadedSize(task.getDownloadedSize() + read);
+                    if (task.getTotalSize() > 0) task.setProgress((int) Math.min(99,
+                            task.getDownloadedSize() * 100 / task.getTotalSize()));
+                }
+            }
+            long actual = Files.size(target);
+            if (actual == 0 || (task.getTotalSize() > 0 && actual != task.getTotalSize())) {
+                throw new IOException("下载文件不完整，请重试");
+            }
+            synchronized (task) {
+                if (task.isCancelled() || task.isPaused()) return;
+                task.setTotalSize(actual);
+                task.setDownloadedSize(actual);
+                task.setProgress(100);
+                task.setStatus(DownloadStatus.COMPLETED);
+                task.setEndTime(LocalDateTime.now());
+            }
+        }
+    }
+
     private void executeDownload(DownloadTask task) {
         try {
             synchronized (task) {
@@ -236,49 +286,9 @@ public class ModelDownloadService {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(task.getUrl()))
                     .timeout(Duration.ofMinutes(30)).GET();
             if (offset > 0) builder.header("Range", "bytes=" + offset + "-");
-            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofInputStream());
-            try (var input = response.body()) {
-                if (response.statusCode() != 200 && response.statusCode() != 206) {
-                    throw new IOException("HTTP " + response.statusCode());
-                }
-                long length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
-                boolean append = response.statusCode() == 206;
-                if (append) {
-                    var range = CONTENT_RANGE.matcher(response.headers().firstValue("Content-Range").orElse(""));
-                    if (!range.matches() || Long.parseLong(range.group(1)) != offset) {
-                        throw new IOException("断点续传响应范围无效");
-                    }
-                    task.setTotalSize(Long.parseLong(range.group(3)));
-                } else {
-                    // A server ignoring Range sends a complete object; truncate instead of appending.
-                    offset = 0;
-                    task.setTotalSize(length > 0 ? length : 0);
-                }
-                task.setDownloadedSize(offset);
-                try (var output = Files.newOutputStream(target, StandardOpenOption.CREATE,
-                        append ? StandardOpenOption.APPEND : StandardOpenOption.TRUNCATE_EXISTING)) {
-                    byte[] buffer = new byte[65536];
-                    int read;
-                    while ((read = input.read(buffer)) != -1) {
-                        if (task.isCancelled() || task.isPaused()) return;
-                        output.write(buffer, 0, read);
-                        task.setDownloadedSize(task.getDownloadedSize() + read);
-                        if (task.getTotalSize() > 0) task.setProgress((int) Math.min(99,
-                                task.getDownloadedSize() * 100 / task.getTotalSize()));
-                    }
-                }
-                long actual = Files.size(target);
-                if (actual == 0 || (task.getTotalSize() > 0 && actual != task.getTotalSize())) {
-                    throw new IOException("下载文件不完整，请重试");
-                }
-                synchronized (task) {
-                    if (task.isCancelled() || task.isPaused()) return;
-                    task.setTotalSize(actual);
-                    task.setDownloadedSize(actual);
-                    task.setProgress(100);
-                    task.setStatus(DownloadStatus.COMPLETED);
-                    task.setEndTime(LocalDateTime.now());
-                }
+            try (var selectedClient = proxyService.openSelectedClient()) {
+                HttpClient client = selectedClient == null ? httpClient : selectedClient;
+                downloadResponse(task, target, offset, client, builder.build());
             }
         } catch (Exception exception) {
             log.warn("Model download failed: {}", task.getModelId(), exception);

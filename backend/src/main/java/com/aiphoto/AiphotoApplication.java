@@ -17,6 +17,10 @@ import static org.springframework.data.web.config.EnableSpringDataWebSupport.Pag
 public class AiphotoApplication {
 
     public static void main(String[] args) {
+        // Enable authenticated HTTP CONNECT before the JDK HTTP client initializes.
+        if (System.getProperty("jdk.http.auth.tunneling.disabledSchemes") == null) {
+            System.setProperty("jdk.http.auth.tunneling.disabledSchemes", "");
+        }
         SpringApplication.run(AiphotoApplication.class, args);
     }
 }

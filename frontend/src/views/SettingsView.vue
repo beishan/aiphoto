@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useSettingStore } from '@/stores/settingStore'
 import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
 import { taskApi, type AiTask } from '@/api/taskApi'
@@ -348,6 +348,45 @@ const modelRoot = ref('/models')
 const models = ref<ModelStatus[]>([])
 const modelLoading = ref(false)
 const modelViewMode = ref<'local' | 'online' | 'downloads'>('local')
+const modelDownloadProxyId = ref(0)
+const modelDownloadProxyOptions = ref<{ id: number; name: string }[]>([])
+const modelDownloadProxyLoading = ref(false)
+const modelDownloadProxyReady = ref(false)
+const modelDownloadProxySaving = ref(false)
+
+async function loadModelDownloadProxy() {
+  modelDownloadProxyLoading.value = true
+  modelDownloadProxyReady.value = false
+  try {
+    const { data } = await settingApi.getModelDownloadProxy()
+    modelDownloadProxyId.value = data.proxyId ?? 0
+    modelDownloadProxyOptions.value = data.options
+    modelDownloadProxyReady.value = true
+  } catch {
+    message.error('加载模型下载代理配置失败')
+  } finally {
+    modelDownloadProxyLoading.value = false
+  }
+}
+
+watch([activeSection, modelViewMode], ([section, mode]) => {
+  if (isCurrentUserAdmin && section === 'models' && mode === 'online') void loadModelDownloadProxy()
+})
+
+async function saveModelDownloadProxy(proxyId: number) {
+  modelDownloadProxySaving.value = true
+  try {
+    await settingApi.setModelDownloadProxy(proxyId || null)
+    modelDownloadProxyId.value = proxyId
+    message.success('模型下载代理已保存')
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '保存模型下载代理失败')
+    await loadModelDownloadProxy()
+  } finally {
+    modelDownloadProxySaving.value = false
+  }
+}
+
 const modelCatalog = ref<ModelCatalogItem[]>([])
 const onlineModels = ref<OnlineModel[]>([])
 const downloadTasks = ref<DownloadTask[]>([])
@@ -896,6 +935,28 @@ const systemStorageFolders = computed(() => [
 
           <!-- Online Catalog Tab -->
           <div v-if="modelViewMode === 'online'">
+            <div v-if="isCurrentUserAdmin" class="panel-card">
+              <strong>模型下载代理</strong>
+              <p class="info-label">可选择已启用的系统代理。设置对新开始、继续或重试的下载生效。</p>
+              <el-select
+                aria-label="模型下载代理"
+                :model-value="modelDownloadProxyId"
+                :loading="modelDownloadProxyLoading || modelDownloadProxySaving"
+                :disabled="!modelDownloadProxyReady || modelDownloadProxySaving"
+                style="width: 100%; max-width: 320px"
+                @change="saveModelDownloadProxy"
+              >
+                <el-option label="部署默认配置" :value="0" />
+                <el-option
+                  v-if="modelDownloadProxyId && !modelDownloadProxyOptions.some(option => option.id === modelDownloadProxyId)"
+                  label="已选代理不可用"
+                  :value="modelDownloadProxyId"
+                  disabled
+                />
+                <el-option v-for="option in modelDownloadProxyOptions" :key="option.id" :label="option.name" :value="option.id" />
+              </el-select>
+              <el-button link type="primary" @click="activeSection = 'proxy'">系统代理配置</el-button>
+            </div>
             <p class="info-label">这里只列出可安装并运行的模型。BLIP-2 请在本地模型页配置完整模型目录。</p>
             <div class="online-models-grid">
               <div v-for="om in onlineModels" :key="om.id" class="panel-card online-model-card">
