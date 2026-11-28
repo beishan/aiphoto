@@ -98,15 +98,41 @@ storage_mounts() {
         awk -F= '$1 == "/storage-pools" || $1 ~ /^\/storage-pools\/[^/]+$/'
 }
 
+saved_storage_mounts() {
+    if docker volume inspect "${DEPLOY_STATE_VOLUME}" >/dev/null 2>&1; then
+        docker run --rm --pull never -v "${DEPLOY_STATE_VOLUME}:/state:ro" alpine:3.20 \
+            sh -ec 'if [ -f /state/storage-mappings ]; then cat /state/storage-mappings; fi'
+    fi
+}
+
+previous_storage_mounts() {
+    local saved
+    saved="$(saved_storage_mounts)" || return 1
+    if [[ -n "${saved}" ]]; then
+        printf '%s\n' "${saved}"
+    else
+        storage_mounts || true
+    fi
+}
+
+persist_storage_mounts() {
+    local mounts
+    mounts="$(storage_mounts)" || return 1
+    docker volume create "${DEPLOY_STATE_VOLUME}" >/dev/null
+    printf '%s\n' "${mounts}" | docker run --rm -i --pull never -v "${DEPLOY_STATE_VOLUME}:/state" alpine:3.20 \
+        sh -ec 'tmp=$(mktemp /state/storage-mappings.XXXXXX); trap "rm -f \"$tmp\"" EXIT; cat > "$tmp"; mv -f "$tmp" /state/storage-mappings'
+}
+
 storage_mappings() {
-    local configured line
+    local configured line mounts
     configured="${STORAGE_POOL_MAPPINGS:-}"
     if [[ -n "${configured//[[:space:]]/}" ]]; then
         printf '%s\n' "${configured}"
     else
+        mounts="$(previous_storage_mounts)" || return 1
         while IFS= read -r line; do
             if [[ "${line}" == /storage-pools/* ]]; then printf '%s\n' "${line#/storage-pools/}"; fi
-        done < <(storage_mounts || true)
+        done <<< "${mounts}"
     fi
 }
 
@@ -153,14 +179,16 @@ render_storage_override() {
 }
 
 legacy_storage_pool() {
-    local path
+    local path mounts
     path="$(effective_value STORAGE_POOL_PATH)"
     if [[ -n "${path}" ]]; then
         if [[ -z "${STORAGE_POOL_PATH:-}" && ( "${path}" == \"*\" || "${path}" == \'*\' ) ]]; then
             path="${path:1:-1}"
         fi
         printf '%s' "${path}"
-    else storage_mounts | sed -n 's|^/storage-pools=||p' || true
+    else
+        mounts="$(previous_storage_mounts)" || return 1
+        sed -n 's|^/storage-pools=||p' <<< "${mounts}"
     fi
 }
 
@@ -198,10 +226,13 @@ validate_migrated_storage() {
     active="$(docker run --rm --pull never -v aiphoto-storage-control:/storage-control:ro alpine:3.20 \
         sh -c 'for file in /storage-control/*.active; do if [ -f "$file" ]; then cat "$file" || exit 1; printf "\\n"; fi; done')" || return 1
     [[ -n "${active}" ]] || return 0
-    pool="$(legacy_storage_pool)"
+    pool="$(legacy_storage_pool)" || return 1
     local mappings line name source
-    mappings="$(storage_mappings)"
-    mounted_pool="$(storage_mounts)" || return 1
+    mappings="$(storage_mappings)" || return 1
+    mounted_pool="$(storage_mounts)" || mounted_pool=""
+    if [[ -z "${mounted_pool}" ]]; then
+        mounted_pool="$(saved_storage_mounts)" || return 1
+    fi
     if [[ -z "${mounted_pool}" ]]; then
         echo "错误：无法确认已迁移数据使用的存储映射。" >&2
         return 1
@@ -543,6 +574,9 @@ case "${ACTION}" in
     cleanup)
         cleanup_release_images
         ;;
+    save-storage-mappings)
+        persist_storage_mounts
+        ;;
     rollback)
         rollback_from_state
         ;;
@@ -550,7 +584,7 @@ case "${ACTION}" in
         compose logs --no-color --tail=200
         ;;
     *)
-        echo "用法：$0 {validate|test|build|deploy|health|cleanup|rollback|logs} [env-file] [state-file]" >&2
+        echo "用法：$0 {validate|test|build|deploy|health|cleanup|save-storage-mappings|rollback|logs} [env-file] [state-file]" >&2
         exit 2
         ;;
 esac

@@ -13,7 +13,7 @@ pipeline {
         string(name: 'PHOTO_LIBRARY_PATH', defaultValue: '/vol2/1000/aiphotoslib', description: 'NAS 宿主机照片库绝对路径（必须已存在）')
         string(name: 'AI_MODELS_PATH', defaultValue: '/vol1/1000/aiphotos/models', description: 'NAS 宿主机 AI 模型根目录绝对路径（必须已存在）')
         string(name: 'STORAGE_DATA_PATH', defaultValue: '/vol1/1000/aiphotos/storage', description: 'NAS 宿主机上传照片和缩略图存储目录（必须已存在）')
-        text(name: 'STORAGE_POOL_MAPPINGS', defaultValue: '', description: '网页迁移可用的 NAS 目录，每行填写 别名=/NAS/绝对路径，例如 disk2=/vol2/1000/aiphoto。留空沿用当前映射。')
+        text(name: 'STORAGE_POOL_MAPPINGS', defaultValue: '', description: '每行填写 别名=/NAS/绝对路径。成功发版后保存在 NAS，下次留空自动沿用。')
         string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口')
         string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口')
         booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速')
@@ -120,6 +120,9 @@ pipeline {
         success {
             withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
                 script {
+                    if (sh(script: './scripts/deploy.sh save-storage-mappings "$AIPHOTO_ENV_FILE"', returnStatus: true) != 0) {
+                        unstable('部署已成功，但存储映射保存失败，请查看 Jenkins 日志。')
+                    }
                     if (sh(script: './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE"', returnStatus: true) != 0) {
                         unstable('部署已成功，但历史镜像清理未完成，请查看 Jenkins 清理日志。')
                     }

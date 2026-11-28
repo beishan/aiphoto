@@ -95,7 +95,7 @@ Pipeline 中可在每次“Build with Parameters”时填写：
 | `PHOTO_LIBRARY_PATH` | NAS 宿主机照片库绝对路径 |
 | `AI_MODELS_PATH` | NAS 宿主机 AI 模型根目录绝对路径 |
 | `STORAGE_DATA_PATH` | NAS 宿主机上传照片和缩略图存储目录 |
-| `STORAGE_POOL_MAPPINGS` | 可选。每行一个 `别名=/NAS/绝对路径`，留空沿用当前映射 |
+| `STORAGE_POOL_MAPPINGS` | 可选。每行一个 `别名=/NAS/绝对路径`，留空沿用上一次成功保存的映射 |
 | `FRONTEND_PORT` | 前端对外端口 |
 | `BACKEND_PORT` | 后端对外端口 |
 | `ENABLE_GPU` | 是否申请 NVIDIA GPU；未安装 Container Toolkit 时不要勾选 |
@@ -134,7 +134,9 @@ disk2=/vol2/1000/aiphoto-pool
 ```
 
 别名由英文字母、数字、下划线和短横线组成。目录必须在 Docker 宿主机上已存在。
-部署会把所有映射挂载到后端和 AI 服务。后续发版留空会沿用当前容器的映射，
+部署会把所有映射挂载到后端和 AI 服务。发布通过健康检查后，Jenkins 将实际映射保存到 NAS
+的 `aiphoto-deploy-state` Docker 卷。后续发版留空即可恢复，即使旧应用容器已被删除。
+首次使用保存功能时，留空也可以从正在使用的旧容器读取映射并保存。
 要增加映射时填写已有和新增的完整列表。生产凭据中的旧 `STORAGE_POOL_PATH` 仍可继续使用。
 直接使用根目录 Compose、只需要单个存储池时，仍可在 `.env` 设置 `STORAGE_POOL_PATH`，并使用：
 
