@@ -1,5 +1,10 @@
 package com.aiphoto.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.annotation.PostConstruct;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardCopyOption;
 import com.aiphoto.storage.StorageRoots;
 import com.aiphoto.storage.StorageRoots.Kind;
 import java.io.IOException;
@@ -35,6 +40,8 @@ public class ModelDownloadService {
     private final HttpClient httpClient;
     private final ModelDownloadProxyService proxyService;
     private final Map<String, DownloadTask> tasks = new ConcurrentHashMap<>();
+    private final ObjectMapper downloadMetadata = new ObjectMapper().registerModule(new JavaTimeModule());
+    private static final Pattern TASK_ID = Pattern.compile("dl-[0-9a-f-]{36}");
     private static final Pattern CONTENT_RANGE = Pattern.compile("bytes (\\d+)-(\\d+)/(\\d+)");
 
     public ModelDownloadService(ModelCatalogService catalog, ModelManagementService management,
@@ -68,6 +75,79 @@ public class ModelDownloadService {
 
     public enum DownloadStatus {
         PENDING, DOWNLOADING, PAUSED, COMPLETED, FAILED, CANCELLED, INSTALLING, INSTALLED
+    }
+
+    private record SavedDownload(String modelId, long size, LocalDateTime startTime, LocalDateTime endTime,
+            boolean installed) {}
+
+    @PostConstruct
+    void restoreCompletedDownloads() {
+        try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
+            Path directory = modelManagementService.prepareDownloadedTarget(".downloads/.metadata").getParent();
+            var catalog = modelCatalogService.getOnlineModels();
+            try (var metadata = Files.newDirectoryStream(directory, "*.json")) {
+                for (Path file : metadata) {
+                    String name = file.getFileName().toString();
+                    String taskId = name.substring(0, name.length() - 5);
+                    if (!TASK_ID.matcher(taskId).matches() || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
+                    try {
+                        var saved = downloadMetadata.readValue(file.toFile(), SavedDownload.class);
+                        var definition = catalog.stream().filter(model -> model.get("id").equals(saved.modelId()))
+                                .findFirst().orElse(null);
+                        if (definition == null || saved.size() <= 0) continue;
+                        DownloadTask task = new DownloadTask();
+                        task.setTaskId(taskId);
+                        task.setModelId(saved.modelId());
+                        task.setModelName((String) definition.get("name"));
+                        task.setTypeKey((String) definition.get("typeKey"));
+                        task.setUrl((String) definition.get("url"));
+                        task.setFilename((String) definition.get("filename"));
+                        Path original = partial(task);
+                        if (!Files.isRegularFile(original, LinkOption.NOFOLLOW_LINKS) || Files.size(original) != saved.size()) continue;
+                        String modelName = modelCatalogService.getAiServiceModelName(task.getTypeKey());
+                        if (saved.installed() && modelName != null) {
+                            String installed = "installed/" + taskId + "/" + ModelArtifactService.artifactPath(modelName, task.getFilename());
+                            if (Files.exists(modelManagementService.resolveModelPath(installed), LinkOption.NOFOLLOW_LINKS)) {
+                                task.setInstalledPath(installed);
+                            }
+                        }
+                        task.setTotalSize(saved.size());
+                        task.setDownloadedSize(saved.size());
+                        task.setProgress(100);
+                        task.setStartTime(saved.startTime());
+                        task.setEndTime(saved.endTime());
+                        task.setStatus(task.getInstalledPath() == null ? DownloadStatus.COMPLETED : DownloadStatus.INSTALLED);
+                        tasks.put(taskId, task);
+                    } catch (Exception exception) {
+                        log.warn("Cannot restore downloaded model {}", taskId, exception);
+                    }
+                }
+            }
+        } catch (Exception exception) {
+            log.warn("Cannot read saved model downloads", exception);
+        }
+    }
+
+    private void rememberDownload(DownloadTask task, boolean installed) {
+        Path temporary = null;
+        try {
+            Path target = modelManagementService.prepareDownloadedTarget(".downloads/" + task.getTaskId() + ".json");
+            temporary = Files.createTempFile(target.getParent(), ".download-", ".tmp");
+            downloadMetadata.writeValue(temporary.toFile(), new SavedDownload(
+                    task.getModelId(), task.getTotalSize(), task.getStartTime(), task.getEndTime(), installed));
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            temporary = null;
+        } catch (Exception exception) {
+            log.warn("Cannot save model download {}", task.getTaskId(), exception);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException exception) {
+                    log.warn("Cannot remove temporary model download metadata", exception);
+                }
+            }
+        }
     }
 
     @Data
@@ -210,6 +290,7 @@ public class ModelDownloadService {
                         : state.get("error") == null ? "模型未加载" : String.valueOf(state.get("error")));
             }
             task.setEndTime(LocalDateTime.now());
+            rememberDownload(task, true);
             task.setStatus(DownloadStatus.INSTALLED);
         } catch (Exception exception) {
             log.warn("Model activation failed: {}", task.getModelId(), exception);
@@ -284,8 +365,9 @@ public class ModelDownloadService {
                 task.setTotalSize(actual);
                 task.setDownloadedSize(actual);
                 task.setProgress(100);
-                task.setStatus(DownloadStatus.COMPLETED);
                 task.setEndTime(LocalDateTime.now());
+                rememberDownload(task, false);
+                task.setStatus(DownloadStatus.COMPLETED);
             }
         }
     }

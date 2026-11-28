@@ -105,6 +105,10 @@ public class ModelManagementService {
         return target;
     }
 
+    Path resolveModelPath(String relativePath) {
+        return resolve(relativePath);
+    }
+
     public void copyDownloadedFile(Path source, String relativePath) throws IOException {
         try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
             Path target = prepareDownloadedTarget(relativePath);

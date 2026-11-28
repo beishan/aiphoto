@@ -53,7 +53,10 @@ class ModelDownloadServiceTest {
                     "filename", "yolov8n.pt", "url", downloadUrl)));
             Path partial = directory.resolve("weights.part");
             Files.write(partial, new byte[]{9, 9});
-            when(management.prepareDownloadedTarget(anyString())).thenReturn(partial);
+            when(management.prepareDownloadedTarget(anyString())).thenAnswer(invocation -> {
+                String path = invocation.getArgument(0);
+                return path.endsWith(".part") ? partial : directory.resolve(Path.of(path).getFileName());
+            });
             List<Runnable> queue = new ArrayList<>();
             var settings = mock(CrawlerSettingRepository.class);
             var proxies = mock(CrawlerProxyRepository.class);
@@ -83,6 +86,15 @@ class ModelDownloadServiceTest {
             assertThat(task.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.COMPLETED);
             assertThat(Files.readAllBytes(partial)).containsExactly(body);
             assertThat(task.getTotalSize()).isEqualTo(4);
+            var restarted = new ModelDownloadService(catalog, management, mock(ModelArtifactService.class),
+                    queue::add, "", proxyService);
+            restarted.restoreCompletedDownloads();
+            var restored = restarted.getTask(task.getTaskId());
+            assertThat(restored).isNotNull();
+            assertThat(restored.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.COMPLETED);
+            assertThat(restored.getTotalSize()).isEqualTo(4);
+            assertThat(restarted.startDownload("yolov8n", "", "", "", 0)).isSameAs(restored);
+            assertThat(queue).isEmpty();
         } finally {
             server.stop(0);
         }
@@ -103,6 +115,8 @@ class ModelDownloadServiceTest {
         when(catalog.getOnlineModels()).thenReturn(List.of(Map.of("id", "clip", "name", "clip",
                 "typeKey", "image_vector", "filename", "model.pt", "url", "https://example.com/model.pt")));
         var actual = service.startDownload("clip", "clip", "image_vector", "", 0);
+        when(management.prepareDownloadedTarget(".downloads/" + actual.getTaskId() + ".json"))
+                .thenReturn(directory.resolve(actual.getTaskId() + ".json"));
         queue.clear(); // Use the already-downloaded fixture below.
         actual.setInstalledPath(task.getInstalledPath());
         actual.setStatus(ModelDownloadService.DownloadStatus.COMPLETED);

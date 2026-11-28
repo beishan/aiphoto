@@ -439,6 +439,12 @@ function isConfiguredOnlineModel(model: OnlineModel) {
   return !!installed && installed[1] === model.installedArtifact
 }
 
+function canActivateOnlineModel(model: OnlineModel) {
+  const current = getConfiguredModel(model.modelName)
+  return !!getReadyDownload(model.id) &&
+    (!isConfiguredOnlineModel(model) || !current?.enabled || !current.exists || !!current.error)
+}
+
 function getOnlineModelState(model: OnlineModel) {
   if (isActivatingModel(model.id)) return '正在启用'
   if (isConfiguredOnlineModel(model)) {
@@ -1139,7 +1145,7 @@ const systemStorageFolders = computed(() => [
                 <div v-else class="online-model-actions">
                   <el-button @click="viewLocalModel(om)">查看本地配置</el-button>
                   <el-button v-if="isActivatingModel(om.id)" type="primary" loading>正在启用</el-button>
-                  <el-button v-else-if="!isConfiguredOnlineModel(om) && getReadyDownload(om.id)" type="primary" :disabled="modelActivationBusy"
+                  <el-button v-else-if="canActivateOnlineModel(om)" type="primary" :disabled="modelActivationBusy"
                     @click="setCurrentModel(getReadyDownload(om.id)!.taskId)">设为当前模型</el-button>
                   <el-button v-else-if="!isConfiguredOnlineModel(om)" type="primary" @click="startDownload(om)">下载</el-button>
                 </div>
