@@ -24,7 +24,7 @@ RUN npm run build
 # Stage 2: Serve with nginx
 FROM ${FRONTEND_NGINX_BASE_IMAGE}
 
-ARG APP_VERSION=0.26.41
+ARG APP_VERSION=0.26.42
 LABEL com.aiphoto.managed="true" \
       org.opencontainers.image.title="aiphoto Frontend" \
       org.opencontainers.image.version="${APP_VERSION}"
