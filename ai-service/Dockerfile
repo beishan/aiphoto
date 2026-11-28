@@ -26,9 +26,10 @@ RUN --mount=type=cache,id=aiphoto-ai-pip,target=/root/.cache/pip,sharing=locked 
 
 # Keep release metadata after the expensive dependency layer. Changing only the
 # application version must not invalidate downloaded and installed Python packages.
-ARG APP_VERSION=0.26.35
+ARG APP_VERSION=0.26.36
 ENV APP_VERSION=${APP_VERSION}
 LABEL com.aiphoto.managed="true" \
+      com.aiphoto.storage-migration="true" \
       org.opencontainers.image.title="aiphoto AI Service" \
       org.opencontainers.image.version="${APP_VERSION}"
 

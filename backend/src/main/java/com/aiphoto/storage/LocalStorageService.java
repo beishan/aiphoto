@@ -10,7 +10,7 @@ import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import com.aiphoto.storage.StorageRoots.Kind;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -27,16 +27,18 @@ public class LocalStorageService {
     private String thumbsDir;
 
     public String getInstanceId() throws IOException {
-        Path path = photoBasePath().resolve(".aiphoto-instance-id");
-        if (!Files.exists(path)) {
-            try {
-                Files.writeString(path, java.util.UUID.randomUUID().toString(),
-                        java.nio.file.StandardOpenOption.CREATE_NEW);
-            } catch (java.nio.file.FileAlreadyExistsException ignored) {
-                // Another request initialized this persistent instance first.
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            Path path = photoBasePath().resolve(".aiphoto-instance-id");
+            if (!Files.exists(path)) {
+                try {
+                    Files.writeString(path, java.util.UUID.randomUUID().toString(),
+                            java.nio.file.StandardOpenOption.CREATE_NEW);
+                } catch (java.nio.file.FileAlreadyExistsException ignored) {
+                    // Another request initialized this persistent instance first.
+                }
             }
+            return Files.readString(path).trim();
         }
-        return Files.readString(path).trim();
     }
 
     private static final String PHOTO_BUCKET = "photos";
@@ -46,8 +48,8 @@ public class LocalStorageService {
     @PostConstruct
     public void init() {
         try {
-            Path photosPath = Paths.get(photosDir).toAbsolutePath().normalize();
-            Path thumbsPath = Paths.get(thumbsDir).toAbsolutePath().normalize();
+            Path photosPath = StorageRoots.active(photosDir, Kind.PHOTOS);
+            Path thumbsPath = StorageRoots.active(thumbsDir, Kind.THUMBNAILS);
             Files.createDirectories(photosPath);
             Files.createDirectories(thumbsPath);
             int migratedPhotos = migrateLegacyHashDirectories(photosPath);
@@ -66,17 +68,21 @@ public class LocalStorageService {
     }
 
     public String uploadPhoto(byte[] data, String objectName, String contentType) throws Exception {
-        Path target = resolveForWrite(photoBasePath(), objectName);
-        Files.createDirectories(target.getParent());
-        Files.write(target, data);
-        return objectName;
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            Path target = resolveForWrite(photoBasePath(), objectName);
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+            return objectName;
+        }
     }
 
     public String uploadThumbnail(byte[] data, String objectName) throws Exception {
-        Path target = resolveForWrite(thumbBasePath(), objectName);
-        Files.createDirectories(target.getParent());
-        Files.write(target, data);
-        return objectName;
+        try (var storageLease = StorageRoots.writing(Kind.THUMBNAILS)) {
+            Path target = resolveForWrite(thumbBasePath(), objectName);
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+            return objectName;
+        }
     }
 
     public InputStream downloadPhoto(String objectName) throws Exception {
@@ -113,12 +119,16 @@ public class LocalStorageService {
     }
 
     public void deleteObject(String objectName) throws Exception {
-        deleteManagedObject(photoBasePath(), objectName);
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            deleteManagedObject(photoBasePath(), objectName);
+        }
     }
 
     public void deleteObject(String bucket, String objectName) throws Exception {
-        Path baseDir = PHOTO_BUCKET.equals(bucket) ? photoBasePath() : thumbBasePath();
-        deleteManagedObject(baseDir, objectName);
+        try (var storageLease = StorageRoots.writing(PHOTO_BUCKET.equals(bucket) ? Kind.PHOTOS : Kind.THUMBNAILS)) {
+            Path baseDir = PHOTO_BUCKET.equals(bucket) ? photoBasePath() : thumbBasePath();
+            deleteManagedObject(baseDir, objectName);
+        }
     }
 
     static String shardObjectName(String objectName) {
@@ -134,11 +144,11 @@ public class LocalStorageService {
     }
 
     private Path photoBasePath() {
-        return Paths.get(photosDir).toAbsolutePath().normalize();
+        return StorageRoots.active(photosDir, Kind.PHOTOS);
     }
 
     private Path thumbBasePath() {
-        return Paths.get(thumbsDir).toAbsolutePath().normalize();
+        return StorageRoots.active(thumbsDir, Kind.THUMBNAILS);
     }
 
     private Path resolveForWrite(Path baseDir, String objectName) {

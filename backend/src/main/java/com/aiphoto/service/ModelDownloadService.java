@@ -1,5 +1,7 @@
 package com.aiphoto.service;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
@@ -142,16 +144,18 @@ public class ModelDownloadService {
     }
 
     public DownloadTask cancel(String taskId) {
-        DownloadTask task = required(taskId);
-        synchronized (task) {
-            if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED
-                    && task.getStatus() != DownloadStatus.INSTALLING) {
-                task.setCancelled(true);
-                task.setStatus(DownloadStatus.CANCELLED);
-                task.setEndTime(LocalDateTime.now());
+        try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
+            DownloadTask task = required(taskId);
+            synchronized (task) {
+                if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED
+                        && task.getStatus() != DownloadStatus.INSTALLING) {
+                    task.setCancelled(true);
+                    task.setStatus(DownloadStatus.CANCELLED);
+                    task.setEndTime(LocalDateTime.now());
+                }
             }
+            return task;
         }
-        return task;
     }
 
     public DownloadTask retry(String taskId) {
@@ -172,34 +176,36 @@ public class ModelDownloadService {
     }
 
     public DownloadTask setAsCurrent(String taskId) {
-        DownloadTask task = required(taskId);
-        synchronized (task) {
-            if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED) {
-                throw new IllegalArgumentException("模型尚未下载完成");
-            }
-            task.setStatus(DownloadStatus.INSTALLING);
-            try {
-                String name = modelCatalogService.getAiServiceModelName(task.getTypeKey());
-                if (name == null) throw new IllegalArgumentException("该模型尚未接入推理服务");
-                if (task.getInstalledPath() == null) {
-                    Path source = partial(task);
-                    task.setInstalledPath(artifactService.install(source, task.getTaskId(), name, task.getFilename()));
+        try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
+            DownloadTask task = required(taskId);
+            synchronized (task) {
+                if (task.getStatus() != DownloadStatus.COMPLETED && task.getStatus() != DownloadStatus.INSTALLED) {
+                    throw new IllegalArgumentException("模型尚未下载完成");
                 }
-                var state = modelManagementService.configure(name, task.getInstalledPath(), true);
-                if (state == null || !Boolean.TRUE.equals(state.get("loaded")) || state.get("error") != null) {
-                    throw new IllegalStateException(state == null ? "AI 服务未返回加载状态"
-                            : state.get("error") == null ? "模型未加载" : String.valueOf(state.get("error")));
+                task.setStatus(DownloadStatus.INSTALLING);
+                try {
+                    String name = modelCatalogService.getAiServiceModelName(task.getTypeKey());
+                    if (name == null) throw new IllegalArgumentException("该模型尚未接入推理服务");
+                    if (task.getInstalledPath() == null) {
+                        Path source = partial(task);
+                        task.setInstalledPath(artifactService.install(source, task.getTaskId(), name, task.getFilename()));
+                    }
+                    var state = modelManagementService.configure(name, task.getInstalledPath(), true);
+                    if (state == null || !Boolean.TRUE.equals(state.get("loaded")) || state.get("error") != null) {
+                        throw new IllegalStateException(state == null ? "AI 服务未返回加载状态"
+                                : state.get("error") == null ? "模型未加载" : String.valueOf(state.get("error")));
+                    }
+                    task.setStatus(DownloadStatus.INSTALLED);
+                    task.setErrorMessage(null);
+                    task.setEndTime(LocalDateTime.now());
+                } catch (Exception exception) {
+                    task.setStatus(DownloadStatus.COMPLETED);
+                    task.setErrorMessage(message(exception));
+                    throw new IllegalArgumentException("模型激活失败: " + message(exception), exception);
                 }
-                task.setStatus(DownloadStatus.INSTALLED);
-                task.setErrorMessage(null);
-                task.setEndTime(LocalDateTime.now());
-            } catch (Exception exception) {
-                task.setStatus(DownloadStatus.COMPLETED);
-                task.setErrorMessage(message(exception));
-                throw new IllegalArgumentException("模型激活失败: " + message(exception), exception);
             }
+            return task;
         }
-        return task;
     }
 
     private DownloadTask required(String id) {
@@ -275,37 +281,39 @@ public class ModelDownloadService {
     }
 
     private void executeDownload(DownloadTask task) {
-        try {
-            synchronized (task) {
-                if (task.isCancelled() || task.isPaused()) return;
-                task.setStatus(DownloadStatus.DOWNLOADING);
-            }
-            Path target = partial(task);
-            long offset = !task.isRestart() && Files.exists(target) ? Files.size(target) : 0;
-            task.setRestart(false);
-            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(task.getUrl()))
-                    .timeout(Duration.ofMinutes(30)).GET();
-            if (offset > 0) builder.header("Range", "bytes=" + offset + "-");
-            try (var selectedClient = proxyService.openSelectedClient()) {
-                HttpClient client = selectedClient == null ? httpClient : selectedClient;
-                downloadResponse(task, target, offset, client, builder.build());
-            }
-        } catch (Exception exception) {
-            log.warn("Model download failed: {}", task.getModelId(), exception);
-            synchronized (task) {
-                if (!task.isCancelled() && !task.isPaused()) {
-                    task.setStatus(DownloadStatus.FAILED);
-                    task.setErrorMessage(message(exception));
-                    task.setEndTime(LocalDateTime.now());
+        try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
+            try {
+                synchronized (task) {
+                    if (task.isCancelled() || task.isPaused()) return;
+                    task.setStatus(DownloadStatus.DOWNLOADING);
                 }
-            }
-        } finally {
-            synchronized (task) {
-                task.setRunning(false);
-                if (task.isReschedule() && task.getStatus() == DownloadStatus.PENDING
-                        && !task.isCancelled() && !task.isPaused()) {
-                    task.setReschedule(false);
-                    schedule(task);
+                Path target = partial(task);
+                long offset = !task.isRestart() && Files.exists(target) ? Files.size(target) : 0;
+                task.setRestart(false);
+                HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(task.getUrl()))
+                        .timeout(Duration.ofMinutes(30)).GET();
+                if (offset > 0) builder.header("Range", "bytes=" + offset + "-");
+                try (var selectedClient = proxyService.openSelectedClient()) {
+                    HttpClient client = selectedClient == null ? httpClient : selectedClient;
+                    downloadResponse(task, target, offset, client, builder.build());
+                }
+            } catch (Exception exception) {
+                log.warn("Model download failed: {}", task.getModelId(), exception);
+                synchronized (task) {
+                    if (!task.isCancelled() && !task.isPaused()) {
+                        task.setStatus(DownloadStatus.FAILED);
+                        task.setErrorMessage(message(exception));
+                        task.setEndTime(LocalDateTime.now());
+                    }
+                }
+            } finally {
+                synchronized (task) {
+                    task.setRunning(false);
+                    if (task.isReschedule() && task.getStatus() == DownloadStatus.PENDING
+                            && !task.isCancelled() && !task.isPaused()) {
+                        task.setReschedule(false);
+                        schedule(task);
+                    }
                 }
             }
         }

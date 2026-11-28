@@ -33,12 +33,13 @@ spring:
       max-request-size: ${MODEL_UPLOAD_MAX_SIZE:8GB}
 
 app:
-  version: ${APP_VERSION:0.26.35}
+  version: ${APP_VERSION:0.26.36}
   crawler:
     proxy-secret: ${CRAWLER_PROXY_SECRET:}
   ai-service-url: ${AI_SERVICE_URL:http://localhost:8000}
   ai-model-root: ${AI_MODEL_ROOT:/models}
   storage:
+    pool-directory: ${STORAGE_POOL_DIRECTORY:}
     photos-dir: ${STORAGE_PHOTOS_DIR:./data/photos}
     thumbs-dir: ${STORAGE_THUMBS_DIR:./data/thumbs}
     crawl-dir: ${STORAGE_CRAWL_DIR:./data/crawl}

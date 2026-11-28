@@ -1,0 +1,23 @@
+x-storage-environment: &storage-environment
+  STORAGE_POOL_DIRECTORY: /storage-pools
+  STORAGE_CONTROL_DIRECTORY: /storage-control
+
+x-storage-volumes: &storage-volumes
+  - type: bind
+    source: ${STORAGE_POOL_PATH:?configure STORAGE_POOL_PATH}
+    target: /storage-pools
+    bind:
+      create_host_path: false
+  - storage_control:/storage-control
+
+services:
+  backend:
+    environment: *storage-environment
+    volumes: *storage-volumes
+  ai-service:
+    environment: *storage-environment
+    volumes: *storage-volumes
+
+volumes:
+  storage_control:
+    name: aiphoto-storage-control

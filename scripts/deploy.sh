@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${PROJECT_DIR}/docker/docker-compose.yml"
 COMPOSE_GPU_FILE="${PROJECT_DIR}/docker/docker-compose.gpu.yml"
+COMPOSE_STORAGE_FILE="${PROJECT_DIR}/docker/docker-compose.storage.yml"
 ACTION="${1:-deploy}"
 ENV_FILE="${2:-${PROJECT_DIR}/docker/.env.production}"
 STATE_FILE="${3:-${PROJECT_DIR}/.aiphoto-previous-images}"
@@ -98,6 +99,9 @@ compose() {
     if gpu_enabled; then
         compose_files+=(--file "${COMPOSE_GPU_FILE}")
     fi
+    if [[ -n "$(effective_value STORAGE_POOL_PATH)" ]]; then
+        compose_files+=(--file "${COMPOSE_STORAGE_FILE}")
+    fi
 
     "${COMPOSE_COMMAND[@]}" \
         --project-name "${COMPOSE_PROJECT_NAME}" \
@@ -108,6 +112,29 @@ compose() {
 
 container_image() {
     docker inspect --format '{{.Config.Image}}' "$1" 2>/dev/null || true
+}
+
+validate_migrated_storage() {
+    local active pool mounted_pool image
+    if ! docker volume inspect aiphoto-storage-control >/dev/null 2>&1; then
+        return 0
+    fi
+    active="$(docker run --rm --pull never -v aiphoto-storage-control:/storage-control:ro alpine:3.20 \
+        sh -c 'for file in /storage-control/*.active; do if [ -f "$file" ]; then echo yes; break; fi; done')" || return 1
+    [[ "${active}" == yes ]] || return 0
+    pool="$(effective_value STORAGE_POOL_PATH)"
+    mounted_pool="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/storage-pools"}}{{.Source}}{{end}}{{end}}' \
+        aiphoto-backend 2>/dev/null || true)"
+    if [[ -z "${pool}" || ( -n "${mounted_pool}" && "${pool%/}" != "${mounted_pool%/}" ) ]]; then
+        echo "错误：已有完成的存储迁移，请保留后端现有的 STORAGE_POOL_PATH 挂载。" >&2
+        return 1
+    fi
+    for image in "$@"; do
+        if [[ "$(docker image inspect --format '{{index .Config.Labels "com.aiphoto.storage-migration"}}' "${image}")" != true ]]; then
+            echo "错误：镜像 ${image} 不支持已迁移的存储位置，无法安全回滚。" >&2
+            return 1
+        fi
+    done
 }
 
 container_health() {
@@ -250,6 +277,7 @@ rollback_from_state() {
     export BACKEND_IMAGE="${previous_backend}"
     export FRONTEND_IMAGE="${previous_frontend}"
     export AI_IMAGE="${previous_ai}"
+    validate_migrated_storage "${previous_backend}" "${previous_ai}" || return 1
     echo "正在回滚到：${BACKEND_IMAGE}, ${FRONTEND_IMAGE}, ${AI_IMAGE}"
     compose up -d --no-build ai-service backend frontend
     if ! wait_for_containers; then
@@ -357,6 +385,12 @@ retry_image_build() {
 }
 
 deploy_release() {
+    local backend_image ai_image app_version
+    backend_image="$(effective_value BACKEND_IMAGE)"
+    ai_image="$(effective_value AI_IMAGE)"
+    app_version="$(effective_value APP_VERSION)"
+    validate_migrated_storage "${backend_image:-aiphoto-backend:${app_version}}" \
+        "${ai_image:-aiphoto-ai:${app_version}}" || return 1
     record_previous_images
     backup_database
     stop_legacy_containers

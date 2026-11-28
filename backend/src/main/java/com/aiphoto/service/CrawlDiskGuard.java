@@ -1,5 +1,7 @@
 package com.aiphoto.service;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
 import com.aiphoto.entity.CrawlerSetting;
 import com.aiphoto.repository.CrawlerSettingRepository;
 import java.io.IOException;
@@ -49,7 +51,9 @@ public class CrawlDiskGuard {
         double value = setting.getDiskLimitValue();
         if (mode == Mode.OFF) return new Status(mode, value, false);
         try {
-            for (String path : new String[]{crawlDir, photosDir, thumbsDir}) {
+            for (String path : new String[]{StorageRoots.active(crawlDir, Kind.CRAWL).toString(),
+                    StorageRoots.active(photosDir, Kind.PHOTOS).toString(),
+                    StorageRoots.active(thumbsDir, Kind.THUMBNAILS).toString()}) {
                 Volume volume = Volume.read(path);
                 double threshold = mode == Mode.PERCENT ? volume.total() * (value / 100) : value * GIB;
                 if (volume.total() <= 0 || volume.usable() <= threshold) {
@@ -57,7 +61,7 @@ public class CrawlDiskGuard {
                 }
             }
             return new Status(mode, value, false);
-        } catch (IOException | SecurityException exception) {
+        } catch (IOException | SecurityException | java.io.UncheckedIOException exception) {
             return new Status(mode, value, true);
         }
     }

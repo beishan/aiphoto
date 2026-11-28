@@ -1,5 +1,11 @@
 package com.aiphoto.config;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
+import java.io.IOException;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.web.servlet.resource.PathResourceResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.CacheControl;
@@ -25,18 +31,32 @@ public class WebConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler("/media/photos/avatars/**")
                 .addResourceLocations(photosPath + "avatars/")
-                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate());
+                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate())
+                .resourceChain(false).addResolver(resolver(photosDir, Kind.PHOTOS, "avatars/"));
 
         registry.addResourceHandler("/media/photos/dock-icons/**")
                 .addResourceLocations(photosPath + "dock-icons/")
-                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate());
+                .setCacheControl(CacheControl.maxAge(30, TimeUnit.DAYS).cachePrivate().mustRevalidate())
+                .resourceChain(false).addResolver(resolver(photosDir, Kind.PHOTOS, "dock-icons/"));
 
         registry.addResourceHandler("/media/photos/**")
                 .addResourceLocations(photosPath)
-                .setCacheControl(CacheControl.noStore());
+                .setCacheControl(CacheControl.noStore())
+                .resourceChain(false).addResolver(resolver(photosDir, Kind.PHOTOS, ""));
 
         registry.addResourceHandler("/media/thumbs/**")
                 .addResourceLocations(thumbsPath)
-                .setCacheControl(CacheControl.noStore());
+                .setCacheControl(CacheControl.noStore())
+                .resourceChain(false).addResolver(resolver(thumbsDir, Kind.THUMBNAILS, ""));
+    }
+
+    private PathResourceResolver resolver(String configured, Kind kind, String subdirectory) {
+        return new PathResourceResolver() {
+            @Override
+            protected Resource getResource(String requestPath, Resource location) throws IOException {
+                var root = StorageRoots.active(configured, kind);
+                return super.getResource(requestPath, new UrlResource(root.toUri().toString() + subdirectory));
+            }
+        };
     }
 }

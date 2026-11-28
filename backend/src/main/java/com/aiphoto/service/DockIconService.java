@@ -1,5 +1,7 @@
 package com.aiphoto.service;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
 import com.aiphoto.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -7,7 +9,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,30 +44,34 @@ public class DockIconService {
     }
 
     public Map<String, String> upload(User user, String name, MultipartFile file) throws Exception {
-        requireName(name);
-        if (file == null || file.isEmpty()) throw new IllegalArgumentException("请选择图标图片");
-        if (file.getSize() > MAX_SIZE) throw new IllegalArgumentException("图标图片不能超过5MB");
-        byte[] bytes = file.getBytes();
-        String extension = SUPPORTED_TYPES.get(detectContentType(bytes));
-        if (extension == null) throw new IllegalArgumentException("仅支持 JPG、PNG 或 WebP 图片");
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            requireName(name);
+            if (file == null || file.isEmpty()) throw new IllegalArgumentException("请选择图标图片");
+            if (file.getSize() > MAX_SIZE) throw new IllegalArgumentException("图标图片不能超过5MB");
+            byte[] bytes = file.getBytes();
+            String extension = SUPPORTED_TYPES.get(detectContentType(bytes));
+            if (extension == null) throw new IllegalArgumentException("仅支持 JPG、PNG 或 WebP 图片");
 
-        Path directory = iconDirectory(user.getId());
-        Files.createDirectories(directory);
-        Path temporary = directory.resolve("." + UUID.randomUUID() + extension);
-        Files.write(temporary, bytes);
-        deleteExisting(user.getId(), name);
-        Files.move(temporary, directory.resolve(name + extension), StandardCopyOption.REPLACE_EXISTING);
-        return getIcons(user);
+            Path directory = iconDirectory(user.getId());
+            Files.createDirectories(directory);
+            Path temporary = directory.resolve("." + UUID.randomUUID() + extension);
+            Files.write(temporary, bytes);
+            deleteExisting(user.getId(), name);
+            Files.move(temporary, directory.resolve(name + extension), StandardCopyOption.REPLACE_EXISTING);
+            return getIcons(user);
+        }
     }
 
     public Map<String, String> delete(User user, String name) {
-        requireName(name);
-        deleteExisting(user.getId(), name);
-        return getIcons(user);
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            requireName(name);
+            deleteExisting(user.getId(), name);
+            return getIcons(user);
+        }
     }
 
     private Path iconDirectory(Long userId) {
-        return Paths.get(photosDir, "dock-icons", String.valueOf(userId));
+        return StorageRoots.active(photosDir, Kind.PHOTOS).resolve("dock-icons").resolve(String.valueOf(userId));
     }
 
     private Path findIcon(Long userId, String name) {

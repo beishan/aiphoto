@@ -25,7 +25,7 @@ class MediaRangeTest {
     static final Path directory;
     static {
         try {
-            directory = Files.createTempDirectory("aiphoto-media-range");
+            directory = Files.createDirectory(Files.createTempDirectory("aiphoto-media-range").resolve("photos"));
             Files.write(directory.resolve("sample.mp4"), new byte[1024]);
         } catch (Exception e) { throw new ExceptionInInitializerError(e); }
     }
@@ -53,5 +53,18 @@ class MediaRangeTest {
         mvc.perform(get("/media/photos/sample.mp4").header("Authorization", "Bearer valid")
                         .header("Range", "bytes=2048-4096"))
                 .andExpect(status().isRequestedRangeNotSatisfiable());
+
+        var newRoot = Files.createDirectory(directory.resolveSibling("new-disk"));
+        var control = Files.createDirectory(directory.resolveSibling(".aiphoto-storage"));
+        Files.write(newRoot.resolve("sample.mp4"), new byte[]{4, 5, 6});
+        var marker = control.resolve("photos.active");
+        Files.writeString(marker, newRoot.toString());
+        try {
+            mvc.perform(get("/media/photos/sample.mp4").header("Authorization", "Bearer valid"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().bytes(new byte[]{4, 5, 6}));
+        } finally {
+            Files.deleteIfExists(marker);
+        }
     }
 }

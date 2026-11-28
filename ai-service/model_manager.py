@@ -28,9 +28,10 @@ class ModelManager:
     """Loads models exclusively from the externally mounted model repository."""
 
     def __init__(self) -> None:
-        self.root = Path(os.environ.get("AI_MODEL_ROOT", "/models")).resolve()
-        self.root.mkdir(parents=True, exist_ok=True)
-        self.config_file = self.root / "model-config.json"
+        self.default_root = Path(os.environ.get("AI_MODEL_ROOT", "/models")).resolve()
+        self.default_root.mkdir(parents=True, exist_ok=True)
+        control = os.environ.get("STORAGE_CONTROL_DIRECTORY")
+        self.control = Path(control) if control else self.default_root / ".aiphoto-storage"
         self.lock = RLock()
         self.models: dict[str, Any | None] = {name: None for name in MODEL_TYPES}
         self.errors: dict[str, str | None] = {name: None for name in MODEL_TYPES}
@@ -40,6 +41,42 @@ class ModelManager:
         )
         self.load_order: list[str] = []
         self.config = self._load_config()
+        self.loaded_root = self.root
+
+    @property
+    def root(self) -> Path:
+        try:
+            target = Path((self.control / "models.active").read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return self.default_root
+        pool = os.environ.get("STORAGE_POOL_DIRECTORY")
+        if not pool or not target.is_absolute() or not target.is_dir():
+            raise ValueError("当前模型存储目录不可用")
+        pool_root = Path(pool).resolve(strict=True)
+        target = target.resolve(strict=True)
+        if pool_root not in target.parents:
+            raise ValueError("模型目录必须位于存储池内")
+        return target
+
+    @property
+    def config_file(self) -> Path:
+        return self.root / "model-config.json"
+
+    @contextmanager
+    def _configuration_writer(self):
+        # The backend holds the same POSIX record lock while moving models.
+        if os.name != "posix" or not os.environ.get("STORAGE_POOL_DIRECTORY"):
+            yield
+            return
+        import fcntl
+
+        self.control.mkdir(exist_ok=True)
+        with (self.control / "models.lock").open("ab") as lock:
+            fcntl.lockf(lock, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.lockf(lock, fcntl.LOCK_UN)
 
     def _defaults(self) -> dict[str, dict[str, Any]]:
         return {
@@ -69,8 +106,9 @@ class ModelManager:
         temporary.replace(self.config_file)
 
     def resolve_path(self, relative_path: str) -> Path:
-        candidate = (self.root / relative_path).resolve()
-        if candidate != self.root and self.root not in candidate.parents:
+        root = self.root
+        candidate = (root / relative_path).resolve()
+        if candidate != root and root not in candidate.parents:
             raise ValueError("模型路径必须位于外部模型根目录内")
         return candidate
 
@@ -90,6 +128,7 @@ class ModelManager:
         if name not in MODEL_TYPES:
             raise ValueError(f"不支持的模型类型: {name}")
         with self.lock:
+            self._refresh_root()
             self._unload(name)
             self.errors[name] = None
 
@@ -117,6 +156,7 @@ class ModelManager:
 
     def get(self, name: str, lazy: bool = True) -> Any | None:
         with self.lock:
+            self._refresh_root()
             model = self.models.get(name)
             if model is None and lazy and self.config[name].get("enabled"):
                 self.reload(name)
@@ -124,6 +164,13 @@ class ModelManager:
             if model is not None:
                 self._touch(name)
             return model
+
+    def _refresh_root(self) -> None:
+        root = self.root
+        if root != self.loaded_root:
+            for name in list(self.load_order):
+                self._unload(name)
+            self.loaded_root = root
 
     @contextmanager
     def use(self, name: str):
@@ -158,10 +205,10 @@ class ModelManager:
     def update(self, name: str, path: str, enabled: bool) -> dict[str, Any]:
         if name not in MODEL_TYPES:
             raise ValueError(f"不支持的模型类型: {name}")
-        resolved = self.resolve_path(path)
-        if enabled:
-            validate_model_path(name, resolved)
-        with self.lock:
+        with self.lock, self._configuration_writer():
+            resolved = self.resolve_path(path)
+            if enabled:
+                validate_model_path(name, resolved)
             previous = self.config[name].copy()
             was_loaded = self.models[name] is not None
             self.config[name] = {"path": path, "enabled": enabled}
@@ -198,6 +245,7 @@ class ModelManager:
 
     def status(self) -> dict[str, Any]:
         with self.lock:
+            self._refresh_root()
             return {
                 "root": str(self.root),
                 "offline": True,

@@ -1,11 +1,12 @@
 package com.aiphoto.service;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
 import com.aiphoto.dto.SiteFaviconStatusDTO;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,13 +22,14 @@ public class SiteFaviconService {
     };
     private static final String PUBLIC_URL = "/api/site/favicon";
 
-    private final Path faviconPath;
+    private final String photosDir;
 
     public SiteFaviconService(@Value("${app.storage.photos-dir:./data/photos}") String photosDir) {
-        this.faviconPath = Paths.get(photosDir, "site", "favicon.png").toAbsolutePath().normalize();
+        this.photosDir = photosDir;
     }
 
     public SiteFaviconStatusDTO getStatus() {
+        Path faviconPath = StorageRoots.active(photosDir, Kind.PHOTOS).resolve("site/favicon.png");
         if (!Files.isRegularFile(faviconPath)) {
             return new SiteFaviconStatusDTO(false, null, 0);
         }
@@ -44,47 +46,54 @@ public class SiteFaviconService {
     }
 
     public SiteFaviconStatusDTO save(MultipartFile file) {
-        validate(file);
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            Path faviconPath = StorageRoots.active(photosDir, Kind.PHOTOS).resolve("site/favicon.png");
+            validate(file);
 
-        Path temporaryFile = null;
-        try {
-            Files.createDirectories(faviconPath.getParent());
-            temporaryFile = faviconPath.getParent().resolve("favicon-" + UUID.randomUUID() + ".tmp");
-            file.transferTo(temporaryFile);
+            Path temporaryFile = null;
             try {
-                Files.move(
-                    temporaryFile,
-                    faviconPath,
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE
-                );
-            } catch (AtomicMoveNotSupportedException exception) {
-                Files.move(temporaryFile, faviconPath, StandardCopyOption.REPLACE_EXISTING);
-            }
-            return getStatus();
-        } catch (IOException exception) {
-            throw new IllegalStateException("保存网站图标失败", exception);
-        } finally {
-            if (temporaryFile != null) {
+                Files.createDirectories(faviconPath.getParent());
+                temporaryFile = faviconPath.getParent().resolve("favicon-" + UUID.randomUUID() + ".tmp");
+                file.transferTo(temporaryFile);
                 try {
-                    Files.deleteIfExists(temporaryFile);
-                } catch (IOException ignored) {
-                    // Best-effort cleanup after a failed write.
+                    Files.move(
+                        temporaryFile,
+                        faviconPath,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                    );
+                } catch (AtomicMoveNotSupportedException exception) {
+                    Files.move(temporaryFile, faviconPath, StandardCopyOption.REPLACE_EXISTING);
+                }
+                return getStatus();
+            } catch (IOException exception) {
+                throw new IllegalStateException("保存网站图标失败", exception);
+            } finally {
+                if (temporaryFile != null) {
+                    try {
+                        Files.deleteIfExists(temporaryFile);
+                    } catch (IOException ignored) {
+                        // Best-effort cleanup after a failed write.
+                    }
                 }
             }
         }
     }
 
     public SiteFaviconStatusDTO restoreDefault() {
-        try {
-            Files.deleteIfExists(faviconPath);
-            return getStatus();
-        } catch (IOException exception) {
-            throw new IllegalStateException("恢复默认网站图标失败", exception);
+        try (var storageLease = StorageRoots.writing(Kind.PHOTOS)) {
+            Path faviconPath = StorageRoots.active(photosDir, Kind.PHOTOS).resolve("site/favicon.png");
+            try {
+                Files.deleteIfExists(faviconPath);
+                return getStatus();
+            } catch (IOException exception) {
+                throw new IllegalStateException("恢复默认网站图标失败", exception);
+            }
         }
     }
 
     public Path getFaviconPath() {
+        Path faviconPath = StorageRoots.active(photosDir, Kind.PHOTOS).resolve("site/favicon.png");
         if (!Files.isRegularFile(faviconPath)) {
             throw new IllegalArgumentException("尚未设置自定义网站图标");
         }

@@ -1,5 +1,7 @@
 package com.aiphoto.service;
 
+import com.aiphoto.storage.StorageRoots;
+import com.aiphoto.storage.StorageRoots.Kind;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,13 +50,17 @@ public class SystemInfoService {
     @Value("${spring.datasource.url}")
     private String dbUrl;
 
-    @Value("${app.version:0.26.35}")
+    @Value("${app.version:0.26.36}")
     private String appVersion;
 
     /**
      * Get storage usage information.
      */
     public Map<String, Object> getStorageInfo() {
+        String photosDir = StorageRoots.active(this.photosDir, Kind.PHOTOS).toString();
+        String thumbsDir = StorageRoots.active(this.thumbsDir, Kind.THUMBNAILS).toString();
+        String crawlDir = StorageRoots.active(this.crawlDir, Kind.CRAWL).toString();
+        String modelRoot = StorageRoots.active(this.modelRoot, Kind.MODELS).toString();
         Map<String, Object> info = new LinkedHashMap<>();
         
         info.put("photosDir", photosDir);
@@ -75,6 +81,7 @@ public class SystemInfoService {
         addVolume(volumes, "照片图库", photosDir);
         addVolume(volumes, "缩略图", thumbsDir);
         addVolume(volumes, "网站采集", crawlDir);
+        addVolume(volumes, "AI 模型", modelRoot);
         info.put("volumes", volumes);
         var photoVolume = volumes.get("照片图库");
         if (photoVolume != null) {

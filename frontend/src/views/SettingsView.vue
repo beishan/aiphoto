@@ -15,6 +15,7 @@ import ThemeSettingsPanel from '@/components/ThemeSettingsPanel.vue'
 import SiteFaviconSettingsPanel from '@/components/SiteFaviconSettingsPanel.vue'
 import CrawlerDisplaySettingsPanel from '@/components/CrawlerDisplaySettingsPanel.vue'
 import CrawlerSettingsPanel from '@/components/CrawlerSettingsPanel.vue'
+import StorageMigrationPanel from '@/components/StorageMigrationPanel.vue'
 
 const settingStore = useSettingStore()
 const message = ElMessage
@@ -1141,6 +1142,7 @@ const systemStorageFolders = computed(() => [
 
         <!-- ====== 存储管理 ====== -->
         <div v-if="activeSection === 'storage'" class="content-panel">
+          <StorageMigrationPanel v-if="isCurrentUserAdmin" @migrated="loadStorageInfo" />
           <div class="panel-header-row">
             <el-button @click="loadStorageInfo()">刷新</el-button>
           </div>
