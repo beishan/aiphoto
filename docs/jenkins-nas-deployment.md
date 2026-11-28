@@ -135,7 +135,8 @@ disk2=/vol2/1000/aiphoto-pool
 
 别名由英文字母、数字、下划线和短横线组成。目录必须在 Docker 宿主机上已存在。
 部署会把所有映射挂载到后端和 AI 服务。发布通过健康检查后，Jenkins 将实际映射保存到 NAS
-的 `aiphoto-deploy-state` Docker 卷。后续发版留空即可恢复，即使旧应用容器已被删除。
+的 `aiphoto-deploy-state` Docker 卷，并把实际映射写成 Jenkins 参数默认值。
+下次打开「带参数构建」会预填上一次成功发版的映射，清空也可以从 NAS 恢复。
 首次使用保存功能时，留空也可以从正在使用的旧容器读取映射并保存。
 要增加映射时填写已有和新增的完整列表。生产凭据中的旧 `STORAGE_POOL_PATH` 仍可继续使用。
 直接使用根目录 Compose、只需要单个存储池时，仍可在 `.env` 设置 `STORAGE_POOL_PATH`，并使用：

@@ -120,7 +120,10 @@ persist_storage_mounts() {
     mounts="$(storage_mounts)" || return 1
     docker volume create "${DEPLOY_STATE_VOLUME}" >/dev/null
     printf '%s\n' "${mounts}" | docker run --rm -i --pull never -v "${DEPLOY_STATE_VOLUME}:/state" alpine:3.20 \
-        sh -ec 'tmp=$(mktemp /state/storage-mappings.XXXXXX); trap "rm -f \"$tmp\"" EXIT; cat > "$tmp"; mv -f "$tmp" /state/storage-mappings'
+        sh -ec 'tmp=$(mktemp /state/storage-mappings.XXXXXX); trap "rm -f \"$tmp\"" EXIT; cat > "$tmp"; mv -f "$tmp" /state/storage-mappings' || return 1
+    local named
+    named="$(sed -n 's|^/storage-pools/||p' <<< "${mounts}")"
+    printf '%s' "${named}"
 }
 
 storage_mappings() {

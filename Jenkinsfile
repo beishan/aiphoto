@@ -1,3 +1,17 @@
+def configureReleaseParameters(String storageMappings) {
+    properties([parameters([
+        string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名'),
+        string(name: 'PHOTO_LIBRARY_PATH', defaultValue: '/vol2/1000/aiphotoslib', description: 'NAS 宿主机照片库绝对路径（必须已存在）'),
+        string(name: 'AI_MODELS_PATH', defaultValue: '/vol1/1000/aiphotos/models', description: 'NAS 宿主机 AI 模型根目录绝对路径（必须已存在）'),
+        string(name: 'STORAGE_DATA_PATH', defaultValue: '/vol1/1000/aiphotos/storage', description: 'NAS 宿主机上传照片和缩略图存储目录（必须已存在）'),
+        text(name: 'STORAGE_POOL_MAPPINGS', defaultValue: storageMappings, description: '每行填写 别名=/NAS/绝对路径。发版成功后，下次自动填入。'),
+        string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口'),
+        string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口'),
+        booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速'),
+        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试'),
+    ])])
+}
+
 pipeline {
     agent any
 
@@ -6,18 +20,6 @@ pipeline {
         timestamps()
         timeout(time: 120, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
-    }
-
-    parameters {
-        string(name: 'NAS_HOST', defaultValue: '192.168.31.155', description: '飞牛 NAS 局域网 IP 或域名')
-        string(name: 'PHOTO_LIBRARY_PATH', defaultValue: '/vol2/1000/aiphotoslib', description: 'NAS 宿主机照片库绝对路径（必须已存在）')
-        string(name: 'AI_MODELS_PATH', defaultValue: '/vol1/1000/aiphotos/models', description: 'NAS 宿主机 AI 模型根目录绝对路径（必须已存在）')
-        string(name: 'STORAGE_DATA_PATH', defaultValue: '/vol1/1000/aiphotos/storage', description: 'NAS 宿主机上传照片和缩略图存储目录（必须已存在）')
-        text(name: 'STORAGE_POOL_MAPPINGS', defaultValue: '', description: '每行填写 别名=/NAS/绝对路径。成功发版后保存在 NAS，下次留空自动沿用。')
-        string(name: 'FRONTEND_PORT', defaultValue: '8391', description: '前端对外端口')
-        string(name: 'BACKEND_PORT', defaultValue: '8392', description: '后端对外端口')
-        booleanParam(name: 'ENABLE_GPU', defaultValue: false, description: '已安装 NVIDIA Container Toolkit 时启用 GPU 加速')
-        booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: '紧急部署时跳过后端测试')
     }
 
     environment {
@@ -33,6 +35,15 @@ pipeline {
             steps {
                 git branch: 'main', url: 'git@github.com:beishan/aiphoto.git'
                 script {
+                    // Initialize new jobs. Successful releases update the stored form default below.
+                    if (!params.containsKey('STORAGE_POOL_MAPPINGS')) {
+                        configureReleaseParameters('')
+                    }
+                    // A new job's first run can be queued before parameter defaults exist.
+                    ['NAS_HOST', 'PHOTO_LIBRARY_PATH', 'AI_MODELS_PATH', 'STORAGE_DATA_PATH',
+                        'FRONTEND_PORT', 'BACKEND_PORT', 'ENABLE_GPU'].each { name ->
+                        if (env[name] == null) env[name] = params[name].toString()
+                    }
                     def appVersion = readFile('VERSION').trim()
                     if (!(appVersion ==~ /\d+\.\d+\.\d+/)) {
                         error("VERSION 必须使用语义化版本号（例如 0.2.2），当前值：${appVersion}")
@@ -120,8 +131,10 @@ pipeline {
         success {
             withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
                 script {
-                    if (sh(script: './scripts/deploy.sh save-storage-mappings "$AIPHOTO_ENV_FILE"', returnStatus: true) != 0) {
-                        unstable('部署已成功，但存储映射保存失败，请查看 Jenkins 日志。')
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', catchInterruptions: false,
+                            message: '部署已成功，但存储映射或 Jenkins 参数默认值保存失败。') {
+                        def mappings = sh(script: './scripts/deploy.sh save-storage-mappings "$AIPHOTO_ENV_FILE"', returnStdout: true)
+                        configureReleaseParameters(mappings)
                     }
                     if (sh(script: './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE"', returnStatus: true) != 0) {
                         unstable('部署已成功，但历史镜像清理未完成，请查看 Jenkins 清理日志。')
