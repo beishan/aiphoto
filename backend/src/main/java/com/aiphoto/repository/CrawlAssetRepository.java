@@ -95,12 +95,18 @@ public interface CrawlAssetRepository extends JpaRepository<CrawlAsset, Long> {
             @Param("jobId") Long jobId,
             @Param("deletedStatus") CrawlAsset.Status deletedStatus,
             Pageable pageable);
-    @Query("SELECT a.fileHashMd5, COUNT(a) FROM CrawlAsset a WHERE a.jobId = :jobId "
-            + "AND a.status <> :deletedStatus AND a.fileHashMd5 IN :hashes GROUP BY a.fileHashMd5")
-    List<Object[]> countHashes(
-            @Param("jobId") Long jobId,
+    @Query("SELECT a.jobId AS jobId, a.fileHashMd5 AS hash, COUNT(a) AS count "
+            + "FROM CrawlAsset a WHERE a.jobId IN :jobIds AND a.status <> :deletedStatus "
+            + "AND a.fileHashMd5 IN :hashes GROUP BY a.jobId, a.fileHashMd5")
+    List<JobHashCount> countHashes(
+            @Param("jobIds") List<Long> jobIds,
             @Param("deletedStatus") CrawlAsset.Status deletedStatus,
             @Param("hashes") List<String> hashes);
+    interface JobHashCount {
+        Long getJobId();
+        String getHash();
+        Long getCount();
+    }
     Optional<CrawlAsset> findByIdAndJobId(Long id, Long jobId);
     Optional<CrawlAsset> findByJobIdAndUrlHash(Long jobId, String urlHash);
     List<CrawlAsset> findByIdInAndJobId(List<Long> ids, Long jobId);

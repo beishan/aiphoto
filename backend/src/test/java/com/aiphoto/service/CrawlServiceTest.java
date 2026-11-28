@@ -81,12 +81,20 @@ class CrawlServiceTest {
         CrawlAsset first = new CrawlAsset(); first.setId(1L); first.setJobId(10L);
         CrawlAsset second = new CrawlAsset(); second.setId(2L); second.setJobId(11L);
         var pageable = PageRequest.of(0, 60);
+        first.setFileHashMd5("shared-hash");
+        second.setFileHashMd5("shared-hash");
         var assets = new PageImpl<>(List.of(first, second), pageable, 2);
+        var reviewCounts = List.of(hashCount(10L, "shared-hash", 2L), hashCount(11L, "shared-hash", 1L));
+        when(assetRepository.countHashes(List.of(10L, 11L), CrawlAsset.Status.DELETED, List.of("shared-hash")))
+                .thenReturn(reviewCounts);
         when(assetRepository.findReviewAssets(9L, null, null, "ALL", "ALL", false, false, pageable)).thenReturn(assets);
 
         var result = crawlService.listReviewAssets(9L, null, "", false, false, pageable);
 
         assertThat(result.getContent()).containsExactly(first, second);
+        assertThat(first.getExactDuplicateCount()).isEqualTo(2L);
+        assertThat(second.getExactDuplicateCount()).isEqualTo(1L);
+        verify(photoRepository).findByFileHashMd5InIncludingTrash(List.of("shared-hash"));
         verify(assetRepository).findReviewAssets(9L, null, null, "ALL", "ALL", false, false, pageable);
     }
 
@@ -549,6 +557,7 @@ class CrawlServiceTest {
     void assetPageUsesWholeJobForDuplicateAndLibraryState() {
         CrawlJob job = completedJob();
         CrawlAsset asset = asset("8/1.jpg", "8/1.thumb.jpg");
+        asset.setJobId(8L);
         asset.setFileHashMd5("same-hash");
         Photo trashPhoto = new Photo();
         trashPhoto.setFileHashMd5("same-hash");
@@ -557,9 +566,10 @@ class CrawlServiceTest {
         when(jobRepository.findByIdAndOwnerId(8L, 9L)).thenReturn(Optional.of(job));
         when(assetRepository.findByJobIdOrderByIdDesc(8L, pageable))
                 .thenReturn(new PageImpl<>(List.of(asset), pageable, 1));
+        var jobCounts = List.of(hashCount(8L, "same-hash", 3L));
         when(assetRepository.countHashes(
-                8L, CrawlAsset.Status.DELETED, List.of("same-hash")))
-                .thenReturn(List.<Object[]>of(new Object[] {"same-hash", 3L}));
+                List.of(8L), CrawlAsset.Status.DELETED, List.of("same-hash")))
+                .thenReturn(jobCounts);
         when(photoRepository.findByFileHashMd5InIncludingTrash(List.of("same-hash")))
                 .thenReturn(List.of(trashPhoto));
 
@@ -624,6 +634,14 @@ class CrawlServiceTest {
         CrawlJob job = completedJob();
         job.setPhase(CrawlJob.Phase.AWAITING_CONFIRMATION);
         return job;
+    }
+
+    private CrawlAssetRepository.JobHashCount hashCount(Long jobId, String hash, Long count) {
+        var row = org.mockito.Mockito.mock(CrawlAssetRepository.JobHashCount.class);
+        when(row.getJobId()).thenReturn(jobId);
+        when(row.getHash()).thenReturn(hash);
+        when(row.getCount()).thenReturn(count);
+        return row;
     }
 
     private CrawlAsset asset(String localPath, String thumbnailPath) {

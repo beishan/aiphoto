@@ -599,7 +599,7 @@ public class CrawlService {
                 : status == null
                         ? assetRepository.findByJobIdOrderByIdDesc(jobId, pageable)
                         : assetRepository.findByJobIdAndStatusOrderByIdDesc(jobId, status, pageable);
-        enrichDuplicateState(jobId, result.getContent());
+        enrichDuplicateState(result.getContent());
         return result;
     }
 
@@ -628,8 +628,7 @@ public class CrawlService {
                 ownerId, sourcePageId, jobId, status == null || status.isBlank() ? "ALL" : status,
                 importStatus == null || importStatus.isBlank() ? "ALL" : importStatus,
                 exactDuplicates, similarOnly, pageable);
-        result.getContent().stream().collect(Collectors.groupingBy(CrawlAsset::getJobId))
-                .forEach(this::enrichDuplicateState);
+        enrichDuplicateState(result.getContent());
         return result;
     }
 
@@ -637,13 +636,15 @@ public class CrawlService {
         return assetRepository.findReviewPageGroups(ownerId);
     }
 
-    private void enrichDuplicateState(Long jobId, List<CrawlAsset> assets) {
+    private void enrichDuplicateState(List<CrawlAsset> assets) {
         List<String> hashes = assets.stream().map(CrawlAsset::getFileHashMd5)
                 .filter(java.util.Objects::nonNull).distinct().toList();
         if (hashes.isEmpty()) return;
-        Map<String, Long> counts = assetRepository.countHashes(
-                        jobId, CrawlAsset.Status.DELETED, hashes).stream()
-                .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
+        var jobIds = assets.stream().map(CrawlAsset::getJobId).distinct().toList();
+        var counts = assetRepository.countHashes(jobIds, CrawlAsset.Status.DELETED, hashes).stream()
+                .collect(Collectors.groupingBy(CrawlAssetRepository.JobHashCount::getJobId,
+                        Collectors.toMap(CrawlAssetRepository.JobHashCount::getHash,
+                                CrawlAssetRepository.JobHashCount::getCount)));
         Map<String, com.aiphoto.entity.Photo> photos = photoRepository
                 .findByFileHashMd5InIncludingTrash(hashes).stream()
                 .collect(Collectors.toMap(
@@ -652,7 +653,8 @@ public class CrawlService {
                         (first, ignored) -> first));
         for (CrawlAsset asset : assets) {
             if (asset.getFileHashMd5() == null) continue;
-            asset.setExactDuplicateCount(counts.getOrDefault(asset.getFileHashMd5(), 0L));
+            asset.setExactDuplicateCount(counts.getOrDefault(asset.getJobId(), Map.of())
+                    .getOrDefault(asset.getFileHashMd5(), 0L));
             var photo = photos.get(asset.getFileHashMd5());
             asset.setLibraryDuplicate(photo != null && photo.getDeletedAt() == null);
             asset.setLibraryTrashDuplicate(photo != null && photo.getDeletedAt() != null);

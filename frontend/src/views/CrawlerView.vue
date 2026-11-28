@@ -519,7 +519,7 @@ async function loadReviewData() {
         delete previewImages[id]
       }
     }
-    await loadPreviews()
+    void loadPreviews()
   } catch (error: any) {
     if (request === reviewRequest) ElMessage.error(error?.response?.data?.message || '待整理图片加载失败')
   }
@@ -793,9 +793,56 @@ const thumbnailQueue = createThumbnailQueue(async (id, signal) => {
   } catch { /* Keep the placeholder when the thumbnail cannot be decoded. */ }
   if (url) URL.revokeObjectURL(url)
 })
+const nearbyReviewAssets = new Set<number>()
+const reviewThumbnailElements = new Map<Element, number>()
+let reviewThumbnailObserver: IntersectionObserver | undefined
+
+function queueReviewThumbnail(id: number) {
+  if (!showCrawlerImages.value || taskDrawerVisible.value || activeTab.value !== 'review') return
+  const asset = reviewAssets.value.find(item => item.id === id)
+  if (asset && canLoadThumbnail(asset)) void thumbnailQueue.enqueue(id)
+}
+
+const vReviewThumbnail = {
+  mounted(el: HTMLElement, { value: id }: { value: number }) {
+    if (typeof IntersectionObserver === 'undefined') {
+      nearbyReviewAssets.add(id)
+      queueReviewThumbnail(id)
+      return
+    }
+    reviewThumbnailObserver ??= new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const assetId = reviewThumbnailElements.get(entry.target)
+        if (assetId === undefined) continue
+        if (entry.isIntersecting) {
+          nearbyReviewAssets.add(assetId)
+          queueReviewThumbnail(assetId)
+        } else {
+          nearbyReviewAssets.delete(assetId)
+        }
+      }
+    }, { rootMargin: '200px' })
+    reviewThumbnailElements.set(el, id)
+    reviewThumbnailObserver.observe(el)
+  },
+  beforeUnmount(el: HTMLElement, { value: id }: { value: number }) {
+    reviewThumbnailObserver?.unobserve(el)
+    reviewThumbnailElements.delete(el)
+    nearbyReviewAssets.delete(id)
+  },
+}
+
+function canLoadThumbnail(asset: CrawlAsset) {
+  return !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id]
+}
+
 async function loadPreviews() {
   if (!showCrawlerImages.value) return
-  const wanted = (taskDrawerVisible.value ? assets.value : reviewAssets.value).filter(asset => !['PENDING', 'RUNNING', 'FAILED', 'SKIPPED', 'DELETED'].includes(asset.status) && !previewImages[asset.id])
+  if (!taskDrawerVisible.value && activeTab.value === 'review') {
+    for (const id of nearbyReviewAssets) queueReviewThumbnail(id)
+    return
+  }
+  const wanted = assets.value.filter(canLoadThumbnail)
   await Promise.all(wanted.map(asset => thumbnailQueue.enqueue(asset.id)))
 }
 
@@ -1656,6 +1703,7 @@ onUnmounted(() => {
   skipThumbnailController?.abort()
   clearSkipThumbnails()
   importPolling.abort()
+  reviewThumbnailObserver?.disconnect()
   thumbnailQueue.dispose()
   crawlerUnmounted = true
   if (pollTimer) clearInterval(pollTimer)
@@ -1859,7 +1907,7 @@ onUnmounted(() => {
 
         <div class="asset-grid">
           <el-card v-for="asset in reviewAssets" :key="asset.id" class="asset-card surface-card" :class="{ selected: selectedAssets.has(asset.id), 'is-importing': pendingImportAssetIds.has(asset.id) }" shadow="hover" @click="asset.status === 'DOWNLOADED' && !pendingImportAssetIds.has(asset.id) && toggleAsset(asset.id)">
-            <div class="asset-preview">
+            <div v-review-thumbnail="asset.id" class="asset-preview">
               <el-image v-if="showCrawlerImages && previewImages[asset.id]" :src="previewImages[asset.id]" fit="cover" loading="lazy" />
               <div v-else class="placeholder"><el-icon><Picture /></el-icon><span>{{ assetStatusLabel(asset) }}</span></div>
               <el-button class="task-image-preview-button" circle size="small" :icon="View" v-if="showCrawlerImages" :disabled="!previewImages[asset.id]" title="预览图片" aria-label="预览图片" @click.stop="openAssetPreview(asset)" />
