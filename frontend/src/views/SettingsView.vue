@@ -1214,38 +1214,6 @@ const systemStorageFolders = computed(() => [
               </el-select>
             </div>
           </div>
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">AI 设置</span>
-                <span class="label-desc">人物聚合与搜索相似度阈值</span>
-              </div>
-            </div>
-          </div>
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">人物聚合阈值</span>
-                <span class="label-desc">控制同一人物的合并灵敏度</span>
-              </div>
-              <span class="threshold-badge">{{ (faceThreshold / 100).toFixed(2) }}</span>
-            </div>
-            <div class="slider-row">
-              <el-slider v-model="faceThreshold" :min="20" :max="80" :step="5" @change="handleThresholdChange" />
-            </div>
-          </div>
-          <div class="panel-card">
-            <div class="setting-row">
-              <div class="setting-info">
-                <span class="label-text">搜索相似度阈值</span>
-                <span class="label-desc">控制语义搜索结果相似度要求</span>
-              </div>
-              <span class="threshold-badge">{{ (searchThreshold / 100).toFixed(2) }}</span>
-            </div>
-            <div class="slider-row">
-              <el-slider v-model="searchThreshold" :min="20" :max="80" :step="5" @change="handleSearchThresholdChange" />
-            </div>
-          </div>
         </div>
 
         <!-- ====== 时间线设置 ====== -->
@@ -1279,6 +1247,30 @@ const systemStorageFolders = computed(() => [
                 :status="indexingStatus?.status === 'COMPLETED' ? 'success' : indexingStatus?.status === 'FAILED' ? 'exception' : undefined" />
             </div>
             <p v-else-if="indexingChecked" class="info-label" role="status">没有需要补建索引的照片。</p>
+          </div>
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">人物聚合阈值</span>
+                <span class="label-desc">控制同一人物的合并灵敏度</span>
+              </div>
+              <span class="threshold-badge">{{ (faceThreshold / 100).toFixed(2) }}</span>
+            </div>
+            <div class="slider-row">
+              <el-slider v-model="faceThreshold" :min="20" :max="80" :step="5" @change="handleThresholdChange" />
+            </div>
+          </div>
+          <div class="panel-card">
+            <div class="setting-row">
+              <div class="setting-info">
+                <span class="label-text">搜索相似度阈值</span>
+                <span class="label-desc">控制语义搜索结果相似度要求</span>
+              </div>
+              <span class="threshold-badge">{{ (searchThreshold / 100).toFixed(2) }}</span>
+            </div>
+            <div class="slider-row">
+              <el-slider v-model="searchThreshold" :min="20" :max="80" :step="5" @change="handleSearchThresholdChange" />
+            </div>
           </div>
         </section>
 
