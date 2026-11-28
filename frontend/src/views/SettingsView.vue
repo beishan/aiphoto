@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useSettingStore } from '@/stores/settingStore'
 import { settingApi, type ModelFile, type ModelName, type ModelStatus, type ModelCatalogItem, type OnlineModel, type DownloadTask, type DownloadStatus } from '@/api/settingApi'
 import { taskApi, type AiTask } from '@/api/taskApi'
+import { photoApi } from '@/api/photoApi'
 import { userApi } from '@/api/userApi'
 import { tagApi } from '@/api/tagApi'
 import { folderApi, type BrowseItem } from '@/api/folderApi'
@@ -36,6 +37,7 @@ const navItems = [
   { key: 'users', label: '用户管理', icon: '👥' },
   { key: 'folders', label: '扫描文件夹', icon: '📁' },
   { key: 'models', label: '模型管理', icon: '🤖' },
+  { key: 'ai-index', label: 'AI 索引', icon: '✨' },
   { key: 'proxy', label: '系统代理配置', icon: '🔗' },
   { key: 'crawler-display', label: '爬虫图片显示', icon: '🖼️' },
   { key: 'crawler', label: '爬虫设置', icon: '🕸️' },
@@ -57,7 +59,7 @@ const navGroups = computed(() => [
   { label: '个人', keys: ['profile'] },
   { label: '外观与偏好', keys: isCurrentUserAdmin ? ['display', 'general', 'favicon', 'crawler-display'] : ['display', 'general', 'crawler-display'] },
   { label: '媒体库', keys: ['folders', 'tags', 'photos', 'timeline'] },
-  { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'crawler', 'tasks'] : ['models', 'tasks'] },
+  { label: '智能服务', keys: isCurrentUserAdmin ? ['models', 'ai-index', 'crawler', 'tasks'] : ['models', 'ai-index', 'tasks'] },
   { label: '管理', keys: isCurrentUserAdmin ? ['users', 'proxy', 'storage'] : ['storage'] },
   { label: '系统', keys: ['system'] },
 ].map(group => ({
@@ -740,6 +742,54 @@ const tasks = ref<AiTask[]>([])
 const taskFilter = ref<'all' | 'running' | 'completed' | 'failed'>('all')
 const taskResult = ref<AiTask | null>(null)
 const taskResultVisible = ref(false)
+const indexingSubmitting = ref(false)
+const indexingJob = ref<{ taskId: number; count: number } | null>(null)
+const indexingStatus = ref<AiTask | null>(null)
+const indexingChecked = ref(false)
+let indexingTimer: ReturnType<typeof setTimeout> | undefined
+let indexingMounted = true
+const indexingRunning = computed(() => !!indexingJob.value &&
+  (!indexingStatus.value || ['PENDING', 'RUNNING'].includes(indexingStatus.value.status)))
+
+async function pollIndexing() {
+  const job = indexingJob.value
+  if (!job || !indexingMounted) return
+  try {
+    const { data } = await taskApi.get(job.taskId)
+    if (!indexingMounted || indexingJob.value?.taskId !== job.taskId) return
+    indexingStatus.value = data
+    if (!indexingRunning.value) void loadTasks()
+  } catch { /* Retry temporary errors while the task is running. */ }
+  if (indexingMounted && indexingRunning.value) indexingTimer = setTimeout(pollIndexing, 2000)
+}
+
+async function indexMissingPhotos() {
+  if (indexingSubmitting.value || indexingRunning.value) return
+  indexingSubmitting.value = true
+  try {
+    const { data } = await photoApi.indexMissing()
+    if (!indexingMounted) return
+    indexingChecked.value = true
+    indexingStatus.value = null
+    indexingJob.value = data.taskId ? data : null
+    if (data.taskId) {
+      message.success(`已提交补建任务，待处理 ${data.count} 张照片`)
+      void pollIndexing()
+    } else {
+      message.info('没有需要补建索引的照片')
+    }
+  } catch (error: any) {
+    message.error(error?.response?.data?.message || '提交补建索引失败')
+  } finally { indexingSubmitting.value = false }
+}
+
+function openIndexingTasks() {
+  taskFilter.value = 'all'
+  activeSection.value = 'tasks'
+  void loadTasks()
+}
+
+onUnmounted(() => { indexingMounted = false; clearTimeout(indexingTimer) })
 
 function showTaskResult(task: AiTask) {
   taskResult.value = task
@@ -1207,6 +1257,30 @@ const systemStorageFolders = computed(() => [
             </div>
           </div>
         </div>
+
+        <section v-if="activeSection === 'ai-index'" class="content-panel" aria-label="AI 索引">
+          <div class="panel-card">
+            <div class="setting-info">
+              <span class="label-text">补建照片索引</span>
+              <span class="label-desc">
+                给旧照片补上已启用模型缺失的索引。Chinese-CLIP 用于语义搜索，InsightFace 用于识别人脸。
+                补建在后台执行，已经建立的索引会保留。
+              </span>
+            </div>
+            <div class="ai-index-actions">
+              <el-button type="primary" :loading="indexingSubmitting" :disabled="indexingRunning" @click="indexMissingPhotos">
+                {{ indexingRunning ? '正在补建索引' : '补建 AI 索引' }}
+              </el-button>
+              <el-button link type="primary" @click="openIndexingTasks">查看任务与日志</el-button>
+            </div>
+            <div v-if="indexingJob" class="ai-index-status" aria-live="polite">
+              <span>任务 #{{ indexingJob.taskId }} · {{ indexingJob.count }} 张照片 · {{ getTaskStatusText(indexingStatus?.status ?? 'PENDING') }}</span>
+              <el-progress :percentage="indexingStatus?.progress ?? 0"
+                :status="indexingStatus?.status === 'COMPLETED' ? 'success' : indexingStatus?.status === 'FAILED' ? 'exception' : undefined" />
+            </div>
+            <p v-else-if="indexingChecked" class="info-label" role="status">没有需要补建索引的照片。</p>
+          </div>
+        </section>
 
         <!-- ====== 任务与日志 ====== -->
         <div v-if="activeSection === 'tasks'" class="content-panel">
@@ -2544,6 +2618,25 @@ const systemStorageFolders = computed(() => [
   min-width: 0;
   overflow: hidden;
   padding: 8px 10px 10px;
+}
+
+.ai-index-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ai-index-actions .el-button { margin-left: 0; }
+
+.ai-index-status {
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .task-log-status {

@@ -3,6 +3,10 @@ import { normalizePage, type SpringPage } from './pageResponse'
 import type { Photo, PhotoDetail, PageResponse } from '@/types'
 
 export const photoApi = {
+  indexMissing() {
+    return http.post<{ taskId: number; count: number }>('/photos/index-all')
+  },
+
   browse(beforeId?: number, size = 40) {
     return http.get<{ content: Photo[]; nextCursor: number | null; hasMore: boolean }>('/photos/browse', { params: { beforeId, size } })
   },
