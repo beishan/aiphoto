@@ -709,6 +709,7 @@ function getTaskStatusClass(status: string): string {
 }
 
 // ===== Storage Management =====
+const storageTab = ref('usage')
 const storageInfo = ref<Record<string, unknown>>({})
 const storageVolumes = computed(() =>
   (storageInfo.value.volumes ?? {}) as Record<string, { total: number; free: number; usable: number }>)
@@ -1142,76 +1143,88 @@ const systemStorageFolders = computed(() => [
 
         <!-- ====== 存储管理 ====== -->
         <div v-if="activeSection === 'storage'" class="content-panel">
-          <StorageMigrationPanel v-if="isCurrentUserAdmin" @migrated="loadStorageInfo" />
-          <div class="panel-header-row">
-            <el-button @click="loadStorageInfo()">刷新</el-button>
-          </div>
-          <!-- Storage breakdown -->
-          <div class="panel-card">
-            <div class="setting-info" style="margin-bottom: 14px;">
-              <span class="label-text">存储占用</span>
-              <span class="label-desc">应用管理的文件大小，包含图库原图、缩略图、采集暂存和模型</span>
-            </div>
-            <div class="storage-breakdown">
-              <div class="storage-item">
-                <span class="storage-label">图库原图</span>
-                <span class="storage-value">{{ formatSize(storageInfo.photosSize as number || 0) }}</span>
+          <el-tabs v-model="storageTab" aria-label="存储管理">
+            <el-tab-pane label="存储占用" name="usage">
+              <div class="panel-header-row">
+                <el-button @click="loadStorageInfo()">刷新</el-button>
               </div>
-              <div class="storage-item">
-                <span class="storage-label">缩略图</span>
-                <span class="storage-value">{{ formatSize(storageInfo.thumbsSize as number || 0) }}</span>
+              <!-- Storage breakdown -->
+              <div class="panel-card">
+                <div class="setting-info" style="margin-bottom: 14px;">
+                  <span class="label-text">存储占用</span>
+                  <span class="label-desc">应用管理的文件大小，包含图库原图、缩略图、采集暂存和模型</span>
+                </div>
+                <div class="storage-breakdown">
+                  <div class="storage-item">
+                    <span class="storage-label">图库原图</span>
+                    <span class="storage-value">{{ formatSize(storageInfo.photosSize as number || 0) }}</span>
+                  </div>
+                  <div class="storage-item">
+                    <span class="storage-label">缩略图</span>
+                    <span class="storage-value">{{ formatSize(storageInfo.thumbsSize as number || 0) }}</span>
+                  </div>
+                  <div class="storage-item">
+                    <span class="storage-label">网站采集</span>
+                    <span class="storage-value">{{ formatSize(storageInfo.crawlSize as number || 0) }}</span>
+                  </div>
+                  <div class="storage-item">
+                    <span class="storage-label">模型文件</span>
+                    <span class="storage-value">{{ formatSize(storageInfo.modelsSize as number || 0) }}</span>
+                  </div>
+                  <div class="storage-item total">
+                    <span class="storage-label">总占用</span>
+                    <span class="storage-value">{{ formatSize(storageInfo.totalStorageSize as number || 0) }}</span>
+                  </div>
+                </div>
               </div>
-              <div class="storage-item">
-                <span class="storage-label">网站采集</span>
-                <span class="storage-value">{{ formatSize(storageInfo.crawlSize as number || 0) }}</span>
+              <!-- Disk space -->
+              <div class="panel-card">
+                <div class="setting-info" style="margin-bottom: 14px;">
+                  <span class="label-text">NAS 磁盘空间</span>
+                  <span class="label-desc">按存储目录所在的卷显示。同一卷上的目录会显示相同容量。</span>
+                </div>
+                <p v-if="!Object.keys(storageVolumes).length">暂未获取到磁盘容量</p>
+                <div v-for="(volume, label) in storageVolumes" :key="label" style="margin: 14px 0">
+                  <strong>{{ label }}</strong>
+                  <el-progress :percentage="volumeUsedPercent(volume.total, volume.free)" />
+                  <div class="disk-usage-meta">
+                    <span>已用 {{ formatSize(volume.total - volume.free) }}</span>
+                    <span>可用 {{ formatSize(volume.usable) }}</span>
+                    <span>总容量 {{ formatSize(volume.total) }}</span>
+                  </div>
+                </div>
               </div>
-              <div class="storage-item">
-                <span class="storage-label">模型文件</span>
-                <span class="storage-value">{{ formatSize(storageInfo.modelsSize as number || 0) }}</span>
+            </el-tab-pane>
+            <el-tab-pane label="存储路径" name="paths">
+              <!-- Directory paths -->
+              <div class="panel-card">
+                <div class="setting-info" style="margin-bottom: 12px;">
+                  <span class="label-text">存储路径</span>
+                </div>
+                <div class="storage-path-list">
+                  <div class="storage-path-item">
+                    <span class="info-label">照片目录</span>
+                    <code>{{ storageInfo.photosDir }}</code>
+                  </div>
+                  <div class="storage-path-item">
+                    <span class="info-label">缩略图目录</span>
+                    <code>{{ storageInfo.thumbsDir }}</code>
+                  </div>
+                  <div class="storage-path-item">
+                    <span class="info-label">采集暂存目录</span>
+                    <code>{{ storageInfo.crawlDir }}</code>
+                  </div>
+                  <div class="storage-path-item">
+                    <span class="info-label">模型目录</span>
+                    <code>{{ storageInfo.modelDir }}</code>
+                  </div>
+                </div>
               </div>
-              <div class="storage-item total">
-                <span class="storage-label">总占用</span>
-                <span class="storage-value">{{ formatSize(storageInfo.totalStorageSize as number || 0) }}</span>
-              </div>
-            </div>
-          </div>
-          <!-- Disk space -->
-          <div class="panel-card">
-            <div class="setting-info" style="margin-bottom: 14px;">
-              <span class="label-text">NAS 磁盘空间</span>
-              <span class="label-desc">按存储目录所在的卷显示。同一卷上的目录会显示相同容量。</span>
-            </div>
-            <p v-if="!Object.keys(storageVolumes).length">暂未获取到磁盘容量</p>
-            <div v-for="(volume, label) in storageVolumes" :key="label" style="margin: 14px 0">
-              <strong>{{ label }}</strong>
-              <el-progress :percentage="volumeUsedPercent(volume.total, volume.free)" />
-              <div class="disk-usage-meta">
-                <span>已用 {{ formatSize(volume.total - volume.free) }}</span>
-                <span>可用 {{ formatSize(volume.usable) }}</span>
-                <span>总容量 {{ formatSize(volume.total) }}</span>
-              </div>
-            </div>
-          </div>
-          <!-- Directory paths -->
-          <div class="panel-card">
-            <div class="setting-info" style="margin-bottom: 12px;">
-              <span class="label-text">存储路径</span>
-            </div>
-            <div class="storage-path-list">
-              <div class="storage-path-item">
-                <span class="info-label">照片目录</span>
-                <code>{{ storageInfo.photosDir }}</code>
-              </div>
-              <div class="storage-path-item">
-                <span class="info-label">缩略图目录</span>
-                <code>{{ storageInfo.thumbsDir }}</code>
-              </div>
-              <div class="storage-path-item">
-                <span class="info-label">模型目录</span>
-                <code>{{ storageInfo.modelDir }}</code>
-              </div>
-            </div>
-          </div>
+            </el-tab-pane>
+            <el-tab-pane v-if="isCurrentUserAdmin" label="存储位置与迁移" name="migration" lazy>
+              <StorageMigrationPanel @migrated="loadStorageInfo" />
+            </el-tab-pane>
+          </el-tabs>
         </div>
 
         <!-- ====== 系统信息 ====== -->
