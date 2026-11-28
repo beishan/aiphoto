@@ -25,8 +25,6 @@ pipeline {
         // Jenkins 外部凭据沿用原 ID，避免品牌升级要求人工迁移密钥。
         PRODUCTION_ENV_CREDENTIAL_ID = 'memoryvault-production-env'
         PREVIOUS_IMAGES_FILE = '.aiphoto-previous-images'
-        // 保留当前版和上一版，确保仍可自动回滚。
-        IMAGE_RETENTION_COUNT = '2'
     }
 
     stages {
@@ -120,7 +118,11 @@ pipeline {
     post {
         success {
             withCredentials([file(credentialsId: env.PRODUCTION_ENV_CREDENTIAL_ID, variable: 'AIPHOTO_ENV_FILE')]) {
-                sh './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" || true'
+                script {
+                    if (sh(script: './scripts/deploy.sh cleanup "$AIPHOTO_ENV_FILE" "$PREVIOUS_IMAGES_FILE"', returnStatus: true) != 0) {
+                        unstable('部署已成功，但历史镜像清理未完成，请查看 Jenkins 清理日志。')
+                    }
+                }
             }
             echo "aiphoto ${env.RELEASE_TAG} 构建和部署成功。"
         }

@@ -15,7 +15,6 @@ DEPLOY_STATE_VOLUME="${DEPLOY_STATE_VOLUME:-aiphoto-deploy-state}"
 BACKUP_RETENTION_COUNT="${BACKUP_RETENTION_COUNT:-10}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-120}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-5}"
-IMAGE_RETENTION_COUNT="${IMAGE_RETENTION_COUNT:-2}"
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_COMMAND=(docker compose)
@@ -78,11 +77,6 @@ validate_configuration() {
     value="$(effective_value JWT_SECRET)"
     if ((${#value} < 32)); then
         echo "错误：JWT_SECRET 至少需要 32 个字符（纯文本，无需 Base64）。" >&2
-        return 1
-    fi
-
-    if [[ ! "${IMAGE_RETENTION_COUNT}" =~ ^[1-9][0-9]*$ ]]; then
-        echo "错误：IMAGE_RETENTION_COUNT 必须是大于 0 的整数。" >&2
         return 1
     fi
 
@@ -265,27 +259,77 @@ rollback_from_state() {
     echo "已恢复上一版本。"
 }
 
-cleanup_repository_images() {
-    local repository="$1" current_image="$2" retained_previous=0 image_ref
-    local previous_limit=$((IMAGE_RETENTION_COUNT - 1))
-    while IFS= read -r image_ref; do
-        [[ -n "${image_ref}" && "${image_ref}" != *':<none>' ]] || continue
-        if [[ "${image_ref}" == "${current_image}" ]]; then
-            continue
-        fi
-        if ((retained_previous < previous_limit)); then
-            retained_previous=$((retained_previous + 1))
-            continue
-        fi
-        echo "清理旧镜像：${image_ref}"
-        docker image rm "${image_ref}" >/dev/null 2>&1 || true
-    done < <(docker image ls "${repository}" --format '{{.Repository}}:{{.Tag}}' | awk '!seen[$0]++')
-}
+cleanup_release_images() {
+    local BACKEND_IMAGE=__missing__ FRONTEND_IMAGE=__missing__ AI_IMAGE=__missing__
+    local previous_state container_name current_image in_use repository candidates image_ref label failed=0
+    local -a repositories=(
+        aiphoto-backend aiphoto-frontend aiphoto-ai aiphoto-postgres aiphoto-backend-test
+        memoryvault-backend memoryvault-frontend memoryvault-ai memoryvault-postgres memoryvault-backend-test
+    )
+    local -a protected_images=()
 
-cleanup_dangling_images() {
+    if [[ -r "${STATE_FILE}" ]]; then
+        # Same trusted state written by record_previous_images and used for rollback.
+        # shellcheck disable=SC1090
+        source "${STATE_FILE}"
+    else
+        if ! previous_state="$(docker run --rm --pull never -v "${DEPLOY_STATE_VOLUME}:/state:ro" \
+            alpine:3.20 cat /state/previous.env)"; then
+            echo "警告：无法读取回滚镜像记录，已跳过镜像清理。" >&2
+            return 1
+        fi
+        source /dev/stdin <<< "${previous_state}"
+    fi
+    if [[ "${BACKEND_IMAGE}" == __missing__ || "${FRONTEND_IMAGE}" == __missing__ || "${AI_IMAGE}" == __missing__ ]]; then
+        echo "警告：回滚镜像记录不完整，已跳过镜像清理。" >&2
+        return 1
+    fi
+    protected_images+=("${BACKEND_IMAGE}" "${FRONTEND_IMAGE}" "${AI_IMAGE}")
+    for container_name in aiphoto-backend aiphoto-frontend aiphoto-ai aiphoto-postgres; do
+        current_image="$(container_image "${container_name}")"
+        if [[ -z "${current_image}" ]]; then
+            echo "警告：无法确认 ${container_name} 使用的镜像，已跳过镜像清理。" >&2
+            return 1
+        fi
+        protected_images+=("${current_image}")
+    done
+    in_use="$(docker container ls --all --format '{{.Image}}')" || return 1
+    while IFS= read -r image_ref; do
+        [[ -z "${image_ref}" ]] || protected_images+=("${image_ref}")
+    done <<< "${in_use}"
+
+    for repository in "${repositories[@]}"; do
+        if ! candidates="$(docker image ls --filter "reference=${repository}:*" --format '{{.Repository}}:{{.Tag}}' | sort -u)"; then
+            failed=1
+            continue
+        fi
+        while IFS= read -r image_ref; do
+            [[ "${image_ref}" == "${repository}:"* && "${image_ref}" != *':<none>' ]] || continue
+            if printf '%s\n' "${protected_images[@]}" | grep -Fx -- "${image_ref}" >/dev/null; then
+                continue
+            fi
+            echo "清理旧镜像：${image_ref}"
+            if ! docker image rm --no-prune "${image_ref}"; then
+                echo "警告：旧镜像清理失败：${image_ref}" >&2
+                failed=1
+            fi
+        done <<< "${candidates}"
+    done
+
     echo "清理 aiphoto 悬空镜像。"
-    docker image prune --force \
-        --filter 'label=com.aiphoto.managed=true' >/dev/null 2>&1 || true
+    for image_ref in "${BACKEND_IMAGE}" "${FRONTEND_IMAGE}" "${AI_IMAGE}"; do
+        # A rollback reference stored as a bare image ID or digest can itself be untagged.
+        if [[ "${image_ref}" == sha256:* || "${image_ref}" == *@* || "${image_ref}" =~ ^[0-9a-f]{12,64}$ ]]; then
+            echo "警告：回滚依赖无标签镜像，已跳过悬空镜像清理。" >&2
+            return 1
+        fi
+    done
+    for label in com.aiphoto.managed com.memoryvault.managed; do
+        if ! docker image prune --force --filter "label=${label}=true"; then
+            failed=1
+        fi
+    done
+    return "${failed}"
 }
 
 retry_image_build() {
@@ -361,10 +405,7 @@ case "${ACTION}" in
         wait_for_containers
         ;;
     cleanup)
-        cleanup_repository_images aiphoto-backend "$(container_image aiphoto-backend)"
-        cleanup_repository_images aiphoto-frontend "$(container_image aiphoto-frontend)"
-        cleanup_repository_images aiphoto-ai "$(container_image aiphoto-ai)"
-        cleanup_dangling_images
+        cleanup_release_images
         ;;
     rollback)
         rollback_from_state
