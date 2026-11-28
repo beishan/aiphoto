@@ -1938,7 +1938,7 @@ onUnmounted(() => {
       </template>
     </section>
 
-    <section v-else class="skip-workspace" role="tabpanel">
+    <section v-else-if="activeTab === 'skips'" class="skip-workspace" role="tabpanel">
       <el-card class="surface-card" shadow="never">
         <template #header><div class="card-heading"><div><p class="eyebrow">PERSISTENT EXCLUSIONS</p><h2>跳过图片管理</h2><p>这些图片 URL 再次出现时会留下来源记录，但不会下载文件。</p></div><el-tag type="info" round>{{ skipTotal }} 条</el-tag></div></template>
         <el-input v-model="skipQuery" class="page-search" clearable placeholder="搜索图片 URL" :prefix-icon="Search" @keyup.enter="searchImageSkips" @clear="searchImageSkips"><template #append><el-button @click="searchImageSkips">搜索</el-button></template></el-input>
