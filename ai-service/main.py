@@ -3,6 +3,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Literal
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel, Field
 
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="aiphoto AI Service",
     description="AI inference service for Chinese-CLIP, InsightFace, YOLOv8, and BLIP-2",
-    version=os.getenv("APP_VERSION", "0.26.57"),
+    version=os.getenv("APP_VERSION", "0.26.58"),
     lifespan=lifespan,
 )
 
@@ -71,6 +72,7 @@ class EmbedTextRequest(BaseModel):
 class ModelConfigRequest(BaseModel):
     path: str
     enabled: bool = True
+    device: Literal["auto", "cpu", "gpu"] | None = None
 
 
 class BatchEmbedResponse(BaseModel):
@@ -112,7 +114,7 @@ def model_status():
 def configure_model(model_name: str, request: ModelConfigRequest):
     """Persist and load a model from a path below AI_MODEL_ROOT."""
     try:
-        return model_manager.update(model_name, request.path, request.enabled)
+        return model_manager.update(model_name, request.path, request.enabled, request.device)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class CLIPModel:
     """Chinese-CLIP model for generating image and text embeddings with Chinese support."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, device: str | None = None):
         logger.info(f"Loading Chinese-CLIP model: {model_path}")
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         local_weights = os.path.abspath(model_path)
         if not os.path.isfile(local_weights):
             raise FileNotFoundError(f"Chinese-CLIP 权重不存在: {local_weights}")

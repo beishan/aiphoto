@@ -531,9 +531,9 @@ function stopDownloadPolling() {
 async function saveModel(model: ModelStatus) {
   modelLoading.value = true
   try {
-    const { data } = await settingApi.configureModel(model.name, model.path, model.enabled)
+    const { data } = await settingApi.configureModel(model.name, model.path, model.enabled, model.device ?? 'auto')
     Object.assign(model, data)
-    recordConfiguredModel(data)
+    if (!data.error) recordConfiguredModel(data)
     data.loaded ? message.success(`${modelLabels[model.name]} 已加载`) : message.warning(data.error || '配置已保存')
   } catch (e: any) {
     message.error(e.response?.data?.message || '保存失败')
@@ -1052,6 +1052,14 @@ const systemStorageFolders = computed(() => [
                   <div class="model-path-row">
                     <label class="model-toggle"><el-switch v-model="model.enabled" size="small" /> 启用</label>
                     <el-input v-model.trim="model.path" class="model-path-input" size="small" placeholder="模型文件路径" clearable />
+                  </div>
+                  <div class="model-path-row">
+                    <span class="info-label">运行设备</span>
+                    <el-select v-model="model.device" size="small" aria-label="运行设备" placeholder="自动（优先 GPU）" style="width: 155px">
+                      <el-option label="自动（优先 GPU）" value="auto" />
+                      <el-option label="CPU" value="cpu" />
+                      <el-option label="GPU" value="gpu" />
+                    </el-select>
                   </div>
                   <div class="model-config-footer">
                     <div class="model-meta-row">

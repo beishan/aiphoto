@@ -24,7 +24,7 @@ class FaceDetection:
 class InsightFaceModel:
     """InsightFace model for face detection and embedding extraction."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, device: str | None = None):
         path = Path(model_path).resolve()
         if not path.is_dir():
             raise FileNotFoundError(f"InsightFace model directory not found: {path}")
@@ -34,7 +34,7 @@ class InsightFaceModel:
             raise ValueError("InsightFace 目录必须采用 <root>/models/<模型名> 结构")
         model_name = path.name
         logger.info(f"Loading InsightFace model: {path}")
-        cuda_available = torch.cuda.is_available()
+        cuda_available = device == "cuda" if device else torch.cuda.is_available()
         providers = (
             ["CUDAExecutionProvider", "CPUExecutionProvider"]
             if cuda_available

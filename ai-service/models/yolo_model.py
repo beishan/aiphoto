@@ -45,11 +45,14 @@ def category_for(name: str) -> str:
 class YOLOModel:
     """YOLOv8 model for object detection."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, device: str | None = None):
         if not os.path.isfile(model_path):
             raise FileNotFoundError(f"YOLO model not found: {model_path}")
         logger.info(f"Loading YOLOv8 model: {model_path}")
+        self.device = device
         self.model = YOLO(model_path)
+        if device:
+            self.model.to(device)
         if self.model.task != "detect":
             raise ValueError("请选择 YOLO 目标检测权重；分类模型不能提供目标框")
         logger.info("YOLOv8 model loaded")
@@ -57,7 +60,7 @@ class YOLOModel:
     def detect(self, image_data: bytes, confidence_threshold: float = 0.5, filename: str = "") -> list[Detection]:
         """Detect objects in an image."""
         image = decode_media(image_data, filename)
-        results = self.model(image, conf=confidence_threshold, verbose=False)
+        results = self.model(image, conf=confidence_threshold, device=self.device, verbose=False)
 
         detections = []
         seen_names = set()

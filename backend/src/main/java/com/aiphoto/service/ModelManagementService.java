@@ -36,11 +36,17 @@ public class ModelManagementService {
     }
 
     public Map<String, Object> configure(String modelName, String path, boolean enabled) {
+        return configure(modelName, path, enabled, null);
+    }
+
+    public Map<String, Object> configure(String modelName, String path, boolean enabled, String device) {
+        var config = device == null ? Map.of("path", path, "enabled", enabled)
+                : Map.of("path", path, "enabled", enabled, "device", device);
         try (var storageLease = StorageRoots.writing(Kind.MODELS)) {
             ResponseEntity<Map> response = restTemplate.exchange(
                     aiServiceUrl + "/models/{name}",
                     HttpMethod.PUT,
-                    new HttpEntity<>(Map.of("path", path, "enabled", enabled)),
+                    new HttpEntity<>(config),
                     Map.class,
                     modelName
             );

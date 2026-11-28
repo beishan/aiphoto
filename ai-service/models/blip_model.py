@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class BLIPModel:
     """BLIP-2 model for generating image captions."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, device: str | None = None):
         logger.info(f"Loading local BLIP-2 model: {model_path}")
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.processor = Blip2Processor.from_pretrained(
             model_path, local_files_only=True, use_fast=False
         )

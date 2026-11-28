@@ -129,7 +129,7 @@ class ModelAndApiTests(unittest.TestCase):
         (root / "good.pt").write_bytes(b"good")
         (root / "bad.pt").write_bytes(b"bad")
         factory = self.manager_module.CLIPModel
-        factory.side_effect = lambda path: (_ for _ in ()).throw(ValueError("bad checkpoint")) \
+        factory.side_effect = lambda path, device: (_ for _ in ()).throw(ValueError("bad checkpoint")) \
             if path.endswith("bad.pt") else Mock()
         self.manager.update("clip", "good.pt", True)
         result = self.manager.update("clip", "bad.pt", True)

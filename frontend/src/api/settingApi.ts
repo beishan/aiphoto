@@ -1,10 +1,12 @@
 import http from './http'
 
 export type ModelName = 'clip' | 'insightface' | 'yolo' | 'blip'
+export type ModelDevice = 'auto' | 'cpu' | 'gpu'
 
 export interface ModelStatus {
   name: ModelName
   enabled: boolean
+  device?: ModelDevice
   path: string
   exists: boolean
   loaded: boolean
@@ -182,8 +184,8 @@ export const settingApi = {
     return http.get<ModelFile[]>('/settings/models/files', { params: { directory } })
   },
 
-  configureModel(name: ModelName, path: string, enabled: boolean) {
-    return http.put<ModelStatus>(`/settings/models/${name}`, { path, enabled })
+  configureModel(name: ModelName, path: string, enabled: boolean, device: ModelDevice) {
+    return http.put<ModelStatus>(`/settings/models/${name}`, { path, enabled, device })
   },
 
   reloadModel(name: ModelName) {

@@ -139,15 +139,26 @@ class ModelManager:
             try:
                 path = self.resolve_path(str(setting.get("path", "")))
                 validate_model_path(name, path)
+                preference = setting.get("device", "auto")
+                cuda_available = torch.cuda.is_available()
+                if preference == "gpu" and not cuda_available:
+                    raise ValueError("CUDA GPU 不可用，请检查 GPU 部署配置或选择 CPU")
+                device = "cuda" if cuda_available and preference != "cpu" else "cpu"
                 self._make_room(name)
                 if name == "clip":
-                    self.models[name] = CLIPModel(str(path))
+                    self.models[name] = CLIPModel(str(path), device=device)
                 elif name == "insightface":
-                    self.models[name] = InsightFaceModel(str(path))
+                    model = InsightFaceModel(str(path), device=device)
+                    if preference == "gpu" and any(
+                        "CUDAExecutionProvider" not in component.session.get_providers()
+                        for component in model.app.models.values()
+                    ):
+                        raise ValueError("InsightFace 无法使用 CUDA 执行提供程序")
+                    self.models[name] = model
                 elif name == "yolo":
-                    self.models[name] = YOLOModel(str(path))
+                    self.models[name] = YOLOModel(str(path), device=device)
                 else:
-                    self.models[name] = BLIPModel(str(path))
+                    self.models[name] = BLIPModel(str(path), device=device)
                 self._touch(name)
             except Exception as exc:  # Keep the service available for configuration.
                 self.errors[name] = str(exc)
@@ -202,7 +213,7 @@ class ModelManager:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def update(self, name: str, path: str, enabled: bool) -> dict[str, Any]:
+    def update(self, name: str, path: str, enabled: bool, device: str | None = None) -> dict[str, Any]:
         if name not in MODEL_TYPES:
             raise ValueError(f"不支持的模型类型: {name}")
         with self.lock, self._configuration_writer():
@@ -211,7 +222,11 @@ class ModelManager:
                 validate_model_path(name, resolved)
             previous = self.config[name].copy()
             was_loaded = self.models[name] is not None
-            self.config[name] = {"path": path, "enabled": enabled}
+            self.config[name] = {
+                "path": path,
+                "enabled": enabled,
+                "device": device if device is not None else previous.get("device", "auto"),
+            }
             result = self.reload(name)
             if result["error"]:
                 self.config[name] = previous
@@ -238,6 +253,7 @@ class ModelManager:
             "name": name,
             "enabled": bool(setting.get("enabled")),
             "path": str(setting.get("path", "")),
+            "device": setting.get("device", "auto"),
             "exists": exists,
             "loaded": self.models[name] is not None,
             "error": error,

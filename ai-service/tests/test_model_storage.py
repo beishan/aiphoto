@@ -23,6 +23,32 @@ def model_doubles():
 
 
 class ModelStorageTest(unittest.TestCase):
+    def test_cpu_selection_persists_and_gpu_requires_cuda(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            os.environ, {"AI_MODEL_ROOT": directory}
+        ):
+            doubles = model_doubles()
+            cuda = doubles["torch"].cuda
+            cuda.empty_cache = Mock()
+            with patch.dict(sys.modules, doubles):
+                spec = importlib.util.spec_from_file_location(
+                    "device_test_manager", Path(__file__).resolve().parents[1] / "model_manager.py"
+                )
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                manager = module.ModelManager()
+                path = manager.root / "clip.pt"
+                path.write_bytes(b"checkpoint")
+                with patch.object(cuda, "is_available", return_value=True):
+                    state = manager.update("clip", path.name, True, "cpu")
+                    self.assertEqual(state["device"], "cpu")
+                    manager.update("clip", path.name, True)
+                    module.CLIPModel.assert_called_with(str(path), device="cpu")
+                self.assertEqual(module.ModelManager().model_status("clip")["device"], "cpu")
+                state = manager.update("clip", path.name, True, "gpu")
+                self.assertIn("CUDA GPU 不可用", state["error"])
+                self.assertEqual(manager.model_status("clip")["device"], "cpu")
+
     def test_migrated_model_root_is_used_without_restarting_ai(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

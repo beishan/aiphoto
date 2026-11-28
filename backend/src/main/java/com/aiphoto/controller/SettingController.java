@@ -62,7 +62,7 @@ public class SettingController {
             @PathVariable String modelName,
             @RequestBody ModelConfigRequest request) {
         return ResponseEntity.ok(modelManagementService.configure(
-                modelName, request.path(), request.enabled()
+                modelName, request.path(), request.enabled(), request.device()
         ));
     }
 
@@ -175,7 +175,7 @@ public class SettingController {
     public record DownloadRequest(String modelId) {
     }
 
-    public record ModelConfigRequest(String path, boolean enabled) {
+    public record ModelConfigRequest(String path, boolean enabled, String device) {
     }
 
     private Long getUserId(Authentication authentication) {
