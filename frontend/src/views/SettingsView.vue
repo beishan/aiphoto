@@ -2149,7 +2149,8 @@ const systemStorageFolders = computed(() => [
 .local-model-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-  align-items: start;
+  grid-auto-rows: 1fr;
+  align-items: stretch;
   gap: 10px;
 }
 
