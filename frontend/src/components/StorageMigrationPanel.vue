@@ -184,7 +184,7 @@ onUnmounted(() => { mounted = false; browseRequest++; clearTimeout(timer) })
         <p v-if="job.error" class="migration-note">{{ job.error }}</p>
       </div>
     </template>
-    <el-dialog v-model="dialog" :title="'新增' + labels[kindToAdd] + '存储位置'" width="min(580px, 92vw)">
+    <el-dialog v-model="dialog" append-to-body :title="'新增' + labels[kindToAdd] + '存储位置'" width="min(580px, 92vw)">
       <nav class="folder-breadcrumbs" aria-label="当前目录">
         <el-button link type="primary" :disabled="browsing || saving" @click="browse('')">已挂载位置</el-button>
         <template v-for="crumb in breadcrumbs" :key="crumb.path">

@@ -27,7 +27,7 @@ FROM ${BACKEND_JRE_BASE_IMAGE}
 # Keep system dependencies before release metadata so a version bump reuses FFmpeg.
 RUN apk add --no-cache ffmpeg
 
-ARG APP_VERSION=0.26.42
+ARG APP_VERSION=0.26.43
 ENV APP_VERSION=${APP_VERSION}
 LABEL com.aiphoto.managed="true" \
       com.aiphoto.storage-migration="true" \
