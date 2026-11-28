@@ -1097,7 +1097,6 @@ const systemStorageFolders = computed(() => [
               </el-select>
               <el-button link type="primary" @click="activeSection = 'proxy'">系统代理配置</el-button>
             </div>
-            <p class="info-label">这里只列出可安装并运行的模型。BLIP-2 请在本地模型页配置完整模型目录。</p>
             <div v-if="onlineCapability" class="model-catalog-link">
               <span>{{ onlineCapability.label }}可用的在线模型</span>
               <el-button link type="primary" @click="onlineCapability = null">查看全部</el-button>

@@ -101,6 +101,70 @@ class ModelDownloadServiceTest {
     }
 
     @Test
+    @Timeout(30)
+    void resumesCaptionBundleAndRestoresItsActivationState() throws Exception {
+        var catalog = spy(new ModelCatalogService());
+        var management = mock(ModelManagementService.class);
+        when(management.prepareDownloadedTarget(anyString())).thenAnswer(call -> {
+            Path path = directory.resolve(call.<String>getArgument(0));
+            Files.createDirectories(path.getParent());
+            return path;
+        });
+        when(management.resolveModelPath(anyString())).thenAnswer(call ->
+                directory.resolve(call.<String>getArgument(0)));
+        List<Runnable> queue = new ArrayList<>();
+        var artifacts = mock(ModelArtifactService.class);
+        var proxy = mock(ModelDownloadProxyService.class);
+        var service = new ModelDownloadService(catalog, management, artifacts, queue::add, "", proxy);
+        var requests = new java.util.concurrent.CopyOnWriteArrayList<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            String range = exchange.getRequestHeaders().getFirst("Range");
+            requests.add(path + " " + range);
+            try (exchange) {
+                if ("/weights".equals(path) && "bytes=1-".equals(range)) {
+                    exchange.getResponseHeaders().set("Content-Range", "bytes 1-2/3");
+                    exchange.sendResponseHeaders(206, 2);
+                    exchange.getResponseBody().write(new byte[]{2, 3});
+                } else {
+                    exchange.sendResponseHeaders(200, 1);
+                    exchange.getResponseBody().write(1);
+                }
+            }
+        });
+        server.start();
+        try {
+            String id = "blip2-opt-2.7b";
+            String base = "http://127.0.0.1:" + server.getAddress().getPort();
+            doReturn(List.of(new ModelCatalogService.DownloadFile("config.json", base + "/config"),
+                    new ModelCatalogService.DownloadFile("weights.safetensors", base + "/weights")))
+                    .when(catalog).getDownloadFiles(id);
+            var task = service.startDownload(id, "", "", "", 0);
+            String relative = "installed/" + task.getTaskId() + "/" + id;
+            Files.write(management.prepareDownloadedTarget(relative + "/weights.safetensors.part"), new byte[]{1});
+            queue.removeFirst().run();
+            assertThat(requests).containsExactly("/config null", "/weights bytes=1-");
+            assertThat(task.getStatus()).isEqualTo(ModelDownloadService.DownloadStatus.COMPLETED);
+            assertThat(task.getTotalSize()).isEqualTo(4);
+            assertThat(Files.readAllBytes(directory.resolve(relative + "/weights.safetensors"))).containsExactly(1, 2, 3);
+            var restarted = new ModelDownloadService(catalog, management, artifacts, queue::add, "", proxy);
+            restarted.restoreCompletedDownloads();
+            assertThat(restarted.getTask(task.getTaskId()).getStatus())
+                    .isEqualTo(ModelDownloadService.DownloadStatus.COMPLETED);
+            when(management.configure("blip", relative, true)).thenReturn(Map.of("loaded", true));
+            restarted.setAsCurrent(task.getTaskId());
+            queue.removeFirst().run();
+            restarted.restoreCompletedDownloads();
+            assertThat(restarted.getTask(task.getTaskId()).getStatus())
+                    .isEqualTo(ModelDownloadService.DownloadStatus.INSTALLED);
+            verifyNoInteractions(artifacts);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void onlyReportsInstalledAfterTheInferenceServiceLoadsTheModel() throws Exception {
         ModelCatalogService catalog = mock(ModelCatalogService.class);
         ModelManagementService management = mock(ModelManagementService.class);

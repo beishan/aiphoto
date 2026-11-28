@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -102,10 +103,16 @@ public class ModelDownloadService {
                         task.setTypeKey((String) definition.get("typeKey"));
                         task.setUrl((String) definition.get("url"));
                         task.setFilename((String) definition.get("filename"));
-                        Path original = partial(task);
-                        if (!Files.isRegularFile(original, LinkOption.NOFOLLOW_LINKS) || Files.size(original) != saved.size()) continue;
                         String modelName = modelCatalogService.getAiServiceModelName(task.getTypeKey());
-                        if (saved.installed() && modelName != null) {
+                        var files = modelCatalogService.getDownloadFiles(task.getModelId());
+                        if (!files.isEmpty()) {
+                            String installed = bundlePath(task);
+                            if (bundleSize(installed, files) != saved.size()) continue;
+                            task.setInstalledPath(installed);
+                        } else {
+                            if (fileSize(partial(task)) != saved.size()) continue;
+                        }
+                        if (files.isEmpty() && saved.installed() && modelName != null) {
                             String installed = "installed/" + taskId + "/" + ModelArtifactService.artifactPath(modelName, task.getFilename());
                             if (Files.exists(modelManagementService.resolveModelPath(installed), LinkOption.NOFOLLOW_LINKS)) {
                                 task.setInstalledPath(installed);
@@ -116,7 +123,8 @@ public class ModelDownloadService {
                         task.setProgress(100);
                         task.setStartTime(saved.startTime());
                         task.setEndTime(saved.endTime());
-                        task.setStatus(task.getInstalledPath() == null ? DownloadStatus.COMPLETED : DownloadStatus.INSTALLED);
+                        task.setStatus(saved.installed() && task.getInstalledPath() != null
+                                ? DownloadStatus.INSTALLED : DownloadStatus.COMPLETED);
                         tasks.put(taskId, task);
                     } catch (Exception exception) {
                         log.warn("Cannot restore downloaded model {}", taskId, exception);
@@ -189,6 +197,7 @@ public class ModelDownloadService {
         task.setTypeKey((String) model.get("typeKey"));
         task.setUrl((String) model.get("url"));
         task.setFilename((String) model.get("filename"));
+        if (model.get("size") instanceof Number size) task.setTotalSize(size.longValue());
         task.setStartTime(LocalDateTime.now());
         task.setStatus(DownloadStatus.PENDING);
         tasks.put(task.getTaskId(), task);
@@ -309,6 +318,24 @@ public class ModelDownloadService {
         return modelManagementService.prepareDownloadedTarget(".downloads/" + task.getTaskId() + ".part");
     }
 
+    private String bundlePath(DownloadTask task) {
+        return "installed/" + task.getTaskId() + "/" + task.getFilename();
+    }
+
+    private long fileSize(Path path) throws IOException {
+        return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Files.size(path) : 0;
+    }
+
+    private long bundleSize(String bundle, List<ModelCatalogService.DownloadFile> files) throws IOException {
+        long bytes = 0;
+        for (var artifact : files) {
+            long size = fileSize(modelManagementService.resolveModelPath(bundle + "/" + artifact.filename()));
+            if (size == 0) return 0;
+            bytes += size;
+        }
+        return bytes;
+    }
+
     private void schedule(DownloadTask task) {
         synchronized (task) {
             if (task.isRunning()) return;
@@ -323,33 +350,42 @@ public class ModelDownloadService {
         }
     }
 
-    private void downloadResponse(DownloadTask task, Path target, long offset,
-            HttpClient client, HttpRequest request) throws IOException, InterruptedException {
-        var response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+    private long downloadFile(DownloadTask task, Path target, String url, HttpClient client,
+            long completedBytes, long estimatedTotal, boolean restart) throws IOException, InterruptedException {
+        long offset = restart ? 0 : fileSize(target);
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMinutes(30)).GET();
+        if (offset > 0) request.header("Range", "bytes=" + offset + "-");
+        var response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
         try (var input = response.body()) {
+            if (offset > 0 && response.statusCode() == 416
+                    && response.headers().firstValue("Content-Range").orElse("").equals("bytes */" + offset)) {
+                return offset;
+            }
             if (response.statusCode() != 200 && response.statusCode() != 206) {
                 throw new IOException("HTTP " + response.statusCode());
             }
             long length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
             boolean append = response.statusCode() == 206;
+            long expected;
             if (append) {
                 var range = CONTENT_RANGE.matcher(response.headers().firstValue("Content-Range").orElse(""));
                 if (!range.matches() || Long.parseLong(range.group(1)) != offset) {
                     throw new IOException("断点续传响应范围无效");
                 }
-                task.setTotalSize(Long.parseLong(range.group(3)));
+                expected = Long.parseLong(range.group(3));
             } else {
                 // A server ignoring Range sends a complete object; truncate instead of appending.
                 offset = 0;
-                task.setTotalSize(length > 0 ? length : 0);
+                expected = length;
             }
-            task.setDownloadedSize(offset);
+            task.setTotalSize(Math.max(estimatedTotal, completedBytes + Math.max(0, expected)));
+            task.setDownloadedSize(completedBytes + offset);
             try (var output = Files.newOutputStream(target, StandardOpenOption.CREATE,
                     append ? StandardOpenOption.APPEND : StandardOpenOption.TRUNCATE_EXISTING)) {
                 byte[] buffer = new byte[65536];
                 int read;
                 while ((read = input.read(buffer)) != -1) {
-                    if (task.isCancelled() || task.isPaused()) return;
+                    if (task.isCancelled() || task.isPaused()) return 0;
                     output.write(buffer, 0, read);
                     task.setDownloadedSize(task.getDownloadedSize() + read);
                     if (task.getTotalSize() > 0) task.setProgress((int) Math.min(99,
@@ -357,19 +393,33 @@ public class ModelDownloadService {
                 }
             }
             long actual = Files.size(target);
-            if (actual == 0 || (task.getTotalSize() > 0 && actual != task.getTotalSize())) {
+            if (actual == 0 || (expected >= 0 && actual != expected)) {
                 throw new IOException("下载文件不完整，请重试");
             }
-            synchronized (task) {
-                if (task.isCancelled() || task.isPaused()) return;
-                task.setTotalSize(actual);
-                task.setDownloadedSize(actual);
-                task.setProgress(100);
-                task.setEndTime(LocalDateTime.now());
-                rememberDownload(task, false);
-                task.setStatus(DownloadStatus.COMPLETED);
-            }
+            return actual;
         }
+    }
+
+    private long downloadBundle(DownloadTask task, HttpClient client,
+            List<ModelCatalogService.DownloadFile> files) throws IOException, InterruptedException {
+        String bundle = bundlePath(task);
+        long downloaded = 0;
+        for (var artifact : files) {
+            if (task.isCancelled() || task.isPaused()) return 0;
+            String relative = bundle + "/" + artifact.filename();
+            Path target = modelManagementService.prepareDownloadedTarget(relative);
+            long size = fileSize(target);
+            if (size == 0) {
+                Path partial = modelManagementService.prepareDownloadedTarget(relative + ".part");
+                size = downloadFile(task, partial, artifact.url(), client, downloaded, task.getTotalSize(), false);
+                if (size == 0) return 0;
+                Files.move(partial, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            }
+            downloaded += size;
+            task.setDownloadedSize(downloaded);
+        }
+        task.setInstalledPath(bundle);
+        return downloaded;
     }
 
     private void executeDownload(DownloadTask task) {
@@ -379,15 +429,23 @@ public class ModelDownloadService {
                     if (task.isCancelled() || task.isPaused()) return;
                     task.setStatus(DownloadStatus.DOWNLOADING);
                 }
-                Path target = partial(task);
-                long offset = !task.isRestart() && Files.exists(target) ? Files.size(target) : 0;
+                boolean restart = task.isRestart();
                 task.setRestart(false);
-                HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(task.getUrl()))
-                        .timeout(Duration.ofMinutes(30)).GET();
-                if (offset > 0) builder.header("Range", "bytes=" + offset + "-");
+                long actual;
+                var files = modelCatalogService.getDownloadFiles(task.getModelId());
                 try (var selectedClient = proxyService.openSelectedClient()) {
                     HttpClient client = selectedClient == null ? httpClient : selectedClient;
-                    downloadResponse(task, target, offset, client, builder.build());
+                    actual = files.isEmpty() ? downloadFile(task, partial(task), task.getUrl(), client, 0, 0, restart)
+                            : downloadBundle(task, client, files);
+                }
+                synchronized (task) {
+                    if (actual == 0 || task.isCancelled() || task.isPaused()) return;
+                    task.setTotalSize(actual);
+                    task.setDownloadedSize(actual);
+                    task.setProgress(100);
+                    task.setEndTime(LocalDateTime.now());
+                    rememberDownload(task, false);
+                    task.setStatus(DownloadStatus.COMPLETED);
                 }
             } catch (Exception exception) {
                 log.warn("Model download failed: {}", task.getModelId(), exception);

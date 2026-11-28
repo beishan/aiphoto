@@ -13,6 +13,23 @@ import java.util.Map;
 @Slf4j
 @Service
 public class ModelCatalogService {
+    private static final String BLIP_ID = "blip2-opt-2.7b";
+    private static final String BLIP_SOURCE = "Salesforce/" + BLIP_ID;
+    private static final String BLIP_URL = "https://huggingface.co/" + BLIP_SOURCE
+            + "/resolve/59a1ef6c1e5117b3f65523d1c6066825bcf315e3/";
+    static final long BLIP_DOWNLOAD_BYTES = 15_000_000_000L;
+
+    record DownloadFile(String filename, String url) {}
+
+    List<DownloadFile> getDownloadFiles(String modelId) {
+        if (!BLIP_ID.equals(modelId)) return List.of();
+        return List.of("config.json", "generation_config.json", "preprocessor_config.json",
+                "processor_config.json", "tokenizer_config.json", "special_tokens_map.json",
+                "added_tokens.json", "tokenizer.json", "merges.txt", "vocab.json",
+                "model.safetensors.index.json", "model-00001-of-00002.safetensors",
+                "model-00002-of-00002.safetensors").stream()
+                .map(file -> new DownloadFile(file, BLIP_URL + file)).toList();
+    }
 
     public enum ModelType {
         FACE_DETECTION("face_detection", "人脸检测模型", "InsightFace Detection", "vision"),
@@ -75,7 +92,9 @@ public class ModelCatalogService {
                         "yolov8n.pt", 6549796, "ultralytics/assets"),
                 online("yolov8s", "YOLOv8s", ModelType.OBJECT_DETECTION,
                         "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8s.pt",
-                        "yolov8s.pt", 0, "ultralytics/assets")
+                        "yolov8s.pt", 0, "ultralytics/assets"),
+                online(BLIP_ID, "BLIP-2 OPT 2.7B", ModelType.IMAGE_CAPTION,
+                        BLIP_URL + "config.json", BLIP_ID, BLIP_DOWNLOAD_BYTES, BLIP_SOURCE)
         );
     }
 
@@ -87,7 +106,8 @@ public class ModelCatalogService {
                 Map.entry("modelName", modelName),
                 Map.entry("installedArtifact", ModelArtifactService.artifactPath(modelName, filename)),
                 Map.entry("typeLabel", type.getLabel()), Map.entry("version", "官方权重"),
-                Map.entry("size", size), Map.entry("device", "CPU/GPU"), Map.entry("precision", "FP32"),
+                Map.entry("size", size), Map.entry("device", "CPU/GPU"),
+                Map.entry("precision", "blip".equals(modelName) ? "GPU FP16 / CPU FP32" : "FP32"),
                 Map.entry("performance", "取决于硬件"), Map.entry("source", source),
                 Map.entry("url", url), Map.entry("filename", filename));
     }
