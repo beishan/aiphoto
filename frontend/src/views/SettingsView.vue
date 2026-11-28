@@ -669,6 +669,13 @@ onUnmounted(() => stopDownloadPolling())
 // ===== Tasks & Logs =====
 const tasks = ref<AiTask[]>([])
 const taskFilter = ref<'all' | 'running' | 'completed' | 'failed'>('all')
+const taskResult = ref<AiTask | null>(null)
+const taskResultVisible = ref(false)
+
+function showTaskResult(task: AiTask) {
+  taskResult.value = task
+  taskResultVisible.value = true
+}
 
 async function loadTasks() {
   try {
@@ -1120,25 +1127,43 @@ const systemStorageFolders = computed(() => [
             { label: '全部', value: 'all' }, { label: '运行中', value: 'running' },
             { label: '已完成', value: 'completed' }, { label: '失败', value: 'failed' },
           ]" aria-label="任务状态筛选" />
-          <div v-if="filteredTasks.length === 0" class="empty-text">暂无任务记录</div>
-          <div v-for="t in filteredTasks" :key="t.id" class="panel-card task-log-card">
-            <div class="task-log-header">
-              <div class="task-log-info">
-                <strong>{{ getTaskTypeText(t.type) }}</strong>
-                <span class="task-log-id">#{{ t.id }}</span>
-              </div>
-              <span class="task-log-status" :class="getTaskStatusClass(t.status)">{{ getTaskStatusText(t.status) }}</span>
-            </div>
-            <div v-if="t.status === 'RUNNING' || t.status === 'PENDING'" class="download-progress-bar">
-              <div class="progress-fill" :style="{ width: t.progress + '%' }"></div>
-            </div>
-            <div class="task-log-meta">
-              <span v-if="t.progress > 0">进度: {{ t.progress }}%</span>
-              <span>创建: {{ formatDate(t.createdAt) }}</span>
-              <span v-if="t.finishedAt">完成: {{ formatDate(t.finishedAt) }}</span>
-            </div>
-            <div v-if="t.resultJson" class="task-log-result">{{ t.resultJson }}</div>
+          <div class="panel-card task-table-card">
+            <el-table :data="filteredTasks" row-key="id" empty-text="暂无任务记录" aria-label="任务与日志">
+              <el-table-column label="任务编号" width="96">
+                <template #default="{ row }">#{{ row.id }}</template>
+              </el-table-column>
+              <el-table-column label="任务类型" min-width="130">
+                <template #default="{ row }">{{ getTaskTypeText(row.type) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="104">
+                <template #default="{ row }">
+                  <span class="task-log-status" :class="getTaskStatusClass(row.status)">{{ getTaskStatusText(row.status) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="进度" min-width="126">
+                <template #default="{ row }">
+                  <el-progress v-if="row.status === 'RUNNING' || row.status === 'PENDING'" :percentage="row.progress" />
+                  <span v-else>{{ row.progress > 0 ? row.progress + '%' : '—' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="创建时间" min-width="165">
+                <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+              </el-table-column>
+              <el-table-column label="完成时间" min-width="165">
+                <template #default="{ row }">{{ row.finishedAt ? formatDate(row.finishedAt) : '—' }}</template>
+              </el-table-column>
+              <el-table-column label="结果" width="100">
+                <template #default="{ row }">
+                  <el-button v-if="row.resultJson" link type="primary" @click="showTaskResult(row)">查看结果</el-button>
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
+          <el-dialog v-model="taskResultVisible" append-to-body :title="taskResult ? '任务 #' + taskResult.id + ' 的结果' : '任务结果'"
+            width="min(640px, 92vw)" @closed="taskResult = null">
+            <pre class="task-log-result">{{ taskResult?.resultJson }}</pre>
+          </el-dialog>
         </div>
 
         <!-- ====== 存储管理 ====== -->
@@ -2368,32 +2393,10 @@ const systemStorageFolders = computed(() => [
 
 /* Tasks & Logs */
 
-.task-log-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.task-log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.task-log-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.task-log-info strong {
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.task-log-id {
-  font-size: 12px;
-  color: var(--text-tertiary);
+.task-table-card {
+  min-width: 0;
+  overflow: hidden;
+  padding: 8px 10px 10px;
 }
 
 .task-log-status {
@@ -2408,21 +2411,16 @@ const systemStorageFolders = computed(() => [
 .task-log-status.completed { background: rgba(48, 209, 88, 0.15); color: var(--success); }
 .task-log-status.failed { background: rgba(255, 69, 58, 0.15); color: var(--danger); }
 
-.task-log-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
 .task-log-result {
   font-size: 12px;
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   padding: 6px 10px;
   border-radius: 6px;
-  word-break: break-all;
+  max-height: 55vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Storage Management */
@@ -2914,8 +2912,7 @@ const systemStorageFolders = computed(() => [
 
 .folder-header,
 .model-type-header,
-.download-task-header,
-.task-log-header {
+.download-task-header {
   gap: 14px;
 }
 
